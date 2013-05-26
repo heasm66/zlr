@@ -334,6 +334,14 @@ namespace ZLR.VM.Debugging
             this.Position = position;
         }
 
+        public override int GetHashCode()
+        {
+            int result = Line.GetHashCode() ^ Position.GetHashCode();
+            if (File != null)
+                result ^= File.GetHashCode();
+            return result;
+        }
+
         public override bool Equals(object obj)
         {
             if (obj is LineInfo)
@@ -348,14 +356,6 @@ namespace ZLR.VM.Debugging
                 this.File == other.File &&
                 this.Line == other.Line &&
                 this.Position == other.Position;
-        }
-
-        public override int GetHashCode()
-        {
-            int result = Line.GetHashCode() ^ Position.GetHashCode();
-            if (File != null)
-                result ^= File.GetHashCode();
-            return result;
         }
 
         public static bool operator ==(LineInfo a, LineInfo b)
