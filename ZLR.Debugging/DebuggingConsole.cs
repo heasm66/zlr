@@ -1,6 +1,7 @@
 ﻿using System;
 using System.Collections.Generic;
 using System.IO;
+using System.Runtime.Serialization;
 using System.Text;
 using ZLR.VM;
 using ZLR.VM.Debugging;
@@ -25,7 +26,8 @@ namespace ZLR.Debugging
         private IDebugger dbg;
         private SourceCache src;
         private bool tracingCalls;
-        string lastCmd;
+        private string lastCmd;
+        private ValueFormatter valueFormatter;
 
         private static readonly char[] COMMAND_DELIM = new char[] { ' ' };
 
@@ -50,6 +52,7 @@ namespace ZLR.Debugging
 
             dbg = zm.Debug();
             src = new SourceCache(sourcePath);
+            valueFormatter = new ValueFormatter(zm, dbg);
 
             io.PutString("ZLR Debugger\n");
             dbg.Restart();
@@ -149,100 +152,191 @@ namespace ZLR.Debugging
                 lastCmd = cmd;
             }
 
-            string[] parts = cmd.Split(COMMAND_DELIM, StringSplitOptions.RemoveEmptyEntries);
-            switch (parts[0].ToLower())
-            {
-                case "reset":
-                    dbg.Restart();
-                    break;
-
-                case "s":
-                case "step":
-                    if (dbg.State == DebuggerState.Paused)
-                        dbg.StepInto();
-                    break;
-
-                case "o":
-                case "over":
-                    if (dbg.State == DebuggerState.Paused)
-                        dbg.StepOver();
-                    break;
-
-                case "up":
-                    if (dbg.State == DebuggerState.Paused)
-                        dbg.StepUp();
-                    break;
-
-                case "sl":
-                case "stepline":
-                    DoStepLine();
-                    break;
-
-                case "ol":
-                case "overline":
-                    DoOverLine();
-                    break;
-
-                case "r":
-                case "run":
-                    if (dbg.State == DebuggerState.Stopped)
+            try {
+                string[] parts = cmd.Split(COMMAND_DELIM, 2, StringSplitOptions.RemoveEmptyEntries);
+                switch (parts[0].ToLower())
+                {
+                    case "reset":
                         dbg.Restart();
-                    dbg.Run();
-                    break;
+                        break;
 
-                case "b":
-                case "break":
-                    DoSetBreakpoint(parts);
-                    break;
+                    case "s":
+                    case "step":
+                        if (dbg.State == DebuggerState.Paused)
+                            dbg.StepInto();
+                        break;
 
-                case "c":
-                case "clear":
-                    DoClearBreakpoint(parts);
-                    break;
+                    case "o":
+                    case "over":
+                        if (dbg.State == DebuggerState.Paused)
+                            dbg.StepOver();
+                        break;
 
-                case "bps":
-                case "breakpoints":
-                    DoShowBreakpoints();
-                    break;
+                    case "up":
+                        if (dbg.State == DebuggerState.Paused)
+                            dbg.StepUp();
+                        break;
 
-                case "tc":
-                case "tracecalls":
-                    DoToggleTraceCalls();
-                    break;
+                    case "sl":
+                    case "stepline":
+                        DoStepLine();
+                        break;
 
-                case "bt":
-                case "backtrace":
-                    DoShowBacktrace();
-                    break;
+                    case "ol":
+                    case "overline":
+                        DoOverLine();
+                        break;
 
-                case "l":
-                case "locals":
-                    DoShowLocals();
-                    break;
+                    case "r":
+                    case "run":
+                        if (dbg.State == DebuggerState.Stopped)
+                            dbg.Restart();
+                        dbg.Run();
+                        break;
 
-                case "g":
-                case "globals":
-                    io.PutString("Not implemented.\n");
-                    break;
+                    case "b":
+                    case "break":
+                        DoSetBreakpoint(parts);
+                        break;
 
-                case "q":
-                case "quit":
-                    io.PutString("Goodbye.\n");
-                    active = ActiveState.Finished;
-                    return;
+                    case "c":
+                    case "clear":
+                        DoClearBreakpoint(parts);
+                        break;
 
-                default:
-                    Console.WriteLine("Unrecognized debugger command.");
+                    case "bps":
+                    case "breakpoints":
+                        DoShowBreakpoints();
+                        break;
 
-                    Console.WriteLine("Commands:");
-                    Console.WriteLine("reset, (s)tep, (o)ver, stepline (sl), overline (ol), up, (r)un,");
-                    Console.WriteLine("(b)reak, (c)lear, breakpoints (bps), tracecalls (tc)");
-                    Console.WriteLine("backtrace (bt), (l)ocals, (g)lobals");
-                    Console.WriteLine("(q)uit");
-                    break;
+                    case "tc":
+                    case "tracecalls":
+                        DoToggleTraceCalls();
+                        break;
+
+                    case "bt":
+                    case "backtrace":
+                        DoShowBacktrace();
+                        break;
+
+                    case "l":
+                    case "locals":
+                        DoShowLocals();
+                        break;
+
+                    case "g":
+                    case "globals":
+                        io.PutString("Not implemented.\n");
+                        break;
+
+                    case "p":
+                    case "print":
+                        DoPrint(parts);
+                        break;
+
+                    case "so":
+                    case "showobj":
+                        DoShowObject(parts);
+                        break;
+
+                    case "q":
+                    case "quit":
+                        io.PutString("Goodbye.\n");
+                        active = ActiveState.Finished;
+                        return;
+
+                    default:
+                        io.PutString("Unrecognized debugger command.\n");
+
+                        io.PutString("Commands:\n");
+                        io.PutString("reset, (s)tep, (o)ver, stepline (sl), overline (ol), up, (r)un,\n");
+                        io.PutString("(b)reak, (c)lear, breakpoints (bps), tracecalls (tc)\n");
+                        io.PutString("backtrace (bt), (l)ocals, (g)lobals\n");
+                        io.PutString("(p)rint, showobj (so)\n");
+                        io.PutString("(q)uit\n");
+                        break;
+                }
+            }
+            catch (DebuggerException ex)
+            {
+                io.PutString(ex.ToString());
             }
 
             ShowStatus();
+        }
+
+        private void DoPrint(string[] parts)
+        {
+            if (parts.Length < 2)
+            {
+                io.PutString("Usage: print <expr>\n");
+                return;
+            }
+
+            var value = Expression.Evaluate(zm, dbg, parts[1], true);
+            io.PutString(valueFormatter.Format(value));
+            io.PutChar('\n');
+        }
+
+        private void DoShowObject(string[] parts)
+        {
+            if (parts.Length < 2)
+            {
+                io.PutString("Usage: showobj <expr>\n");
+                return;
+            }
+
+            var value = Expression.Evaluate(zm, dbg, parts[1]);
+
+            int address = dbg.GetObjectAddress((ushort)value.Content);
+
+            byte[] attrs;
+            ushort parent, sibling, child;
+            int propertyTable;
+            dbg.ParseObject(address, out attrs, out parent, out sibling, out child, out propertyTable);
+
+            io.PutString(string.Format("=== {0} ===\nParent: {1}\nSibling: {2}\nChild: {3}\n",
+                valueFormatter.Format(new Value(ValueType.Object, value.Content)),
+                valueFormatter.Format(new Value(ValueType.Object, parent)),
+                valueFormatter.Format(new Value(ValueType.Object, sibling)),
+                valueFormatter.Format(new Value(ValueType.Object, child))));
+
+            io.PutString("Attributes:\n");
+            for (int i = 0; i < attrs.Length; i++)
+            {
+                byte bit = 0x80;
+
+                for (int j = 0; j < 8; j++)
+                {
+                    if ((attrs[i] & bit) != 0)
+                    {
+                        io.PutString("  ");
+                        io.PutString(valueFormatter.Format(new Value(ValueType.Attribute, i * 8 + j)));
+                        io.PutChar('\n');
+                    }
+                }
+            }
+
+            io.PutString(string.Format("Properties (table at ${0:x4}):\n", propertyTable));
+            for (short prop = dbg.GetNextProp((ushort)value.Content, 0); prop != 0; prop = dbg.GetNextProp((ushort)value.Content, prop))
+            {
+                var addr = dbg.GetPropAddress((ushort)value.Content, prop);
+                var length = dbg.GetPropLength(addr);
+
+                io.PutString(string.Format("  {0} (length {1}):\n",
+                    valueFormatter.Format(new Value(ValueType.Property, prop)),
+                    length));
+
+                io.PutString("   ");
+                for (int i = 0; i < length; i++)
+                {
+                    byte b = dbg.ReadByte(addr + i);
+                    io.PutString(string.Format(" {0:x2}", b));
+                }
+                io.PutChar('\n');
+            }
+
+            io.PutString("==========\n");
         }
 
         private void DoShowLocals()
@@ -539,6 +633,8 @@ namespace ZLR.Debugging
 
             return -1;
         }
+
+
 
         class SourceCache
         {

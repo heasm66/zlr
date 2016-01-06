@@ -54,6 +54,19 @@ namespace ZLR.VM.Debugging
         short ReadWord(int address);
         void WriteByte(int address, byte value);
         void WriteWord(int address, short value);
+        short ReadVariable(byte number);
+        void WriteVariable(byte number, short value);
+
+        string DecodeString(int address);
+
+        int GetObjectAddress(ushort number);
+        string GetObjectName(ushort number);
+        void ParseObject(int address, out byte[] attrs, out ushort parent,
+            out ushort sibling, out ushort child, out int propertyTable);
+        void ParseProperty(int address, out byte number, out byte length);
+        int GetPropAddress(ushort obj, short prop);
+        int GetPropLength(int address);
+        short GetNextProp(ushort obj, short prop);
 
         int CallDepth { get; }
         ICallFrame[] GetCallFrames();
@@ -219,6 +232,7 @@ namespace ZLR.VM
 
             public short Call(short packedAddress, short[] args)
             {
+                zm.running = true;
                 zm.EnterFunctionImpl(packedAddress, args, 0, zm.pc);
                 zm.JitLoop();
                 return zm.stack.Pop();
@@ -243,6 +257,108 @@ namespace ZLR.VM
             {
                 zm.zmem[address] = (byte)(value >> 8);
                 zm.zmem[address + 1] = (byte)value;
+            }
+
+            public short ReadVariable(byte number)
+            {
+                if (number == 0)
+                {
+                    return zm.stack.Peek();
+                }
+                else if (number < 16)
+                {
+                    return zm.topFrame.Locals[number - 1];
+                }
+                else
+                {
+                    return zm.GetWord(zm.GlobalsOffset + 2 * (number - 16));
+                }
+            }
+
+            public void WriteVariable(byte number, short value)
+            {
+                if (number == 0)
+                {
+                    zm.stack.Pop();
+                    zm.stack.Push(value);
+                }
+                else if (number < 16)
+                {
+                    zm.topFrame.Locals[number - 1] = value;
+                }
+                else
+                {
+                    zm.SetWord(zm.GlobalsOffset + 2 * (number - 16), value);
+                }
+            }
+
+            public string DecodeString(int address)
+            {
+                return zm.DecodeString(address);
+            }
+
+            public int GetObjectAddress(ushort number)
+            {
+                return zm.GetObjectAddress(number);
+            }
+
+            public string GetObjectName(ushort number)
+            {
+                return zm.GetObjectName(number);
+            }
+
+            public void ParseObject(int address, out byte[] attrs,
+                out ushort parent, out ushort sibling, out ushort child, out int propertyTable)
+            {
+                if (zm.zversion <= 3)
+                {
+                    attrs = new byte[] {
+                        zm.GetByte(address),
+                        zm.GetByte(address+1),
+                        zm.GetByte(address+2),
+                        zm.GetByte(address+3),
+                    };
+                    parent = zm.GetByte(address + 4);
+                    sibling = zm.GetByte(address + 5);
+                    child = zm.GetByte(address + 6);
+                    propertyTable = zm.GetWord(address + 7);
+                }
+                else
+                {
+                    attrs = new byte[] {
+                        zm.GetByte(address),
+                        zm.GetByte(address+1),
+                        zm.GetByte(address+2),
+                        zm.GetByte(address+3),
+                        zm.GetByte(address+4),
+                        zm.GetByte(address+5),
+                    };
+                    parent = (ushort)zm.GetWord(address + 6);
+                    sibling = (ushort)zm.GetWord(address + 8);
+                    child = (ushort)zm.GetWord(address + 10);
+                    propertyTable = zm.GetWord(address + 12);
+                }
+            }
+
+            public void ParseProperty(int address, out byte number, out byte length)
+            {
+                //XXX
+                throw new NotImplementedException();
+            }
+
+            public int GetPropAddress(ushort obj, short prop)
+            {
+                return zm.GetPropAddr(obj, prop);
+            }
+
+            public int GetPropLength(int address)
+            {
+                return zm.GetPropLength((ushort)address);
+            }
+
+            public short GetNextProp(ushort obj, short prop)
+            {
+                return zm.GetNextProp(obj, prop);
             }
 
             public int CallDepth

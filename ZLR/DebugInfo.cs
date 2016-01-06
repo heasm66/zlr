@@ -26,7 +26,12 @@ namespace ZLR.VM.Debugging
         }
 
         private List<RoutineInfo> routines = new List<RoutineInfo>();
+        private List<ObjectInfo> objects = new List<ObjectInfo>();
         private DoubleMap<string, byte> globals = new DoubleMap<string, byte>();
+        private DoubleMap<string, ushort> arrays = new DoubleMap<string, ushort>();
+        private DoubleMap<string, ushort> attributes = new DoubleMap<string, ushort>();
+        private DoubleMap<string, ushort> properties = new DoubleMap<string, ushort>();
+        private DoubleMap<string, ushort> actions = new DoubleMap<string, ushort>();
         private byte[] matchingHeader;
 
         public DebugInfo(Stream fromStream)
@@ -48,6 +53,7 @@ namespace ZLR.VM.Debugging
                 string str;
                 LineRef line;
                 RoutineInfo routine = null;
+                ObjectInfo obj = null;
                 List<string> localList = new List<string>();
                 List<LineInfo> lineList = new List<LineInfo>();
                 List<ushort> offsetList = new List<ushort>();
@@ -79,9 +85,16 @@ namespace ZLR.VM.Debugging
 
                         case 3:
                             // OBJECT_DBR
-                            ReadWord(br);
-                            ReadString(br);
-                            ReadLineRef(br);
+                            obj = new ObjectInfo();
+                            objects.Add(obj);
+                            obj.Number = ReadWord(br);
+                            obj.Name = ReadString(br);
+                            line = ReadLineRef(br);
+                            if (line.IsValid)
+                                obj.DefinedAt = new LineInfo(
+                                    filenames[line.FileNum],
+                                    line.LineNum,
+                                    line.Column); 
                             ReadLineRef(br);
                             break;
 
@@ -93,12 +106,28 @@ namespace ZLR.VM.Debugging
                             break;
 
                         case 12: // ARRAY_DBR
+                            w = ReadWord(br);
+                            str = ReadString(br);
+                            arrays.Add(str, w);
+                            break;
+
                         case 5: // ATTR_DBR
+                            w = ReadWord(br);
+                            str = ReadString(br);
+                            attributes.Add(str, w);
+                            break;
+
                         case 6: // PROP_DBR
+                            w = ReadWord(br);
+                            str = ReadString(br);
+                            properties.Add(str, w);
+                            break;
+
                         case 7: // FAKE_ACTION_DBR
                         case 8: // ACTION_DBR
-                            ReadWord(br);
-                            ReadString(br);
+                            w = ReadWord(br);
+                            str = ReadString(br);
+                            actions.Add(str, w);
                             break;
 
                         case 9:
@@ -248,6 +277,26 @@ namespace ZLR.VM.Debugging
             get { return globals; }
         }
 
+        public DoubleMap<string, ushort> Arrays
+        {
+            get { return arrays; }
+        }
+
+        public DoubleMap<string, ushort> Attributes
+        {
+            get { return attributes; }
+        }
+
+        public DoubleMap<string, ushort> Properties
+        {
+            get { return properties; }
+        }
+
+        public DoubleMap<string, ushort> Actions
+        {
+            get { return actions; }
+        }
+
         public RoutineInfo FindRoutine(int pc)
         {
             int start = 0, end = routines.Count;
@@ -274,6 +323,24 @@ namespace ZLR.VM.Debugging
             for (int i = 0; i < routines.Count; i++)
                 if (routines[i].Name == name)
                     return routines[i];
+
+            return null;
+        }
+
+        public ObjectInfo FindObject(int number)
+        {
+            for (int i = 0; i < objects.Count; i++)
+                if (objects[i].Number == number)
+                    return objects[i];
+
+            return null;
+        }
+
+        public ObjectInfo FindObject(string name)
+        {
+            for (int i = 0; i < objects.Count; i++)
+                if (objects[i].Name == name)
+                    return objects[i];
 
             return null;
         }
@@ -319,6 +386,13 @@ namespace ZLR.VM.Debugging
         public string[] Locals;
         public ushort[] LineOffsets;
         public LineInfo[] LineInfos;
+    }
+
+    public class ObjectInfo
+    {
+        public string Name;
+        public int Number;
+        public LineInfo DefinedAt;
     }
 
     public struct LineInfo
