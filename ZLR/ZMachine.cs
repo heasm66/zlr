@@ -17,6 +17,7 @@ using System.IO;
 using System.Reflection;
 using System.Reflection.Emit;
 using System.Text;
+using JetBrains.Annotations;
 using ZLR.IFF;
 using ZLR.VM.Debugging;
 
@@ -24,23 +25,25 @@ using SystemDebugger = System.Diagnostics.Debugger;
 
 namespace ZLR.VM
 {
+    [PublicAPI]
     public sealed class RandomNeededEventArgs : EventArgs
     {
         public RandomNeededEventArgs(short range)
         {
-            this.Range = range;
+            Range = range;
         }
 
         public short Range { get; private set; }
         public short? Value { get; set; }
     }
 
+    [PublicAPI]
     public sealed class RandomRolledEventArgs : EventArgs
     {
         public RandomRolledEventArgs(short value, short range)
         {
-            this.Value = value;
-            this.Range = range;
+            Value = value;
+            Range = range;
         }
 
         public short Value { get; private set; }
@@ -53,16 +56,16 @@ namespace ZLR.VM
 
         private class CachedCode
         {
-            public int NextPC;
-            public ZCodeDelegate Code;
+            public readonly int NextPC;
+            public readonly ZCodeDelegate Code;
 #if BENCHMARK
             public int Cycles;
 #endif
 
             public CachedCode(int nextPC, ZCodeDelegate code)
             {
-                this.NextPC = nextPC;
-                this.Code = code;
+                NextPC = nextPC;
+                Code = code;
 #if BENCHMARK
                 this.Cycles = 0;
 #endif
@@ -70,10 +73,9 @@ namespace ZLR.VM
         }
 
         // compilation state
-        byte zversion;
+        readonly byte zversion;
         int globalsOffset, objectTable, dictionaryTable, abbrevTable;
         bool compiling;
-        int compilationStart;
         ILGenerator il;
         LocalBuilder tempArrayLocal, tempWordLocal, stackLocal, localsLocal;
         LruCache<int, CachedCode> cache;
@@ -81,32 +83,45 @@ namespace ZLR.VM
         int maxUndoDepth = DEFAULT_MAX_UNDO_DEPTH;
 
         // compilation and runtime state
-        int pc;
+        internal int pc;
         bool clearable;
         bool debugging;
 
         // runtime state
-        Stream gameFile;
-        bool running;
-        byte[] zmem;
-        IZMachineIO io;
+        readonly Stream gameFile;
+        internal bool running;
+        [NotNull] readonly byte[] zmem;
+        [NotNull] internal readonly IZMachineIO io;
         CommandFileReader cmdRdr;
         CommandFileWriter cmdWtr;
         Stack<short> stack = new Stack<short>();
-        Stack<CallFrame> callStack = new Stack<CallFrame>();
+
+        [ItemNotNull] [NotNull]
+        internal Stack<CallFrame> callStack = new Stack<CallFrame>();
+
         CallFrame topFrame;
         Random rng = new Random();
         bool predictableRng;
         byte[] wordSeparators;
         int romStart;
         int codeStart, stringStart; // V6-7
-        List<UndoState> undoStates = new List<UndoState>();
+
+        [ItemNotNull] [NotNull]
+        readonly List<UndoState> undoStates = new List<UndoState>();
+
         bool normalOutput, tableOutput;
-        Stack<ushort> tableOutputAddrStack = new Stack<ushort>();
-        Stack<List<byte>> tableOutputBufferStack = new Stack<List<byte>>();
+
+        [NotNull]
+        readonly Stack<ushort> tableOutputAddrStack = new Stack<ushort>();
+
+        [ItemNotNull] [NotNull]
+        readonly Stack<List<byte>> tableOutputBufferStack = new Stack<List<byte>>();
+
         char[] alphabet0, alphabet1, alphabet2, extraChars;
         byte[] terminatingChars;
-        MemoryTraps traps = new MemoryTraps();
+
+        [NotNull]
+        readonly MemoryTraps traps = new MemoryTraps();
 
 #if BENCHMARK
         long cycles;
@@ -127,126 +142,126 @@ namespace ZLR.VM
         /// <param name="gameStream">A stream containing either a plain Z-code
         /// file or a Blorb file which in turn contains a Z-code resource.</param>
         /// <param name="io"></param>
-        public ZMachine(Stream gameStream, IZMachineIO io)
+        public ZMachine([NotNull] Stream gameStream, [NotNull] IZMachineIO io)
         {
             if (gameStream == null)
-                throw new ArgumentNullException("gameStream");
-            if (io == null)
-                throw new ArgumentNullException("io");
+                throw new ArgumentNullException(nameof(gameStream));
 
-            this.io = io;
+            this.io = io ?? throw new ArgumentNullException(nameof(io));
 
             // check for Blorb
-            byte[] temp = new byte[12];
+            var temp = new byte[12];
             gameStream.Seek(0, SeekOrigin.Begin);
             gameStream.Read(temp, 0, 12);
             if (temp[0] == 'F' && temp[1] == 'O' && temp[2] == 'R' && temp[3] == 'M' &&
                 temp[8] == 'I' && temp[9] == 'F' && temp[10] == 'R' && temp[11] == 'S')
             {
-                Blorb blorb = new Blorb(gameStream);
+                var blorb = new Blorb(gameStream);
                 if (blorb.GetStoryType() == "ZCOD")
+                {
                     gameStream = blorb.GetStoryStream();
+                    System.Diagnostics.Debug.Assert(gameStream != null, "gameStream != null");
+                }
                 else
-                    throw new ArgumentException("Not a Z-code Blorb");
+                {
+                    throw new ArgumentException("Not a Z-code Blorb", nameof(gameStream));
+                }
             }
 
-            this.gameFile = gameStream;
+            gameFile = gameStream;
 
             zmem = new byte[gameStream.Length];
             gameStream.Seek(0, SeekOrigin.Begin);
             gameStream.Read(zmem, 0, (int)gameStream.Length);
 
             if (zmem.Length < 64)
-                throw new ArgumentException("Z-code file is too short: must be at least 64 bytes");
+                throw new ArgumentException("Z-code file is too short: must be at least 64 bytes", nameof(gameStream));
 
             zversion = zmem[0];
 
             if (zversion < 1 || zversion > 8)
-                throw new ArgumentException("Z-code version must be between 1 and 8");
+                throw new ArgumentException("Z-code version must be between 1 and 8", nameof(gameStream));
 
-            io.SizeChanged += new EventHandler(io_SizeChanged);
+            io.SizeChanged += io_SizeChanged;
         }
 
+        [PublicAPI]
         public event EventHandler<RandomNeededEventArgs> RandomNeeded;
+        [PublicAPI]
         public event EventHandler<RandomRolledEventArgs> RandomRolled;
 
+        [PublicAPI]
         public int CodeCacheSize
         {
-            get { return cacheSize; }
+            get => cacheSize;
             set
             {
                 if (running)
                     throw new InvalidOperationException("Can't change code cache size while running");
                 if (value < 0)
-                    throw new ArgumentOutOfRangeException("Code cache size may not be negative");
+                    throw new ArgumentOutOfRangeException(nameof(value), "Code cache size may not be negative");
                 cacheSize = value;
             }
         }
 
+        [PublicAPI]
         public int MaxUndoDepth
         {
-            get { return MaxUndoDepth; }
+            get => maxUndoDepth;
             set
             {
                 if (running)
                     throw new InvalidOperationException("Can't change max undo depth while running");
                 if (value < 0)
-                    throw new ArgumentOutOfRangeException("Max undo depth may not be negative");
+                    throw new ArgumentOutOfRangeException(nameof(value), "Max undo depth may not be negative");
                 maxUndoDepth = value;
             }
         }
 
-        public void LoadDebugInfo(Stream fromStream)
+        public void LoadDebugInfo([NotNull] Stream fromStream)
         {
-            DebugInfo di = new DebugInfo(fromStream);
+            var di = new DebugInfo(fromStream);
             if (!di.MatchesGameFile(gameFile))
-                throw new ArgumentException("Debug file does not match loaded story file");
+                throw new ArgumentException("Debug file does not match loaded story file", nameof(fromStream));
 
             debugFile = di;
         }
 
-        public DebugInfo DebugInfo
-        {
-            get { return debugFile; }
-        }
+        public DebugInfo DebugInfo => debugFile;
 
-        public IZMachineIO IO
-        {
-            get { return io; }
-        }
+        // ReSharper disable once InconsistentNaming
+        [NotNull]
+        public IZMachineIO IO => io;
 
-        private CallFrame TopFrame
-        {
-            get { return topFrame; }
-        }
+        internal CallFrame TopFrame => topFrame;
 
-        private byte GetByte(int address)
+        internal byte GetByte(int address)
         {
             return zmem[address];
         }
 
-        private short GetWord(int address)
+        internal short GetWord(int address)
         {
             return (short)(zmem[address] * 256 + zmem[address + 1]);
         }
 
-        private void GetBytes(int address, int length, byte[] dest, int destIndex)
+        private void GetBytes(int address, int length, [NotNull] byte[] dest, int destIndex)
         {
             Array.Copy(zmem, address, dest, destIndex, length);
         }
 
-        private void SetBytes(int address, int length, byte[] src, int srcIndex)
+        private void SetBytes(int address, int length, [NotNull] byte[] src, int srcIndex)
         {
             Array.Copy(src, srcIndex, zmem, address, length);
         }
 
-        private void SetByte(int address, byte value)
+        internal void SetByte(int address, byte value)
         {
             zmem[address] = value;
         }
 
 #pragma warning disable 0169
-        private void SetByteChecked(int address, byte value)
+        internal void SetByteChecked(int address, byte value)
         {
             if (address < romStart && (address >= 64 || ValidHeaderWrite(address, ref value)))
                 zmem[address] = value;
@@ -254,20 +269,20 @@ namespace ZLR.VM
             if (address == 0x10)
             {
                 // watch for changes to Flags 2's lower byte
-                byte b = zmem[0x11];
+                var b = zmem[0x11];
                 io.Transcripting = ((b & 1) != 0);
                 io.ForceFixedPitch = ((b & 2) != 0);
             }
         }
 #pragma warning restore 0169
 
-        private void SetWord(int address, short value)
+        internal void SetWord(int address, short value)
         {
             zmem[address] = (byte)(value >> 8);
             zmem[address + 1] = (byte)value;
         }
 
-        private void SetWordChecked(int address, short value)
+        internal void SetWordChecked(int address, short value)
         {
             if (address + 1 < romStart && (address >= 64 || ValidHeaderWrite(address, ref value)))
             {
@@ -278,7 +293,7 @@ namespace ZLR.VM
             if (address == 0xF || address == 0x10)
             {
                 // watch for changes to Flags 2's lower byte
-                byte b = zmem[0x11];
+                var b = zmem[0x11];
                 io.Transcripting = ((b & 1) != 0);
                 io.ForceFixedPitch = ((b & 2) != 0);
             }
@@ -298,11 +313,11 @@ namespace ZLR.VM
 
         private bool ValidHeaderWrite(int address, ref short value)
         {
-            byte b1 = (byte)(value >> 8);
-            byte b2 = (byte)value;
+            var b1 = (byte)(value >> 8);
+            var b2 = (byte)value;
 
-            bool v1 = ValidHeaderWrite(address, ref b1);
-            bool v2 = ValidHeaderWrite(address + 1, ref b2);
+            var v1 = ValidHeaderWrite(address, ref b1);
+            var v2 = ValidHeaderWrite(address + 1, ref b2);
 
             if (v1 || v2)
             {
@@ -318,17 +333,15 @@ namespace ZLR.VM
                 return false;
         }
 
+        [PublicAPI]
         public bool PredictableRandom
         {
-            get { return predictableRng; }
+            get => predictableRng;
             set
             {
                 if (value != predictableRng)
                 {
-                    if (value)
-                        rng = new Random(12345);
-                    else
-                        rng = new Random();
+                    rng = value ? new Random(12345) : new Random();
                     predictableRng = value;
                 }
             }
@@ -338,7 +351,7 @@ namespace ZLR.VM
         {
             //DebugOut("Z-machine version {0}", zversion);
 
-            ResetHeaderFields(true);
+            ResetHeaderFields();
             io.EraseWindow(-1);
             if (zversion <= 4)
                 io.ScrollFromBottom = true;
@@ -471,6 +484,7 @@ namespace ZLR.VM
         }
 #endif
 
+        [PublicAPI]
         public void Reset()
         {
             if (running)
@@ -497,6 +511,7 @@ namespace ZLR.VM
             clearable = false;
         }
 
+        [PublicAPI]
         public void ClearCache()
         {
             if (!clearable)
@@ -511,7 +526,7 @@ namespace ZLR.VM
         /// </summary>
         private void JitLoop()
         {
-            int initialCallDepth = callStack.Count;
+            var initialCallDepth = callStack.Count;
 
             while (running && callStack.Count >= initialCallDepth)
             {
@@ -527,7 +542,7 @@ namespace ZLR.VM
 #endif
 
                 CachedCode entry;
-                int thisPC = pc;
+                var thisPC = pc;
 #if !DISABLE_CACHE
                 if (thisPC < romStart || cache.TryGetValue(thisPC, out entry) == false)
 #endif
@@ -556,118 +571,80 @@ namespace ZLR.VM
         }
 
         // compilation state exposed internally for the Opcode class
-        internal LocalBuilder TempWordLocal
-        {
-            get
-            {
-                if (tempWordLocal == null)
-                    tempWordLocal = il.DeclareLocal(typeof(short));
-                return tempWordLocal;
-            }
-        }
+        [NotNull]
+        internal LocalBuilder TempWordLocal => tempWordLocal ?? (tempWordLocal = il.DeclareLocal(typeof(short)));
 
-        internal LocalBuilder TempArrayLocal
-        {
-            get
-            {
-                if (tempArrayLocal == null)
-                    tempArrayLocal = il.DeclareLocal(typeof(short[]));
-                return tempArrayLocal;
-            }
-        }
+        [NotNull]
+        internal LocalBuilder TempArrayLocal => tempArrayLocal ?? (tempArrayLocal = il.DeclareLocal(typeof(short[])));
 
-        internal LocalBuilder StackLocal
-        {
-            get { return stackLocal; }
-        }
+        internal LocalBuilder StackLocal => stackLocal;
 
-        internal LocalBuilder LocalsLocal
-        {
-            get
-            {
-                return localsLocal;
-            }
-        }
+        internal LocalBuilder LocalsLocal => localsLocal;
 
-        internal int GlobalsOffset
-        {
-            get { return globalsOffset; }
-        }
+        internal int GlobalsOffset => globalsOffset;
 
-        internal int PC
-        {
-            get { return pc; }
-            set { pc = value; }
-        }
+        internal int PC => pc;
 
-        internal int RomStart
-        {
-            get { return romStart; }
-        }
+        internal int RomStart => romStart;
 
-        internal int CompilationStart
-        {
-            get { return compilationStart; }
-        }
+        internal int CompilationStart { get; private set; }
 
-        internal int ZVersion
-        {
-            get { return zversion; }
-        }
+        internal int ZVersion => zversion;
 
         private delegate void ZCodeDelegate();
-        private static readonly Type zcodeReturnType = null;
-        private static readonly Type[] zcodeParamTypes = { typeof(ZMachine) };
+        private static readonly Type ZcodeReturnType = null;
+        private static readonly Type[] ZcodeParamTypes = { typeof(ZMachine) };
 
+        [NotNull]
         private ZCodeDelegate CompileZCode(out int instructionCount)
         {
-            OperandType[] operandTypes = new OperandType[8];
-            short[] argv = new short[8];
-            Dictionary<int, Opcode> opcodes = new Dictionary<int, Opcode>();
+            var operandTypes = new OperandType[8];
+            var argv = new short[8];
+            var opcodes = new Dictionary<int, Opcode>();
 
-            DynamicMethod dm = new DynamicMethod(string.Format("z_{0:x}", pc), zcodeReturnType, zcodeParamTypes,
+            var dm = new DynamicMethod($"z_{pc:x}", ZcodeReturnType, ZcodeParamTypes,
                 typeof(ZMachine));
             il = dm.GetILGenerator();
             tempArrayLocal = null;
             tempWordLocal = null;
 
             compiling = true;
-            compilationStart = pc;
+            CompilationStart = pc;
             instructionCount = 0;
 
             // initialize local variables for the stack and z-locals
-            FieldInfo stackFI = typeof(ZMachine).GetField("stack", BindingFlags.NonPublic | BindingFlags.Instance);
+            var stackFI = GetFieldInfo("stack");
             stackLocal = il.DeclareLocal(typeof(Stack<short>));
             il.Emit(OpCodes.Ldarg_0);
             il.Emit(OpCodes.Ldfld, stackFI);
             il.Emit(OpCodes.Stloc, stackLocal);
 
-            MethodInfo getTopFrameMI = typeof(ZMachine).GetMethod("get_TopFrame", BindingFlags.NonPublic | BindingFlags.Instance);
-            FieldInfo localsFI = typeof(CallFrame).GetField("Locals");
+            var getTopFrameMI = GetMethodInfo("get_TopFrame");
+            var localsFI = typeof(CallFrame).GetField(nameof(CallFrame.Locals));
             localsLocal = il.DeclareLocal(typeof(short[]));
             il.Emit(OpCodes.Ldarg_0);
             il.Emit(OpCodes.Call, getTopFrameMI);
-            Label haveLocals = il.DefineLabel();
+            var haveLocals = il.DefineLabel();
             il.Emit(OpCodes.Dup);
             il.Emit(OpCodes.Brtrue, haveLocals);
             il.Emit(OpCodes.Pop);
             il.Emit(OpCodes.Ldnull);
             il.Emit(OpCodes.Stloc, localsLocal);
-            Label doneLocals = il.DefineLabel();
+            var doneLocals = il.DefineLabel();
             il.Emit(OpCodes.Br, doneLocals);
             il.MarkLabel(haveLocals);
             il.Emit(OpCodes.Ldfld, localsFI);
             il.Emit(OpCodes.Stloc, localsLocal);
             il.MarkLabel(doneLocals);
 
-            Queue<int> todoList = new Queue<int>();
+            var todoList = new Queue<int>();
 
             // pass 1: make linear opcode chains, which might be disconnected from each other.
             Opcode lastOp = null;
             while (compiling)
             {
                 instructionCount++;
-                int thisPC = pc;
+                var thisPC = pc;
 
                 if (opcodes.ContainsKey(thisPC))
                 {
@@ -679,7 +656,7 @@ namespace ZLR.VM
                 }
                 else
                 {
-                    Opcode op = DecodeOneOp(operandTypes, argv);
+                    var op = DecodeOneOp(operandTypes, argv);
                     opcodes.Add(thisPC, op);
                     op.Label = il.DefineLabel();
                     if (lastOp != null)
@@ -688,7 +665,7 @@ namespace ZLR.VM
 
                     if (op.IsBranch || op.IsUnconditionalJump)
                     {
-                        int targetPC = pc + op.BranchOffset - 2;
+                        var targetPC = pc + op.BranchOffset - 2;
                         if (!opcodes.ContainsKey(targetPC))
                             todoList.Enqueue(targetPC);
                     }
@@ -706,11 +683,11 @@ namespace ZLR.VM
                 }
             }
 
-            Opcode node, firstNode = opcodes[compilationStart];
-            Queue<Opcode> todoNodes = new Queue<Opcode>();
+            Opcode firstNode = opcodes[CompilationStart];
+            var todoNodes = new Queue<Opcode>();
 
             // pass 2: tie the chains together, so that every opcode's Target field is correct.
-            node = firstNode;
+            var node = firstNode;
             while (node != null)
             {
                 if (node.Target == null)
@@ -731,13 +708,13 @@ namespace ZLR.VM
             // TODO: optimize constant comparisons here
 
             // pass 3: generate the IL
-            node = opcodes[compilationStart];
+            node = opcodes[CompilationStart];
             compiling = true;
             lastOp = null;
-            bool needRet = false;
-            MethodInfo debugChkMI = typeof(ZMachine).GetMethod("DebugCheck", BindingFlags.NonPublic | BindingFlags.Instance);
+            var needRet = false;
+            var debugChkMI = GetMethodInfo(nameof(DebugCheck));
 #if BENCHMARK
-            FieldInfo cyclesFI = typeof(ZMachine).GetField("cycles", BindingFlags.NonPublic | BindingFlags.Instance);
+            FieldInfo cyclesFI = typeof(ZMachine).GetField(nameof(ZMachine.cycles), BindingFlags.NonPublic | BindingFlags.Instance);
 #endif
             while (node != null && compiling)
             {
@@ -757,7 +734,7 @@ namespace ZLR.VM
                     if (debugging)
                     {
                         // return immediately if DebugCheck(address) returns true
-                        Label noBreakLabel = il.DefineLabel();
+                        var noBreakLabel = il.DefineLabel();
                         il.Emit(OpCodes.Ldarg_0);
                         il.Emit(OpCodes.Ldc_I4, node.PC);
                         il.Emit(OpCodes.Call, debugChkMI);
@@ -784,7 +761,7 @@ namespace ZLR.VM
                     }
                     else
                     {
-                        node.Compile(il, ref compiling);
+                        compiling = node.Compile(il);
 
                         if (node.Target != null)
                             todoNodes.Enqueue(node.Target);
@@ -832,13 +809,24 @@ namespace ZLR.VM
             stackLocal = null;
             localsLocal = null;
 
-            return (ZCodeDelegate)dm.CreateDelegate(typeof(ZCodeDelegate), this);
+            return (ZCodeDelegate) dm.CreateDelegate(typeof(ZCodeDelegate), this);
         }
 
-        private Opcode DecodeOneOp(OperandType[] operandTypes, short[] argv)
+        [NotNull]
+        internal static FieldInfo GetFieldInfo([NotNull] string name) =>
+            typeof(ZMachine).GetField(name, BindingFlags.NonPublic | BindingFlags.Instance) ??
+            throw new ArgumentException($"No such field {name} on {nameof(ZMachine)}");
+
+        [NotNull]
+        internal static MethodInfo GetMethodInfo([NotNull] string name) =>
+            typeof(ZMachine).GetMethod(name, BindingFlags.NonPublic | BindingFlags.Instance) ??
+            throw new ArgumentException($"No such field {name} on {nameof(ZMachine)}");
+
+        [NotNull]
+        private Opcode DecodeOneOp([NotNull] OperandType[] operandTypes, [NotNull] short[] argv)
         {
-            int opc = pc;
-            byte opcode = GetByte(pc++);
+            var opc = pc;
+            var opcode = GetByte(pc++);
             OpForm form;
             if (opcode == 0xBE)
                 form = OpForm.Ext;
@@ -858,10 +846,7 @@ namespace ZLR.VM
                 case OpForm.Short:
                     opnum = (byte)(opcode & 0xF);
                     operandTypes[0] = (OperandType)((opcode >> 4) & 3);
-                    if (operandTypes[0] == OperandType.Omitted)
-                        count = OpCount.Zero;
-                    else
-                        count = OpCount.One;
+                    count = operandTypes[0] == OperandType.Omitted ? OpCount.Zero : OpCount.One;
                     break;
 
                 case OpForm.Long:
@@ -871,10 +856,7 @@ namespace ZLR.VM
 
                 case OpForm.Var:
                     opnum = (byte)(opcode & 0x1F);
-                    if ((opcode & 0x20) == 0)
-                        count = OpCount.Two;
-                    else
-                        count = OpCount.Var;
+                    count = (opcode & 0x20) == 0 ? OpCount.Two : OpCount.Var;
                     break;
 
                 case OpForm.Ext:
@@ -892,10 +874,7 @@ namespace ZLR.VM
             {
                 case OpForm.Short:
                     // the operand type was already found above
-                    if (operandTypes[0] == OperandType.Omitted)
-                        argc = 0;
-                    else
-                        argc = 1;
+                    argc = operandTypes[0] == OperandType.Omitted ? 0 : 1;
                     break;
 
                 case OpForm.Long:
@@ -931,7 +910,7 @@ namespace ZLR.VM
             }
 
             // read operands
-            for (int i = 0; i < argc; i++)
+            for (var i = 0; i < argc; i++)
             {
                 switch (operandTypes[i])
                 {
@@ -965,10 +944,7 @@ namespace ZLR.VM
                 // these are unrecognized custom opcodes, so the best we can do
                 // is skip the opcode and its operands and hope it won't branch or store.
                 if (count != OpCount.Ext || opnum < 29)
-                    throw new NotImplementedException(string.Format(
-                        "Opcode {0} at ${1:x5}",
-                        FormatOpcode(count, form, opnum),
-                        opc));
+                    throw new NotImplementedException($"Opcode {FormatOpcode(count, form, opnum)} at ${opc:x5}");
             }
 
 #if TRACING
@@ -999,9 +975,9 @@ namespace ZLR.VM
 #endif
 
             // decode branch info, store info, and/or text
-            int resultStorage = -1;
-            bool branchIfTrue = false;
-            int branchOffset = int.MinValue;
+            var resultStorage = -1;
+            var branchIfTrue = false;
+            var branchOffset = int.MinValue;
             string text = null;
 
             if (info.Attr.Store)
@@ -1020,7 +996,7 @@ namespace ZLR.VM
 
             if (info.Attr.Branch)
             {
-                DecodeBranch(ref pc, out branchIfTrue, out branchOffset);
+                DecodeBranch(out branchIfTrue, out branchOffset);
 
 #if TRACING
                 Console.Write(" ?{0}{1}",
@@ -1057,10 +1033,10 @@ namespace ZLR.VM
                 text, resultStorage, branchIfTrue, branchOffset);
         }
 
-        private void DecodeBranch(ref int pc, out bool branchIfTrue, out int branchOffset)
+        private void DecodeBranch(out bool branchIfTrue, out int branchOffset)
         {
-            byte b = GetByte(pc++);
-            branchIfTrue = ((b & 128) == 128);
+            var b = GetByte(pc++);
+            branchIfTrue = (b & 128) == 128;
             if ((b & 64) == 64)
             {
                 // short branch, 0 to 63
@@ -1075,6 +1051,7 @@ namespace ZLR.VM
             }
         }
 
+        [NotNull]
         private static string FormatOpCount(OpCount opc)
         {
             switch (opc)
@@ -1088,9 +1065,10 @@ namespace ZLR.VM
             }
         }
 
+        [NotNull]
         internal static string FormatOpcode(OpCount opc, OpForm form, int opnum)
         {
-            StringBuilder sb = new StringBuilder(FormatOpCount(opc));
+            var sb = new StringBuilder(FormatOpCount(opc));
             sb.Append(':');
 
             if (form == OpForm.Ext)
@@ -1120,9 +1098,9 @@ namespace ZLR.VM
 
         private int UnpackOperandTypes(byte b, OperandType[] operandTypes, int start)
         {
-            int count = 0;
+            var count = 0;
 
-            for (int i = 0; i < 4; i++)
+            for (var i = 0; i < 4; i++)
             {
                 operandTypes[i + start] = (OperandType)(b >> 6);
                 b <<= 2;
@@ -1133,7 +1111,7 @@ namespace ZLR.VM
             return count;
         }
 
-        void ResetHeaderFields(bool firstRun)
+        void ResetHeaderFields()
         {
             normalOutput = true;
             tableOutput = false;
@@ -1218,27 +1196,27 @@ namespace ZLR.VM
 
         private void LoadAlphabets()
         {
-            ushort userAlphabets = (ushort)GetWord(0x34);
+            var userAlphabets = (ushort)GetWord(0x34);
             if (userAlphabets == 0)
             {
-                alphabet0 = defaultAlphabet0;
-                alphabet1 = defaultAlphabet1;
-                alphabet2 = defaultAlphabet2;
+                alphabet0 = DefaultAlphabet0;
+                alphabet1 = DefaultAlphabet1;
+                alphabet2 = DefaultAlphabet2;
             }
             else
             {
                 alphabet0 = new char[26];
-                for (int i = 0; i < 26; i++)
+                for (var i = 0; i < 26; i++)
                     alphabet0[i] = CharFromZSCII(GetByte(userAlphabets + i));
 
                 alphabet1 = new char[26];
-                for (int i = 0; i < 26; i++)
+                for (var i = 0; i < 26; i++)
                     alphabet1[i] = CharFromZSCII(GetByte(userAlphabets + 26 + i));
 
                 alphabet2 = new char[26];
                 alphabet2[0] = ' '; // escape code
                 alphabet2[1] = '\n'; // new line
-                for (int i = 2; i < 26; i++)
+                for (var i = 2; i < 26; i++)
                     alphabet2[i] = CharFromZSCII(GetByte(userAlphabets + 52 + i));
 
                 if (userAlphabets < romStart)
@@ -1248,16 +1226,16 @@ namespace ZLR.VM
 
         private void LoadExtraChars()
         {
-            ushort userExtraChars = (ushort)GetHeaderExtWord(3);
+            var userExtraChars = (ushort)GetHeaderExtWord(3);
             if (userExtraChars == 0)
             {
-                extraChars = defaultExtraChars;
+                extraChars = DefaultExtraChars;
             }
             else
             {
-                byte n = GetByte(userExtraChars);
+                var n = GetByte(userExtraChars);
                 extraChars = new char[n];
-                for (int i = 0; i < n; i++)
+                for (var i = 0; i < n; i++)
                     extraChars[i] = (char)GetWord(userExtraChars + 1 + 2 * i);
 
                 if (userExtraChars < romStart)
@@ -1270,16 +1248,16 @@ namespace ZLR.VM
 
         private void LoadTerminatingChars()
         {
-            ushort terminatingTable = (ushort)GetWord(0x2E);
+            var terminatingTable = (ushort)GetWord(0x2E);
             if (terminatingTable == 0)
             {
                 terminatingChars = new byte[0];
             }
             else
             {
-                List<byte> temp = new List<byte>();
-                byte b = GetByte(terminatingTable);
-                int n = 1;
+                var temp = new List<byte>();
+                var b = GetByte(terminatingTable);
+                var n = 1;
                 while (b != 0)
                 {
                     if (b == 255)
@@ -1307,9 +1285,9 @@ namespace ZLR.VM
         private void LoadWordSeparators()
         {
             // read word separators
-            byte n = GetByte(dictionaryTable);
+            var n = GetByte(dictionaryTable);
             wordSeparators = new byte[n];
-            for (int i = 0; i < n; i++)
+            for (var i = 0; i < n; i++)
                 wordSeparators[i] = GetByte(dictionaryTable + 1 + i);
 
             // the dictionary is almost certainly in ROM, but just in case...
@@ -1332,18 +1310,18 @@ namespace ZLR.VM
 
         private short GetHeaderExtWord(int num)
         {
-            ushort headerExt = (ushort)GetWord(0x36);
+            var headerExt = (ushort)GetWord(0x36);
             if (headerExt == 0)
                 return 0;
 
-            ushort len = (ushort)GetWord(headerExt);
+            var len = (ushort)GetWord(headerExt);
             if (num > len)
                 return 0;
 
             return GetWord(headerExt + 2 * num);
         }
 
-        private int UnpackAddress(short packedAddr, bool forString)
+        internal int UnpackAddress(short packedAddr, bool forString)
         {
             switch (zversion)
             {
@@ -1369,7 +1347,7 @@ namespace ZLR.VM
             }
         }
 
-        private void TrapMemory(ushort address, ushort length)
+        internal void TrapMemory(ushort address, ushort length)
         {
             traps.Handle(address, length);
         }
@@ -1379,11 +1357,11 @@ namespace ZLR.VM
             public CallFrame(int returnPC, int prevStackDepth, int numLocals, int argCount,
                 int resultStorage)
             {
-                this.ReturnPC = returnPC;
-                this.PrevStackDepth = prevStackDepth;
-                this.Locals = new short[numLocals];
-                this.ArgCount = argCount;
-                this.ResultStorage = resultStorage;
+                ReturnPC = returnPC;
+                PrevStackDepth = prevStackDepth;
+                Locals = new short[numLocals];
+                ArgCount = argCount;
+                ResultStorage = resultStorage;
             }
 
             public readonly int ReturnPC;
@@ -1392,9 +1370,10 @@ namespace ZLR.VM
             public readonly int ArgCount;
             public readonly int ResultStorage;
 
+            [NotNull]
             public CallFrame Clone()
             {
-                CallFrame result = new CallFrame(ReturnPC, PrevStackDepth, Locals.Length,
+                var result = new CallFrame(ReturnPC, PrevStackDepth, Locals.Length,
                     ArgCount, ResultStorage);
                 Array.Copy(Locals, result.Locals, Locals.Length);
                 return result;
@@ -1402,43 +1381,28 @@ namespace ZLR.VM
 
             #region ICallFrame Members
 
-            int ICallFrame.ReturnPC
-            {
-                get { return ReturnPC; }
-            }
+            int ICallFrame.ReturnPC => ReturnPC;
 
-            int ICallFrame.PrevStackDepth
-            {
-                get { return PrevStackDepth; }
-            }
+            int ICallFrame.PrevStackDepth => PrevStackDepth;
 
-            short[] ICallFrame.Locals
-            {
-                get { return Locals; }
-            }
+            short[] ICallFrame.Locals => Locals;
 
-            int ICallFrame.ArgCount
-            {
-                get { return ArgCount; }
-            }
+            int ICallFrame.ArgCount => ArgCount;
 
-            int ICallFrame.ResultStorage
-            {
-                get { return ResultStorage; }
-            }
+            int ICallFrame.ResultStorage => ResultStorage;
 
             #endregion
         }
 
         private class UndoState
         {
-            private byte[] ram;
-            private short[] savedStack;
-            private CallFrame[] savedCallStack;
-            private int savedPC;
-            private byte savedDest;
+            private readonly byte[] ram;
+            private readonly short[] savedStack;
+            private readonly CallFrame[] savedCallStack;
+            private readonly int savedPC;
+            private readonly byte savedDest;
 
-            public UndoState(byte[] zmem, int ramLength, Stack<short> stack, Stack<CallFrame> callStack,
+            public UndoState([NotNull] byte[] zmem, int ramLength, [NotNull] Stack<short> stack, [ItemNotNull] [NotNull] Stack<CallFrame> callStack,
                 int pc, byte dest)
             {
                 ram = new byte[ramLength];
@@ -1446,24 +1410,24 @@ namespace ZLR.VM
 
                 savedStack = stack.ToArray();
                 savedCallStack = callStack.ToArray();
-                for (int i = 0; i < savedCallStack.Length; i++)
+                for (var i = 0; i < savedCallStack.Length; i++)
                     savedCallStack[i] = savedCallStack[i].Clone();
 
                 savedPC = pc;
                 savedDest = dest;
             }
 
-            public void Restore(byte[] zmem, Stack<short> stack, Stack<CallFrame> callStack,
+            public void Restore([NotNull] byte[] zmem, [NotNull] Stack<short> stack, [ItemNotNull] [NotNull] Stack<CallFrame> callStack,
                 out int pc, out byte dest)
             {
                 Array.Copy(ram, zmem, ram.Length);
 
                 stack.Clear();
-                for (int i = savedStack.Length - 1; i >= 0; i--)
+                for (var i = savedStack.Length - 1; i >= 0; i--)
                     stack.Push(savedStack[i]);
 
                 callStack.Clear();
-                for (int i = savedCallStack.Length - 1; i >= 0; i--)
+                for (var i = savedCallStack.Length - 1; i >= 0; i--)
                     callStack.Push(savedCallStack[i]);
 
                 pc = savedPC;
@@ -1475,11 +1439,11 @@ namespace ZLR.VM
 
         private class MemoryTraps
         {
-            private List<int> starts = new List<int>();
-            private List<int> lengths = new List<int>();
-            private List<MemoryTrapHandler> handlers = new List<MemoryTrapHandler>();
+            [NotNull] private readonly List<int> starts = new List<int>();
+            [NotNull] private readonly List<int> lengths = new List<int>();
+            [NotNull] private readonly List<MemoryTrapHandler> handlers = new List<MemoryTrapHandler>();
 
-            private int firstAddress = 0;
+            private int firstAddress;
             private int lastAddress = -1;
 
             /// <summary>
@@ -1492,7 +1456,7 @@ namespace ZLR.VM
             /// is written.</param>
             public void Add(int trapStart, int trapLength, MemoryTrapHandler trapHandler)
             {
-                int idx = starts.BinarySearch(trapStart);
+                var idx = starts.BinarySearch(trapStart);
                 if (idx < 0)
                 {
                     idx = ~idx;
@@ -1510,14 +1474,14 @@ namespace ZLR.VM
             /// remove.</param>
             public void Remove(int trapStart)
             {
-                int idx = starts.BinarySearch(trapStart);
+                var idx = starts.BinarySearch(trapStart);
                 if (idx >= 0)
                 {
                     starts.RemoveAt(idx);
                     lengths.RemoveAt(idx);
                     handlers.RemoveAt(idx);
 
-                    int count = starts.Count;
+                    var count = starts.Count;
                     if (count == 0)
                     {
                         firstAddress = 0;
@@ -1541,18 +1505,18 @@ namespace ZLR.VM
             /// was written.</param>
             public void Handle(int changeStart, int changeLength)
             {
-                int changeEnd = changeStart + changeLength - 1;
+                var changeEnd = changeStart + changeLength - 1;
 
                 if (changeStart > lastAddress || changeEnd < firstAddress)
                     return;
 
                 /* the number of traps will be very limited, so we don't need to
                  * do anything fancy here. */
-                int trapCount = starts.Count;
-                for (int i = 0; i < trapCount; i++)
+                var trapCount = starts.Count;
+                for (var i = 0; i < trapCount; i++)
                 {
-                    int start = starts[i];
-                    int len = lengths[i];
+                    var start = starts[i];
+                    var len = lengths[i];
                     if (changeStart >= start && changeEnd < start + len)
                         handlers[i].Invoke();
                 }

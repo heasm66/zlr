@@ -2,6 +2,7 @@ using System;
 using System.Collections.Generic;
 using System.IO;
 using System.Text;
+using JetBrains.Annotations;
 
 namespace ZLR.VM
 {
@@ -11,7 +12,7 @@ namespace ZLR.VM
     public partial class ZMachine
     {
 #pragma warning disable 0169
-        private short ReadImpl(ushort buffer, ushort parse, ushort time, ushort routine)
+        internal short ReadImpl(ushort buffer, ushort parse, ushort time, ushort routine)
         {
             byte max, initlen;
             if (zversion <= 4)
@@ -34,49 +35,55 @@ namespace ZLR.VM
             BeginExternalWait();
             try
             {
+                if (cmdRdr != null && cmdRdr.EOF)
+                {
+                    cmdRdr.Dispose();
+                    cmdRdr = null;
+                }
+
                 if (cmdRdr == null)
                 {
-                    string initial = string.Empty;
+                    var initial = string.Empty;
                     if (initlen > 0)
                     {
                         // we never get here for V1-4
-                        StringBuilder sb = new StringBuilder(initlen);
-                        for (int i = 0; i < initlen; i++)
+                        var sb = new StringBuilder(initlen);
+                        for (var i = 0; i < initlen; i++)
                             sb.Append(CharFromZSCII(GetByte(buffer + 2 + i)));
                         initial = sb.ToString();
                     }
                     str = io.ReadLine(initial,
-                        time, delegate { return HandleInputTimer(routine); },
+                        time, () => HandleInputTimer(routine),
                         terminatingChars, out terminator);
                 }
                 else
                 {
                     str = cmdRdr.ReadLine(out terminator);
+                    System.Diagnostics.Debug.Assert(str != null, "str != null");
                     if (terminator == 13)
                         io.PutCommand(str + "\n");
                     else
                         io.PutCommand(str);
                 }
 
-                if (cmdWtr != null)
-                    cmdWtr.WriteLine(str, terminator);
+                cmdWtr?.WriteLine(str, terminator);
             }
             finally
             {
                 EndExternalWait();
             }
 
-            byte[] chars = StringToZSCII(str.ToLower());
+            var chars = StringToZSCII(str.ToLower());
             if (zversion <= 4)
             {
-                for (int i = 0; i < Math.Min(chars.Length, max); i++)
+                for (var i = 0; i < Math.Min(chars.Length, max); i++)
                     SetByte(buffer + 1 + i, chars[i]);
                 SetByte(buffer + 1 + Math.Min(chars.Length, max), 0);
             }
             else
             {
                 SetByte(buffer + 1, (byte)chars.Length);
-                for (int i = 0; i < Math.Min(chars.Length, max); i++)
+                for (var i = 0; i < Math.Min(chars.Length, max); i++)
                     SetByte(buffer + 2 + i, chars[i]);
             }
 
@@ -86,7 +93,7 @@ namespace ZLR.VM
             return terminator;
         }
 
-        private short ReadCharImpl(ushort time, ushort routine)
+        internal short ReadCharImpl(ushort time, ushort routine)
         {
             BeginExternalWait();
             try
@@ -101,13 +108,12 @@ namespace ZLR.VM
 
                 if (cmdRdr == null)
                     result = io.ReadKey(time,
-                        delegate { return HandleInputTimer(routine); },
-                        delegate(char c) { return FilterInput(CharToZSCII(c)); });
+                        () => HandleInputTimer(routine),
+                        c => FilterInput(CharToZSCII(c)));
                 else
                     result = cmdRdr.ReadKey();
 
-                if (cmdWtr != null)
-                    cmdWtr.WriteKey((byte)result);
+                cmdWtr?.WriteKey((byte)result);
 
                 return result;
             }
@@ -124,16 +130,16 @@ namespace ZLR.VM
 
             JitLoop();
 
-            short result = stack.Pop();
+            var result = stack.Pop();
             return (result != 0);
         }
 
         private short FilterInput(short ch)
         {
             // only allow characters that are defined for input: section 3.8
-            if (ch < 32 && (ch != 8 && ch != 13 && ch != 27))
+            if (ch < 32 && ch != 8 && ch != 13 && ch != 27)
                 return 0;
-            else if (ch >= 127 && (ch <= 128 || ch >= 255))
+            if (ch >= 127 && (ch <= 128 || ch >= 255))
                 return 0;
 
             return ch;
@@ -141,12 +147,13 @@ namespace ZLR.VM
 
         private struct Token
         {
-            public byte StartPos, Length;
+            public readonly byte StartPos;
+            public readonly byte Length;
 
-            public Token(byte startPos, byte Length)
+            public Token(byte startPos, byte length)
             {
-                this.StartPos = startPos;
-                this.Length = Length;
+                StartPos = startPos;
+                Length = length;
             }
         }
 
@@ -155,9 +162,10 @@ namespace ZLR.VM
             return (ch == 9) || (ch == 32);
         }
 
-        private List<Token> SplitTokens(byte[] buffer, ushort userDict)
+        [NotNull]
+        private List<Token> SplitTokens([NotNull] byte[] buffer, ushort userDict)
         {
-            List<Token> result = new List<Token>();
+            var result = new List<Token>();
             byte[] seps;
 
             if (userDict == 0)
@@ -166,12 +174,12 @@ namespace ZLR.VM
             }
             else
             {
-                byte n = GetByte(userDict);
+                var n = GetByte(userDict);
                 seps = new byte[n];
                 GetBytes(userDict + 1, n, seps, 0);
             }
 
-            int i = 0;
+            var i = 0;
             do
             {
                 // skip whitespace
@@ -189,7 +197,7 @@ namespace ZLR.VM
                 }
                 else
                 {
-                    byte start = (byte)i;
+                    var start = (byte)i;
 
                     // find the end of the word
                     while (i < buffer.Length && !IsTokenSpace(buffer[i]) &&
@@ -206,7 +214,7 @@ namespace ZLR.VM
             return result;
         }
 
-        private void Tokenize(ushort buffer, ushort parse, ushort userDict, bool skipUnrecognized)
+        internal void Tokenize(ushort buffer, ushort parse, ushort userDict, bool skipUnrecognized)
         {
             byte bufLen;
             int tokenOffset;
@@ -216,7 +224,7 @@ namespace ZLR.VM
                 bufLen = 0;
                 tokenOffset = 1;
 
-                for (int i = buffer + 1; i < romStart; i++)
+                for (var i = buffer + 1; i < romStart; i++)
                     if (GetByte(i) == 0)
                     {
                         bufLen = (byte)(i - buffer - 1);
@@ -229,16 +237,16 @@ namespace ZLR.VM
                 tokenOffset = 2;
             }
 
-            byte max = GetByte(parse + 0);
+            var max = GetByte(parse + 0);
             byte count = 0;
 
-            byte[] myBuffer = new byte[bufLen];
+            var myBuffer = new byte[bufLen];
             GetBytes(buffer + tokenOffset, bufLen, myBuffer, 0);
-            List<Token> tokens = SplitTokens(myBuffer, userDict);
+            var tokens = SplitTokens(myBuffer, userDict);
 
-            foreach (Token tok in tokens)
+            foreach (var tok in tokens)
             {
-                ushort word = LookUpWord(userDict, myBuffer, tok.StartPos, tok.Length);
+                var word = LookUpWord(userDict, myBuffer, tok.StartPos, tok.Length);
                 if (word == 0 && skipUnrecognized)
                     continue;
 
@@ -257,13 +265,12 @@ namespace ZLR.VM
         private ushort LookUpWord(int userDict, byte[] buffer, int pos, int length)
         {
             int dictStart;
-            byte[] word;
 
-            word = EncodeText(buffer, pos, length, DictWordSize);
+            var word = EncodeText(buffer, pos, length, DictWordSize);
 
             if (userDict != 0)
             {
-                byte n = GetByte(userDict);
+                var n = GetByte(userDict);
                 dictStart = userDict + 1 + n;
             }
             else
@@ -271,7 +278,7 @@ namespace ZLR.VM
                 dictStart = dictionaryTable + 1 + wordSeparators.Length;
             }
 
-            byte entryLength = GetByte(dictStart++);
+            var entryLength = GetByte(dictStart++);
 
             int entries;
             if (userDict == 0)
@@ -283,9 +290,9 @@ namespace ZLR.VM
             if (entries < 0)
             {
                 // use linear search for unsorted user dictionary
-                for (int i = 0; i < entries; i++)
+                for (var i = 0; i < entries; i++)
                 {
-                    int addr = dictStart + i * entryLength;
+                    var addr = dictStart + i * entryLength;
                     if (CompareWords(word, addr) == 0)
                         return (ushort)addr;
                 }
@@ -296,9 +303,9 @@ namespace ZLR.VM
                 int start = 0, end = entries;
                 while (start < end)
                 {
-                    int mid = (start + end) / 2;
-                    int addr = dictStart + mid * entryLength;
-                    int cmp = CompareWords(word, addr);
+                    var mid = (start + end) / 2;
+                    var addr = dictStart + mid * entryLength;
+                    var cmp = CompareWords(word, addr);
                     if (cmp == 0)
                         return (ushort)addr;
                     else if (cmp < 0)
@@ -311,11 +318,11 @@ namespace ZLR.VM
             return 0;
         }
 
-        private int CompareWords(byte[] word, int addr)
+        private int CompareWords([NotNull] byte[] word, int addr)
         {
-            for (int i = 0; i < word.Length; i++)
+            for (var i = 0; i < word.Length; i++)
             {
-                int cmp = word[i] - GetByte(addr + i);
+                var cmp = word[i] - GetByte(addr + i);
                 if (cmp != 0)
                     return cmp;
             }
@@ -334,6 +341,7 @@ namespace ZLR.VM
         /// truncated or padded to, which must be a multiple of 3; or 0 to allow variable size
         /// output (padded up to a multiple of 2 bytes, if necessary).</param>
         /// <returns>The encoded text, with th.</returns>
+        [NotNull]
         private byte[] EncodeText(byte[] input, int start, int length, int numZchars)
         {
             List<byte> zchars;
@@ -344,14 +352,14 @@ namespace ZLR.VM
             else
             {
                 if (numZchars < 0 || numZchars % 3 != 0)
-                    throw new ArgumentException("Output size must be a multiple of 3", "numZchars");
+                    throw new ArgumentException("Output size must be a multiple of 3", nameof(numZchars));
                 zchars = new List<byte>(numZchars);
             }
 
-            for (int i = 0; i < length; i++)
+            for (var i = 0; i < length; i++)
             {
-                byte zc = input[start + i];
-                char ch = CharFromZSCII(zc);
+                var zc = input[start + i];
+                var ch = CharFromZSCII(zc);
 
                 if (ch == ' ')
                 {
@@ -400,7 +408,7 @@ namespace ZLR.VM
                 resultBytes = numZchars * 2 / 3;
             }
 
-            byte[] result = new byte[resultBytes];
+            var result = new byte[resultBytes];
             int zi = 0, ri = 0;
             while (ri < resultBytes)
             {
@@ -414,7 +422,7 @@ namespace ZLR.VM
             return result;
         }
 
-        private void SetInputStream(short num)
+        internal void SetInputStream(short num)
         {
             switch (num)
             {
@@ -427,11 +435,10 @@ namespace ZLR.VM
                     break;
 
                 case 1:
-                    Stream cmdStream = io.OpenCommandFile(false);
+                    var cmdStream = io.OpenCommandFile(false);
                     if (cmdStream != null)
                     {
-                        if (cmdRdr != null)
-                            cmdRdr.Dispose();
+                        cmdRdr?.Dispose();
 
                         try
                         {
@@ -445,7 +452,7 @@ namespace ZLR.VM
                     break;
 
                 default:
-                    throw new Exception("Invalid input stream #" + num.ToString());
+                    throw new Exception("Invalid input stream #" + num);
             }
         }
 
@@ -459,12 +466,10 @@ namespace ZLR.VM
         /// will be called to get a stream for the command file. The property will be
         /// reset to false after the game finishes running.</para>
         /// </remarks>
+        [PublicAPI]
         public bool WritingCommandsToFile
         {
-            get
-            {
-                return (cmdWtr != null);
-            }
+            get => cmdWtr != null;
             set
             {
                 if (value)
@@ -485,26 +490,18 @@ namespace ZLR.VM
         /// will be called to get a stream for the command file. The property will be
         /// reset to false after the game finishes running.</para>
         /// </remarks>
+        [PublicAPI]
         public bool ReadingCommandsFromFile
         {
-            get
-            {
-                return (cmdRdr != null);
-            }
-            set
-            {
-                if (value)
-                    SetInputStream(1);
-                else
-                    SetInputStream(0);
-            }
+            get => cmdRdr != null;
+            set => SetInputStream((short) (value ? 1 : 0));
         }
 
         private class CommandFileReader : IDisposable
         {
             private StreamReader rdr;
 
-            public CommandFileReader(Stream stream)
+            public CommandFileReader([NotNull] Stream stream)
             {
                 rdr = new StreamReader(stream);
             }
@@ -518,24 +515,22 @@ namespace ZLR.VM
                 }
             }
 
-            public bool EOF
-            {
-                get { return rdr.EndOfStream; }
-            }
+            public bool EOF => rdr.EndOfStream;
 
+            [CanBeNull]
             public string ReadLine(out byte terminator)
             {
                 terminator = 13;
-                string line = rdr.ReadLine();
+                var line = rdr.ReadLine();
 
-                if (line.EndsWith("]"))
+                if (line != null && line.EndsWith("]"))
                 {
-                    int idx = line.LastIndexOf('[');
+                    var idx = line.LastIndexOf('[');
                     if (idx >= 0)
                     {
-                        string key = line.Substring(idx + 1, line.Length - idx - 2);
+                        var key = line.Substring(idx + 1, line.Length - idx - 2);
                         int keyCode;
-                        if (int.TryParse(key, out keyCode) == true)
+                        if (int.TryParse(key, out keyCode))
                         {
                             line = line.Substring(0, idx);
                             terminator = (byte)keyCode;
@@ -552,19 +547,18 @@ namespace ZLR.VM
 
             public byte ReadKey()
             {
-                string line = rdr.ReadLine();
+                var line = rdr.ReadLine();
 
-                if (line.Length == 0)
+                if (string.IsNullOrEmpty(line))
                     return 13;
 
                 if (line.StartsWith("["))
                 {
-                    int idx = line.IndexOf(']');
+                    var idx = line.IndexOf(']');
                     if (idx >= 0)
                     {
-                        string key = line.Substring(1, idx - 1);
-                        int keyCode;
-                        if (int.TryParse(key, out keyCode) == true)
+                        var key = line.Substring(1, idx - 1);
+                        if (int.TryParse(key, out int keyCode))
                             return (byte)keyCode;
                     }
                 }
@@ -577,7 +571,7 @@ namespace ZLR.VM
         {
             private StreamWriter wtr;
 
-            public CommandFileWriter(Stream stream)
+            public CommandFileWriter([NotNull] Stream stream)
             {
                 wtr = new StreamWriter(stream);
             }

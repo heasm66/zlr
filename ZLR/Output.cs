@@ -2,6 +2,7 @@ using System;
 using System.Text;
 using System.Collections.Generic;
 using System.IO;
+using JetBrains.Annotations;
 
 namespace ZLR.VM
 {
@@ -84,6 +85,7 @@ namespace ZLR.VM
     /// and splitting windows; changing the text style; and indicating the capabilities of
     /// the I/O system.
     /// </summary>
+    [PublicAPI]
     public interface IZMachineIO
     {
         // TODO: let the I/O module know whether we're using a command file, so it can disable the "more" prompts
@@ -113,7 +115,8 @@ namespace ZLR.VM
         /// still allow the player to edit it as if he had typed it himself. (If this cannot be achieved,
         /// it is recommended to err on the side of letting the player edit the text.)</para>
         /// </remarks>
-        string ReadLine(string initial, int time, TimedInputCallback callback, byte[] terminatingKeys, out byte terminator);
+        [NotNull]
+        string ReadLine([NotNull] string initial, int time, [NotNull] TimedInputCallback callback, [CanBeNull] byte[] terminatingKeys, out byte terminator);
         /// <summary>
         /// Reads a single key of input from the player, without echoing it.
         /// </summary>
@@ -127,13 +130,13 @@ namespace ZLR.VM
         /// ZSCII values, according to the currently selected translation table.</param>
         /// <returns>The ZSCII value of the key that was pressed, or 0 if input was cancelled by the
         /// timer callback.</returns>
-        short ReadKey(int time, TimedInputCallback callback, CharTranslator translator);
+        short ReadKey(int time, [NotNull] TimedInputCallback callback, [NotNull] CharTranslator translator);
         /// <summary>
         /// Displays a command that has been read from the command file.
         /// </summary>
         /// <param name="command">The command read from the file. If the command was terminated
         /// by pressing the enter key, this string will end with a newline.</param>
-        void PutCommand(string command);
+        void PutCommand([NotNull] string command);
         
         #endregion
 
@@ -150,13 +153,13 @@ namespace ZLR.VM
         /// window settings.
         /// </summary>
         /// <param name="str">The string to write.</param>
-        void PutString(string str);
+        void PutString([NotNull] string str);
         /// <summary>
         /// Writes a series of lines to the screen, spreading down and to the right from the
         /// current cursor position, and leaving the cursor at the end of the last line.
         /// </summary>
         /// <param name="lines">The lines to write.</param>
-        void PutTextRectangle(string[] lines);
+        void PutTextRectangle([ItemNotNull] [NotNull] string[] lines);
         /// <summary>
         /// Gets or sets a value indicating whether text in the lower (main) window is
         /// buffered for word wrapping.
@@ -190,7 +193,7 @@ namespace ZLR.VM
         /// Writes a string to the transcript file.
         /// </summary>
         /// <param name="str">The string to write.</param>
-        void PutTranscriptString(string str);
+        void PutTranscriptString([NotNull] string str);
 
         #endregion
 
@@ -201,21 +204,23 @@ namespace ZLR.VM
         /// </summary>
         /// <param name="size">The size of the game state that will be written, in bytes.</param>
         /// <returns>A writable <see cref="System.IO.Stream"/> for the save file, which the
-        /// VM will close after it's done saving; or null if the user chose not to select a
+        /// VM will close after it's done saving; or <see langword="null"/> if the user chose not to select a
         /// file or the file couldn't be opened.</returns>
         /// <remarks>
         /// The interface module is responsible for prompting the player for a file name, if necessary.
         /// </remarks>
+        [CanBeNull]
         Stream OpenSaveFile(int size);
         /// <summary>
         /// Opens a stream to read a previously saved game file.
         /// </summary>
         /// <returns>A readable <see cref="System.IO.Stream"/> for the save file, which the
-        /// VM will close after it's done loading; or null if the user chose not to select a
+        /// VM will close after it's done loading; or <see langword="null"/> if the user chose not to select a
         /// file or the file couldn't be opened.</returns>
         /// <remarks>
         /// The interface module is responsible for prompting the player for a file name, if necessary.
         /// </remarks>
+        [CanBeNull]
         Stream OpenRestoreFile();
         /// <summary>
         /// Opens a stream to read or write auxiliary game data.
@@ -227,7 +232,7 @@ namespace ZLR.VM
         /// false if it will be used to read previously saved data.</param>
         /// <returns>A <see cref="System.IO.Stream"/> for the auxiliary file, which must be
         /// readable or writable depending on the value of <paramref name="writing"/>, and
-        /// which the VM will close after it's done using; or null if the user chose not to
+        /// which the VM will close after it's done using; or <see langword="null"/> if the user chose not to
         /// select a file or the file couldn't be opened.</returns>
         /// <remarks>
         /// The interface module is responsible for prompting the player for a file name, if necessary.
@@ -235,7 +240,8 @@ namespace ZLR.VM
         /// for a name and use the suggested name as a default. The suggested name should at least
         /// be visible to the user, since a game may use several auxiliary files.
         /// </remarks>
-        Stream OpenAuxiliaryFile(string name, int size, bool writing);
+        [CanBeNull]
+        Stream OpenAuxiliaryFile([NotNull] string name, int size, bool writing);
         /// <summary>
         /// Opens a stream to read or write the player's input to a file.
         /// </summary>
@@ -243,8 +249,9 @@ namespace ZLR.VM
         /// input; false if it will be used to replay previously recorded input.</param>
         /// <returns>A <see cref="System.IO.Stream"/> for the command file, which must be
         /// readable or writable depending on the value of <paramref name="writing"/>, and
-        /// which the VM will close after it's done using; or null if the user chose not to
+        /// which the VM will close after it's done using; or <see langword="null"/> if the user chose not to
         /// select a file or the file couldn't be opened.</returns>
+        [CanBeNull]
         Stream OpenCommandFile(bool writing);
 
         #endregion
@@ -352,8 +359,8 @@ namespace ZLR.VM
         /// <param name="useTime"><b>true</b> if this is a time game, or <b>false</b> if
         /// this is a score game.</param>
         /// <returns><b>true</b> to indicate that the status line request has been handled,
-        /// or <b>false</b> to allow ZLR's default status line handler to print it</returns>
-        bool DrawCustomStatusLine(string location, short hoursOrScore, short minsOrTurns, bool useTime);
+        /// or <b>false</b> to allow ZLR's default status line handler to print it.</returns>
+        bool DrawCustomStatusLine([NotNull] string location, short hoursOrScore, short minsOrTurns, bool useTime);
 
         #endregion
 
@@ -376,7 +383,7 @@ namespace ZLR.VM
         /// the sound to finish before returning.
         /// </remarks>
         void PlaySoundSample(ushort number, SoundAction action, byte volume, byte repeats,
-            SoundFinishedCallback callback);
+            [NotNull] SoundFinishedCallback callback);
         /// <summary>
         /// Plays a beep sound.
         /// </summary>
@@ -549,19 +556,19 @@ namespace ZLR.VM
         }
 
 #pragma warning disable 0169
-        private void PrintZSCII(short zc)
+        internal void PrintZSCII(short zc)
         {
             if (zc == 0)
                 return;
 
             if (tableOutput)
             {
-                List<byte> buffer = tableOutputBufferStack.Peek();
+                var buffer = tableOutputBufferStack.Peek();
                 buffer.Add((byte)zc);
             }
             else
             {
-                char ch = CharFromZSCII(zc);
+                var ch = CharFromZSCII(zc);
                 if (normalOutput)
                     io.PutChar(ch);
                 if (io.Transcripting)
@@ -569,11 +576,11 @@ namespace ZLR.VM
             }
         }
 
-        private void PrintUnicode(ushort uc)
+        internal void PrintUnicode(ushort uc)
         {
             if (tableOutput)
             {
-                List<byte> buffer = tableOutputBufferStack.Peek();
+                var buffer = tableOutputBufferStack.Peek();
                 buffer.Add((byte)CharToZSCII((char)uc));
             }
             else
@@ -585,12 +592,12 @@ namespace ZLR.VM
             }
         }
 
-        private void PrintString(string str)
+        internal void PrintString(string str)
         {
             if (tableOutput)
             {
-                List<byte> buffer = tableOutputBufferStack.Peek();
-                foreach (char ch in str)
+                var buffer = tableOutputBufferStack.Peek();
+                foreach (var ch in str)
                     buffer.Add((byte)CharToZSCII(ch));
             }
             else
@@ -626,7 +633,7 @@ namespace ZLR.VM
                     return 13;
 
                 default:
-                    int idx = Array.IndexOf(extraChars, ch);
+                    var idx = Array.IndexOf(extraChars, ch);
                     if (idx >= 0)
                         return (short)(155 + idx);
                     else
@@ -634,27 +641,28 @@ namespace ZLR.VM
             }
         }
 
-        private byte[] StringToZSCII(string str)
+        [NotNull]
+        private byte[] StringToZSCII([NotNull] string str)
         {
-            byte[] result = new byte[str.Length];
-            for (int i = 0; i < str.Length; i++)
+            var result = new byte[str.Length];
+            for (var i = 0; i < str.Length; i++)
                 result[i] = (byte)CharToZSCII(str[i]);
             return result;
         }
 
         // default alphabets (S 3.5.3)
-        private static readonly char[] defaultAlphabet0 =
+        private static readonly char[] DefaultAlphabet0 =
             { 'a', 'b', 'c', 'd', 'e', 'f', 'g', 'h', 'i', 'j', 'k', 'l', 'm',
               'n', 'o', 'p', 'q', 'r', 's', 't', 'u', 'v', 'w', 'x', 'y', 'z' };
-        private static readonly char[] defaultAlphabet1 =
+        private static readonly char[] DefaultAlphabet1 =
             { 'A', 'B', 'C', 'D', 'E', 'F', 'G', 'H', 'I', 'J', 'K', 'L', 'M',
               'N', 'O', 'P', 'Q', 'R', 'S', 'T', 'U', 'V', 'W', 'X', 'Y', 'Z' };
-        private static readonly char[] defaultAlphabet2 =
+        private static readonly char[] DefaultAlphabet2 =
             { ' ', '\n', '0', '1', '2', '3',  '4', '5', '6',  '7', '8', '9', '.',
               ',', '!',  '?', '_', '#', '\'', '"', '/', '\\', '-', ':', '(', ')' };
 
         // default Unicode translations (S 3.8.5.3)
-        private static readonly char[] defaultExtraChars =
+        private static readonly char[] DefaultExtraChars =
             { '\u00e4', '\u00f6', '\u00fc', '\u00c4', '\u00d6', '\u00dc', '\u00df', '\u00bb', '\u00ab', '\u00eb', // 155
               '\u00ef', '\u00ff', '\u00cb', '\u00cf', '\u00e1', '\u00e9', '\u00ed', '\u00f3', '\u00fa', '\u00fd', // 165
               '\u00c1', '\u00c9', '\u00cd', '\u00d3', '\u00da', '\u00dd', '\u00e0', '\u00e8', '\u00ec', '\u00f2', // 175
@@ -663,20 +671,18 @@ namespace ZLR.VM
               '\u00e3', '\u00f1', '\u00f5', '\u00c3', '\u00d1', '\u00d5', '\u00e6', '\u00c6', '\u00e7', '\u00c7', // 205
               '\u00fe', '\u00f0', '\u00de', '\u00d0', '\u00a3', '\u0153', '\u0152', '\u00a1', '\u00bf' };         // 215
 
-        private string DecodeString(int address)
-        {
-            int dummy;
-            return DecodeStringWithLen(address, out dummy);
-        }
+        [NotNull]
+        internal string DecodeString(int address) => DecodeStringWithLen(address, out int dummy);
 
+        [NotNull]
         private string DecodeStringWithLen(int address, out int len)
         {
             len = 0;
 
-            int alphabet = 0;
-            int abbrevMode = 0;
+            var alphabet = 0;
+            var abbrevMode = 0;
             short word;
-            StringBuilder sb = new StringBuilder();
+            var sb = new StringBuilder();
 
             do
             {
@@ -756,9 +762,10 @@ namespace ZLR.VM
             }
         }
 
+        [NotNull]
         private string GetAbbreviation(int num)
         {
-            ushort address = (ushort)GetWord(abbrevTable + num * 2);
+            var address = (ushort)GetWord(abbrevTable + num * 2);
             return DecodeString(address * 2); // word address, not byte address!
         }
 
@@ -768,9 +775,9 @@ namespace ZLR.VM
             JitLoop();
         }
 
-        private void SetOutputStream(short num, ushort address)
+        internal void SetOutputStream(short num, ushort address)
         {
-            bool enabled = true;
+            var enabled = true;
             if (num < 0)
             {
                 num = (short)-num;
@@ -805,11 +812,11 @@ namespace ZLR.VM
                     else if (tableOutput)
                     {
                         address = tableOutputAddrStack.Pop();
-                        List<byte> buffer = tableOutputBufferStack.Pop();
+                        var buffer = tableOutputBufferStack.Pop();
 
-                        int len = Math.Min(buffer.Count, romStart - address - 2);
+                        var len = Math.Min(buffer.Count, romStart - address - 2);
                         SetWord(address, (short)len);
-                        for (int i = 0; i < len; i++)
+                        for (var i = 0; i < len; i++)
                             SetByte(address + 2 + i, buffer[i]);
 
                         if (tableOutputAddrStack.Count == 0)
@@ -821,11 +828,10 @@ namespace ZLR.VM
                     // player's commands
                     if (enabled)
                     {
-                        Stream cmdStream = io.OpenCommandFile(true);
+                        var cmdStream = io.OpenCommandFile(true);
                         if (cmdStream != null)
                         {
-                            if (cmdWtr != null)
-                                cmdWtr.Dispose();
+                            cmdWtr?.Dispose();
 
                             try
                             {
@@ -848,12 +854,12 @@ namespace ZLR.VM
                     break;
 
                 default:
-                    throw new Exception("Invalid output stream #" + num.ToString());
+                    throw new Exception("Invalid output stream #" + num);
             }
         }
 
 #pragma warning disable 0169
-        private void GetCursorPos(ushort address)
+        internal void GetCursorPos(ushort address)
         {
             short x, y;
             io.GetCursorPos(out x, out y);

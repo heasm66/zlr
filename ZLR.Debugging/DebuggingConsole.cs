@@ -1,8 +1,8 @@
 ﻿using System;
 using System.Collections.Generic;
 using System.IO;
-using System.Runtime.Serialization;
 using System.Text;
+using JetBrains.Annotations;
 using ZLR.VM;
 using ZLR.VM.Debugging;
 
@@ -29,7 +29,7 @@ namespace ZLR.Debugging
         private string lastCmd;
         private ValueFormatter valueFormatter;
 
-        private static readonly char[] COMMAND_DELIM = new char[] { ' ' };
+        private static readonly char[] COMMAND_DELIM = { ' ' };
 
         public DebuggingConsole(ZMachine zm, IZMachineIO io, string[] sourcePath)
         {
@@ -38,10 +38,7 @@ namespace ZLR.Debugging
             this.sourcePath = sourcePath;
         }
 
-        public bool Active
-        {
-            get { return active == ActiveState.Active; }
-        }
+        public bool Active => active == ActiveState.Active;
 
         public void Activate()
         {
@@ -59,11 +56,11 @@ namespace ZLR.Debugging
             ShowStatus();
         }
 
-        private void TraceCallsEventHandler(object sender, EnterFunctionEventArgs e)
+        private void TraceCallsEventHandler(object sender, [NotNull] EnterFunctionEventArgs e)
         {
             io.PutString("[ ");
 
-            for (int i = 0; i < e.CallDepth; i++)
+            for (var i = 0; i < e.CallDepth; i++)
                 io.PutString(". ");
 
             RoutineInfo rtn;
@@ -74,13 +71,13 @@ namespace ZLR.Debugging
             }
             else
             {
-                io.PutString(string.Format("${0:x4}", e.PackedAddress));
+                io.PutString($"${e.PackedAddress:x4}");
             }
 
             io.PutChar('(');
             if (e.Args != null)
             {
-                for (int i = 0; i < e.Args.Length; i++)
+                for (var i = 0; i < e.Args.Length; i++)
                 {
                     if (i > 0)
                         io.PutString(", ");
@@ -112,30 +109,22 @@ namespace ZLR.Debugging
             if (zm.DebugInfo != null &&
                 (rtn = zm.DebugInfo.FindRoutine(dbg.CurrentPC)) != null)
             {
-                io.PutString(string.Format("${0:x5} ({1}+{2})   {3}\n",
-                    dbg.CurrentPC,
-                    rtn.Name,
-                    dbg.CurrentPC - rtn.CodeStart,
-                    dbg.Disassemble(dbg.CurrentPC)));
+                io.PutString(
+                    $"${dbg.CurrentPC:x5} ({rtn.Name}+{dbg.CurrentPC - rtn.CodeStart})   {dbg.Disassemble(dbg.CurrentPC)}\n");
 
-                LineInfo? li = zm.DebugInfo.FindLine(dbg.CurrentPC);
+                var li = zm.DebugInfo.FindLine(dbg.CurrentPC);
                 if (li != null)
                 {
-                    io.PutString(string.Format("{0}:{1}: {2}\n",
-                        li.Value.File,
-                        li.Value.Line,
-                        src.Load(li.Value)));
+                    io.PutString($"{li.Value.File}:{li.Value.Line}: {src.Load(li.Value)}\n");
                 }
             }
             else
             {
-                io.PutString(string.Format("${0:x5}   {1}\n",
-                    dbg.CurrentPC,
-                    dbg.Disassemble(dbg.CurrentPC)));
+                io.PutString($"${dbg.CurrentPC:x5}   {dbg.Disassemble(dbg.CurrentPC)}\n");
             }
         }
 
-        public void HandleCommand(string cmd)
+        public void HandleCommand([NotNull] string cmd)
         {
             if (cmd.Trim() == "")
             {
@@ -153,7 +142,7 @@ namespace ZLR.Debugging
             }
 
             try {
-                string[] parts = cmd.Split(COMMAND_DELIM, 2, StringSplitOptions.RemoveEmptyEntries);
+                var parts = cmd.Split(COMMAND_DELIM, 2, StringSplitOptions.RemoveEmptyEntries);
                 switch (parts[0].ToLower())
                 {
                     case "reset":
@@ -265,7 +254,7 @@ namespace ZLR.Debugging
             ShowStatus();
         }
 
-        private void DoPrint(string[] parts)
+        private void DoPrint([ItemNotNull] [NotNull] string[] parts)
         {
             if (parts.Length < 2)
             {
@@ -278,7 +267,7 @@ namespace ZLR.Debugging
             io.PutChar('\n');
         }
 
-        private void DoShowObject(string[] parts)
+        private void DoShowObject([ItemNotNull] [NotNull] string[] parts)
         {
             if (parts.Length < 2)
             {
@@ -288,25 +277,25 @@ namespace ZLR.Debugging
 
             var value = Expression.Evaluate(zm, dbg, parts[1]);
 
-            int address = dbg.GetObjectAddress((ushort)value.Content);
+            var address = dbg.GetObjectAddress((ushort)value.Content);
 
             byte[] attrs;
             ushort parent, sibling, child;
             int propertyTable;
             dbg.ParseObject(address, out attrs, out parent, out sibling, out child, out propertyTable);
 
-            io.PutString(string.Format("=== {0} ===\nParent: {1}\nSibling: {2}\nChild: {3}\n",
-                valueFormatter.Format(new Value(ValueType.Object, value.Content)),
-                valueFormatter.Format(new Value(ValueType.Object, parent)),
-                valueFormatter.Format(new Value(ValueType.Object, sibling)),
-                valueFormatter.Format(new Value(ValueType.Object, child))));
+            io.PutString(
+                $"=== {valueFormatter.Format(new Value(ValueType.Object, value.Content))} ===\n" +
+                $"Parent: {valueFormatter.Format(new Value(ValueType.Object, parent))}\n" +
+                $"Sibling: {valueFormatter.Format(new Value(ValueType.Object, sibling))}\n" +
+                $"Child: {valueFormatter.Format(new Value(ValueType.Object, child))}\n");
 
             io.PutString("Attributes:\n");
-            for (int i = 0; i < attrs.Length; i++)
+            for (var i = 0; i < attrs.Length; i++)
             {
                 byte bit = 0x80;
 
-                for (int j = 0; j < 8; j++)
+                for (var j = 0; j < 8; j++)
                 {
                     if ((attrs[i] & bit) != 0)
                     {
@@ -317,21 +306,19 @@ namespace ZLR.Debugging
                 }
             }
 
-            io.PutString(string.Format("Properties (table at ${0:x4}):\n", propertyTable));
-            for (short prop = dbg.GetNextProp((ushort)value.Content, 0); prop != 0; prop = dbg.GetNextProp((ushort)value.Content, prop))
+            io.PutString($"Properties (table at ${propertyTable:x4}):\n");
+            for (var prop = dbg.GetNextProp((ushort)value.Content, 0); prop != 0; prop = dbg.GetNextProp((ushort)value.Content, prop))
             {
                 var addr = dbg.GetPropAddress((ushort)value.Content, prop);
                 var length = dbg.GetPropLength(addr);
 
-                io.PutString(string.Format("  {0} (length {1}):\n",
-                    valueFormatter.Format(new Value(ValueType.Property, prop)),
-                    length));
+                io.PutString($"  {valueFormatter.Format(new Value(ValueType.Property, prop))} (length {length}):\n");
 
                 io.PutString("   ");
-                for (int i = 0; i < length; i++)
+                for (var i = 0; i < length; i++)
                 {
-                    byte b = dbg.ReadByte(addr + i);
-                    io.PutString(string.Format(" {0:x2}", b));
+                    var b = dbg.ReadByte(addr + i);
+                    io.PutString($" {b:x2}");
                 }
                 io.PutChar('\n');
             }
@@ -341,8 +328,7 @@ namespace ZLR.Debugging
 
         private void DoShowLocals()
         {
-            ICallFrame[] frames;
-            frames = dbg.GetCallFrames();
+            var frames = dbg.GetCallFrames();
             int stackItems;
             if (frames.Length == 0)
             {
@@ -351,25 +337,23 @@ namespace ZLR.Debugging
             }
             else
             {
-                ICallFrame cf = frames[0];
+                var cf = frames[0];
                 if (cf.Locals.Length == 0)
                 {
                     io.PutString("No local variables.\n");
                 }
                 else
                 {
-                    io.PutString(string.Format("{0} local variable{1}:\n",
-                        cf.Locals.Length,
-                        cf.Locals.Length == 1 ? "" : "s"));
+                    io.PutString($"{cf.Locals.Length} local variable{(cf.Locals.Length == 1 ? "" : "s")}:\n");
 
-                    var rtn = zm.DebugInfo != null ? zm.DebugInfo.FindRoutine(dbg.CurrentPC) : null;
-                    for (int i = 0; i < cf.Locals.Length; i++)
+                    var rtn = zm.DebugInfo?.FindRoutine(dbg.CurrentPC);
+                    for (var i = 0; i < cf.Locals.Length; i++)
                     {
                         io.PutString("    ");
                         if (rtn != null && i < rtn.Locals.Length)
                             io.PutString(rtn.Locals[i]);
                         else
-                            io.PutString(string.Format("local_{0}", i + 1));
+                            io.PutString($"local_{i + 1}");
                         io.PutString(string.Format(" = {0} (${0:x4})\n", cf.Locals[i]));
                     }
                 }
@@ -381,13 +365,11 @@ namespace ZLR.Debugging
             }
             else
             {
-                io.PutString(string.Format("{0} word{1} on stack:\n",
-                    stackItems,
-                    stackItems == 1 ? "" : "s"));
-                Stack<short> temp = new Stack<short>();
-                for (int i = 0; i < stackItems; i++)
+                io.PutString($"{stackItems} word{(stackItems == 1 ? "" : "s")} on stack:\n");
+                var temp = new Stack<short>();
+                for (var i = 0; i < stackItems; i++)
                 {
-                    short value = dbg.StackPop();
+                    var value = dbg.StackPop();
                     temp.Push(value);
                     io.PutString(string.Format("    ${0:x4} (${0})\n", value));
                 }
@@ -398,20 +380,18 @@ namespace ZLR.Debugging
 
         private void DoShowBacktrace()
         {
-            ICallFrame[] frames;
-            frames = dbg.GetCallFrames();
-            io.PutString(string.Format("Call depth: {0}\n", frames.Length));
-            io.PutString(string.Format("PC = {0}\n", DumpCodeAddress(zm, dbg, dbg.CurrentPC)));
+            var frames = dbg.GetCallFrames();
+            io.PutString($"Call depth: {frames.Length}\n");
+            io.PutString($"PC = {DumpCodeAddress(zm, dbg.CurrentPC)}\n");
 
-            for (int i = 0; i < frames.Length; i++)
+            for (var i = 0; i < frames.Length; i++)
             {
-                ICallFrame cf = frames[i];
+                var cf = frames[i];
                 io.PutString("==========\n");
-                io.PutString(string.Format("[{0}] return PC = {1}\n", i + 1, DumpCodeAddress(zm, dbg, cf.ReturnPC)));
-                io.PutString(string.Format("called with {0} arg{1}, stack depth {2}\n",
-                    cf.ArgCount,
-                    cf.ArgCount == 1 ? "" : "s",
-                    cf.PrevStackDepth));
+                io.PutString($"[{i + 1}] return PC = {DumpCodeAddress(zm, cf.ReturnPC)}\n");
+                io.PutString(
+                    $"called with {cf.ArgCount} arg{(cf.ArgCount == 1 ? "" : "s")}, " +
+                    $"stack depth {cf.PrevStackDepth}\n");
 
                 if (cf.ResultStorage < 16)
                 {
@@ -425,25 +405,28 @@ namespace ZLR.Debugging
                     }
                     else
                     {
-                        RoutineInfo rtn = null;
-                        if (zm.DebugInfo != null)
-                            rtn = zm.DebugInfo.FindRoutine(cf.ReturnPC);
+                        var rtn = zm.DebugInfo?.FindRoutine(cf.ReturnPC);
                         if (rtn != null && cf.ResultStorage - 1 < rtn.Locals.Length)
-                            io.PutString(string.Format("storing result to local {0} ({1})\n",
-                                cf.ResultStorage,
-                                rtn.Locals[cf.ResultStorage - 1]));
+                        {
+                            io.PutString(
+                                $"storing result to local {cf.ResultStorage} " +
+                                $"({rtn.Locals[cf.ResultStorage - 1]})\n");
+                        }
                         else
-                            io.PutString(string.Format("storing result to local {0}\n", cf.ResultStorage));
+                        {
+                            io.PutString($"storing result to local {cf.ResultStorage}\n");
+                        }
                     }
                 }
-                else if (zm.DebugInfo.Globals.Contains((byte)cf.ResultStorage))
+                else if (zm.DebugInfo != null && zm.DebugInfo.Globals.Contains((byte)cf.ResultStorage))
                 {
-                    io.PutString(string.Format("storing result to global {0} ({1})\n", cf.ResultStorage,
-                        zm.DebugInfo.Globals[(byte)(cf.ResultStorage - 16)]));
+                    io.PutString(
+                        $"storing result to global {cf.ResultStorage} " +
+                        $"({zm.DebugInfo.Globals[(byte) (cf.ResultStorage - 16)]})\n");
                 }
                 else
                 {
-                    io.PutString(string.Format("storing result to global {0}\n", cf.ResultStorage));
+                    io.PutString($"storing result to global {cf.ResultStorage}\n");
                 }
             }
             io.PutString("==========\n");
@@ -467,48 +450,46 @@ namespace ZLR.Debugging
 
         private void DoShowBreakpoints()
         {
-            int[] breakpoints = dbg.GetBreakpoints();
+            var breakpoints = dbg.GetBreakpoints();
             if (breakpoints.Length == 0)
             {
                 io.PutString("No breakpoints.\n");
             }
             else
             {
-                io.PutString(string.Format("{0} breakpoint{1}:\n",
-                    breakpoints.Length,
-                    breakpoints.Length == 1 ? "" : "s"));
+                io.PutString($"{breakpoints.Length} breakpoint{(breakpoints.Length == 1 ? "" : "s")}:\n");
 
                 Array.Sort(breakpoints);
-                foreach (int bp in breakpoints)
-                    io.PutString(string.Format("    {0}\n", DumpCodeAddress(zm, dbg, bp)));
+                foreach (var bp in breakpoints)
+                    io.PutString($"    {DumpCodeAddress(zm, bp)}\n");
             }
         }
 
-        private void DoClearBreakpoint(string[] parts)
+        private void DoClearBreakpoint([ItemNotNull] [NotNull] string[] parts)
         {
             int address;
-            if (parts.Length < 2 || (address = ParseAddress(zm, dbg, parts[1])) < 0)
+            if (parts.Length < 2 || (address = ParseAddress(zm, parts[1])) < 0)
             {
                 io.PutString("Usage: clear <addrspec>\n");
             }
             else
             {
                 dbg.SetBreakpoint(address, false);
-                io.PutString(string.Format("Cleared breakpoint at {0}.\n", DumpCodeAddress(zm, dbg, address)));
+                io.PutString($"Cleared breakpoint at {DumpCodeAddress(zm, address)}.\n");
             }
         }
 
-        private void DoSetBreakpoint(string[] parts)
+        private void DoSetBreakpoint([ItemNotNull] [NotNull] string[] parts)
         {
             int address;
-            if (parts.Length < 2 || (address = ParseAddress(zm, dbg, parts[1])) < 0)
+            if (parts.Length < 2 || (address = ParseAddress(zm, parts[1])) < 0)
             {
                 io.PutString("Usage: break <addrspec>\n");
             }
             else
             {
                 dbg.SetBreakpoint(address, true);
-                io.PutString(string.Format("Set breakpoint at {0}.\n", DumpCodeAddress(zm, dbg, address)));
+                io.PutString($"Set breakpoint at {DumpCodeAddress(zm, address)}.\n");
             }
         }
 
@@ -522,7 +503,7 @@ namespace ZLR.Debugging
                 }
                 else
                 {
-                    LineInfo? oldLI = zm.DebugInfo.FindLine(dbg.CurrentPC);
+                    var oldLI = zm.DebugInfo.FindLine(dbg.CurrentPC);
                     LineInfo? newLI;
                     do
                     {
@@ -546,7 +527,7 @@ namespace ZLR.Debugging
                 }
                 else
                 {
-                    LineInfo? oldLI = zm.DebugInfo.FindLine(dbg.CurrentPC);
+                    var oldLI = zm.DebugInfo.FindLine(dbg.CurrentPC);
                     LineInfo? newLI;
                     do
                     {
@@ -560,99 +541,94 @@ namespace ZLR.Debugging
             }
         }
 
-        private static string DumpCodeAddress(ZMachine zm, IDebugger dbg, int address)
+        [NotNull]
+        private static string DumpCodeAddress([NotNull] ZMachine zm, int address)
         {
-            StringBuilder sb = new StringBuilder();
+            var sb = new StringBuilder();
             sb.AppendFormat("${0:x5}", address);
 
-            if (zm.DebugInfo != null)
+            var rtn = zm.DebugInfo?.FindRoutine(address);
+            if (rtn != null)
             {
-                RoutineInfo rtn = zm.DebugInfo.FindRoutine(address);
-                if (rtn != null)
-                {
-                    sb.AppendFormat(" ({0}+{1}", rtn.Name, address - rtn.CodeStart);
+                sb.AppendFormat(" ({0}+{1}", rtn.Name, address - rtn.CodeStart);
 
-                    LineInfo? li = zm.DebugInfo.FindLine(address);
-                    if (li != null)
-                        sb.AppendFormat(", {0}:{1}", li.Value.File, li.Value.Line);
+                var li = zm.DebugInfo.FindLine(address);
+                if (li != null)
+                    sb.AppendFormat(", {0}:{1}", li.Value.File, li.Value.Line);
 
-                    sb.Append(')');
-                }
+                sb.Append(')');
             }
 
             return sb.ToString();
         }
 
-        private static int ParseAddress(ZMachine zm, IDebugger dbg, string spec)
+        private static int ParseAddress(ZMachine zm, [NotNull] string spec)
         {
-            if (!string.IsNullOrEmpty(spec))
+            if (string.IsNullOrEmpty(spec)) return -1;
+
+            if (spec[0] == '$')
+                return Convert.ToInt32(spec.Substring(1), 16);
+
+            if (char.IsDigit(spec[0]))
+                return Convert.ToInt32(spec);
+
+            if (zm.DebugInfo == null) return -1;
+
+            var idx = spec.LastIndexOf(':');
+            if (idx >= 0)
             {
-                if (spec[0] == '$')
-                    return Convert.ToInt32(spec.Substring(1), 16);
-
-                if (char.IsDigit(spec[0]))
-                    return Convert.ToInt32(spec);
-
-                if (zm.DebugInfo != null)
+                try
                 {
-                    int idx = spec.LastIndexOf(':');
-                    if (idx >= 0)
-                    {
-                        try
-                        {
-                            int result = zm.DebugInfo.FindCodeAddress(
-                                spec.Substring(0, idx),
-                                Convert.ToInt32(spec.Substring(idx + 1)));
-                            if (result >= 0)
-                                return result;
-                        }
-                        catch (FormatException) { }
-                        catch (OverflowException) { }
-                    }
-
-                    RoutineInfo rtn;
-
-                    idx = spec.LastIndexOf('+');
-                    if (idx >= 0)
-                    {
-                        try
-                        {
-                            rtn = zm.DebugInfo.FindRoutine(spec.Substring(0, idx));
-                            if (rtn != null)
-                                return rtn.CodeStart + Convert.ToInt32(spec.Substring(idx + 1));
-                        }
-                        catch (FormatException) { }
-                        catch (OverflowException) { }
-                    }
-
-                    rtn = zm.DebugInfo.FindRoutine(spec);
-                    if (rtn != null && rtn.LineOffsets.Length > 0)
-                        return rtn.CodeStart + rtn.LineOffsets[0];
+                    var result = zm.DebugInfo.FindCodeAddress(
+                        spec.Substring(0, idx),
+                        Convert.ToInt32(spec.Substring(idx + 1)));
+                    if (result >= 0)
+                        return result;
                 }
+                catch (FormatException) { }
+                catch (OverflowException) { }
             }
+
+            RoutineInfo rtn;
+
+            idx = spec.LastIndexOf('+');
+            if (idx >= 0)
+            {
+                try
+                {
+                    rtn = zm.DebugInfo.FindRoutine(spec.Substring(0, idx));
+                    if (rtn != null)
+                        return rtn.CodeStart + Convert.ToInt32(spec.Substring(idx + 1));
+                }
+                catch (FormatException) { }
+                catch (OverflowException) { }
+            }
+
+            rtn = zm.DebugInfo.FindRoutine(spec);
+            if (rtn != null && rtn.LineOffsets.Length > 0)
+                return rtn.CodeStart + rtn.LineOffsets[0];
 
             return -1;
         }
-
-
 
         class SourceCache
         {
             private const int MAX_SRC_LINE_LEN = 50;
 
             private readonly string[] searchPath;
-            private Dictionary<string, string[]> cache = new Dictionary<string, string[]>();
+            private readonly Dictionary<string, string[]> cache = new Dictionary<string, string[]>();
 
             public SourceCache(string[] searchPath)
             {
                 this.searchPath = searchPath;
             }
 
+            [CanBeNull]
             private string FindFile(string filename)
             {
-                foreach (string p in searchPath)
+                foreach (var p in searchPath)
                 {
-                    string combined = Path.Combine(p, filename);
+                    var combined = Path.Combine(p, filename);
                     if (File.Exists(combined))
                         return combined;
                 }
@@ -663,18 +639,17 @@ namespace ZLR.Debugging
                 return null;
             }
 
+            [CanBeNull]
             public string Load(LineInfo li)
             {
-                string[] lines;
-
-                if (cache.TryGetValue(li.File, out lines) == false)
+                if (!cache.TryGetValue(li.File, out string[] lines))
                 {
-                    string file = FindFile(li.File);
+                    var file = FindFile(li.File);
                     if (file == null)
                     {
                         cache.Add(li.File, null);
                     }
-                    else if (cache.TryGetValue(file, out lines) == true)
+                    else if (cache.TryGetValue(file, out lines))
                     {
                         cache.Add(li.File, lines);
                     }
@@ -689,14 +664,13 @@ namespace ZLR.Debugging
 
                 if (lines != null)
                 {
-                    int line = li.Line - 1;
+                    var line = li.Line - 1;
                     if (line < lines.Length)
                     {
-                        string result = lines[line];
-                        if (result.Length > MAX_SRC_LINE_LEN)
-                            return result.Substring(0, MAX_SRC_LINE_LEN - 3) + "...";
-                        else
-                            return result;
+                        var result = lines[line];
+                        return result.Length > MAX_SRC_LINE_LEN
+                            ? result.Substring(0, MAX_SRC_LINE_LEN - 3) + "..."
+                            : result;
                     }
                 }
 

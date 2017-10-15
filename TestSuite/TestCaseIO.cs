@@ -1,8 +1,9 @@
 using System;
 using System.Collections.Generic;
-using System.Text;
-using ZLR.VM;
 using System.IO;
+using System.Text;
+using JetBrains.Annotations;
+using ZLR.VM;
 
 namespace TestSuite
 {
@@ -12,6 +13,7 @@ namespace TestSuite
         protected readonly StringBuilder outputBuffer = new StringBuilder();
         protected MemoryStream saveData;
 
+        [NotNull]
         public string CollectOutput()
         {
             string result = outputBuffer.ToString();
@@ -58,6 +60,7 @@ namespace TestSuite
             // nada
         }
 
+        [NotNull]
         public Stream OpenSaveFile(int size)
         {
             saveData = new MemoryStream();
@@ -147,10 +150,7 @@ namespace TestSuite
             set { /* nada */ }
         }
 
-        public bool VariablePitchAvailable
-        {
-            get { return false; }
-        }
+        public bool VariablePitchAvailable => false;
 
         public bool ScrollFromBottom
         {
@@ -158,65 +158,29 @@ namespace TestSuite
             set { /* nada */ }
         }
 
-        public bool BoldAvailable
-        {
-            get { return false; }
-        }
+        public bool BoldAvailable => false;
 
-        public bool ItalicAvailable
-        {
-            get { return false; }
-        }
+        public bool ItalicAvailable => false;
 
-        public bool FixedPitchAvailable
-        {
-            get { return false; }
-        }
+        public bool FixedPitchAvailable => false;
 
-        public bool GraphicsFontAvailable
-        {
-            get { return false; }
-        }
+        public bool GraphicsFontAvailable => false;
 
-        public bool TimedInputAvailable
-        {
-            get { return false; }
-        }
+        public bool TimedInputAvailable => false;
 
-        public bool SoundSamplesAvailable
-        {
-            get { return false; }
-        }
+        public bool SoundSamplesAvailable => false;
 
-        public byte WidthChars
-        {
-            get { return 80; }
-        }
+        public byte WidthChars => 80;
 
-        public short WidthUnits
-        {
-            get { return 80; }
-        }
+        public short WidthUnits => 80;
 
-        public byte HeightChars
-        {
-            get { return 25; }
-        }
+        public byte HeightChars => 25;
 
-        public short HeightUnits
-        {
-            get { return 25; }
-        }
+        public short HeightUnits => 25;
 
-        public byte FontHeight
-        {
-            get { return 1; }
-        }
+        public byte FontHeight => 1;
 
-        public byte FontWidth
-        {
-            get { return 1; }
-        }
+        public byte FontWidth => 1;
 
         public event EventHandler SizeChanged
         {
@@ -224,20 +188,11 @@ namespace TestSuite
             remove { /* nada */ }
         }
 
-        public bool ColorsAvailable
-        {
-            get { return false; }
-        }
+        public bool ColorsAvailable => false;
 
-        public byte DefaultForeground
-        {
-            get { return 9; }
-        }
+        public byte DefaultForeground => 9;
 
-        public byte DefaultBackground
-        {
-            get { return 2; }
-        }
+        public byte DefaultBackground => 2;
 
         public UnicodeCaps CheckUnicode(char ch)
         {
@@ -253,7 +208,7 @@ namespace TestSuite
 
         public ReplayIO(string prevInputFile)
         {
-            this.inputFile = prevInputFile;
+            inputFile = prevInputFile;
         }
 
         public override string ReadLine(string initial, int time, TimedInputCallback callback, byte[] terminatingKeys, out byte terminator)
@@ -300,13 +255,13 @@ namespace TestSuite
 
         public RecordingIO(string newInputFile)
         {
-            this.inputFile = newInputFile;
+            inputFile = newInputFile;
         }
 
         public override string ReadLine(string initial, int time, TimedInputCallback callback, byte[] terminatingKeys, out byte terminator)
         {
             terminator = 13;
-            return Console.ReadLine();
+            return Console.ReadLine() ?? string.Empty;
         }
 
         public override short ReadKey(int time, TimedInputCallback callback, CharTranslator translator)

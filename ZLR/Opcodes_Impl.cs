@@ -1,5 +1,4 @@
 using System;
-using System.Collections.Generic;
 using System.Text;
 using System.IO;
 
@@ -7,7 +6,7 @@ namespace ZLR.VM
 {
     partial class ZMachine
     {
-        private void StoreResult(byte dest, short result)
+        internal void StoreResult(byte dest, short result)
         {
             if (dest == 0)
                 stack.Push(result);
@@ -17,7 +16,7 @@ namespace ZLR.VM
                 SetWord(globalsOffset + 2 * (dest - 16), result);
         }
 
-        private void EnterFunctionImpl(short packedAddress, short[] args, int resultStorage, int returnPC)
+        internal void EnterFunctionImpl(short packedAddress, short[] args, int resultStorage, int returnPC)
         {
             if (debugging)
             {
@@ -56,7 +55,7 @@ namespace ZLR.VM
             pc = address;
         }
 
-        private void LeaveFunctionImpl(short result)
+        internal void LeaveFunctionImpl(short result)
         {
             CallFrame frame = callStack.Pop();
             SetTopFrame();
@@ -74,7 +73,7 @@ namespace ZLR.VM
         }
 
 #pragma warning disable 0169
-        private void StoreVariableImpl(byte dest, short result)
+        internal void StoreVariableImpl(byte dest, short result)
         {
             if (dest == 0)
             {
@@ -87,7 +86,7 @@ namespace ZLR.VM
                 SetWord(globalsOffset + 2 * (dest - 16), result);
         }
 
-        private short LoadVariableImpl(byte num)
+        internal short LoadVariableImpl(byte num)
         {
             if (num == 0)
                 return stack.Peek();
@@ -97,7 +96,7 @@ namespace ZLR.VM
                 return GetWord(globalsOffset + 2 * (num - 16));
         }
 
-        private short IncImpl(byte dest, short amount)
+        internal short IncImpl(byte dest, short amount)
         {
             short result;
             if (dest == 0)
@@ -120,7 +119,7 @@ namespace ZLR.VM
             return result;
         }
 
-        private short RandomImpl(short range)
+        internal short RandomImpl(short range)
         {
             short? result = null;
 
@@ -171,7 +170,7 @@ namespace ZLR.VM
             return (short)result;
         }
 
-        private void SaveUndo(byte dest, int nextPC)
+        internal void SaveUndo(byte dest, int nextPC)
         {
             if (maxUndoDepth > 0)
             {
@@ -188,7 +187,7 @@ namespace ZLR.VM
             }
         }
 
-        private void RestoreUndo(byte dest, int failurePC)
+        internal void RestoreUndo(byte dest, int failurePC)
         {
             if (undoStates.Count == 0)
             {
@@ -202,7 +201,7 @@ namespace ZLR.VM
                 undoStates.RemoveAt(i);
                 lastState.Restore(zmem, stack, callStack, out pc, out dest);
                 SetTopFrame();
-                ResetHeaderFields(false);
+                ResetHeaderFields();
                 StoreResult(dest, 2);
             }
         }
@@ -210,13 +209,10 @@ namespace ZLR.VM
 
         private void SetTopFrame()
         {
-            if (callStack.Count > 0)
-                topFrame = callStack.Peek();
-            else
-                topFrame = null;
+            topFrame = callStack.Count > 0 ? callStack.Peek() : null;
         }
 
-        private void Restart()
+        internal void Restart()
         {
             gameFile.Seek(0, SeekOrigin.Begin);
             gameFile.Read(zmem, 0, (int)gameFile.Length);
@@ -226,14 +222,14 @@ namespace ZLR.VM
             topFrame = null;
             undoStates.Clear();
 
-            ResetHeaderFields(false);
+            ResetHeaderFields();
             io.EraseWindow(-1);
 
             pc = (ushort)GetWord(0x06);
         }
 
 #pragma warning disable 0169
-        private bool VerifyGameFile()
+        internal bool VerifyGameFile()
         {
             try
             {
@@ -258,7 +254,7 @@ namespace ZLR.VM
             }
         }
 
-        private static short LogShiftImpl(short a, short b)
+        internal static short LogShiftImpl(short a, short b)
         {
             if (b < 0)
                 return (short)((ushort)a >> (-b));
@@ -266,7 +262,7 @@ namespace ZLR.VM
                 return (short)(a << b);
         }
 
-        private static short ArtShiftImpl(short a, short b)
+        internal static short ArtShiftImpl(short a, short b)
         {
             if (b < 0)
                 return (short)(a >> (-b));
@@ -274,7 +270,7 @@ namespace ZLR.VM
                 return (short)(a << b);
         }
 
-        private void ThrowImpl(short value, ushort catchingFrame)
+        internal void ThrowImpl(short value, ushort catchingFrame)
         {
             while (callStack.Count > catchingFrame)
                 callStack.Pop();
@@ -283,7 +279,7 @@ namespace ZLR.VM
             LeaveFunctionImpl(value);
         }
 
-        private short SaveAuxiliary(ushort table, ushort bytes, ushort nameAddr)
+        internal short SaveAuxiliary(ushort table, ushort bytes, ushort nameAddr)
         {
             byte nameLen = GetByte(nameAddr);
             byte[] nameBuffer = new byte[nameLen];
@@ -310,7 +306,7 @@ namespace ZLR.VM
             }
         }
 
-        private ushort RestoreAuxiliary(ushort table, ushort bytes, ushort nameAddr)
+        internal ushort RestoreAuxiliary(ushort table, ushort bytes, ushort nameAddr)
         {
             byte nameLen = GetByte(nameAddr);
             byte[] nameBuffer = new byte[nameLen];
@@ -337,7 +333,7 @@ namespace ZLR.VM
             }
         }
 
-        private int ScanTableImpl(short x, ushort table, ushort tableLen, byte form)
+        internal int ScanTableImpl(short x, ushort table, ushort tableLen, byte form)
         {
             if (form == 0)
                 form = 0x82;
@@ -364,7 +360,7 @@ namespace ZLR.VM
             return 0;
         }
 
-        private void CopyTableImpl(ushort first, ushort second, short size)
+        internal void CopyTableImpl(ushort first, ushort second, short size)
         {
             if (second == 0)
             {
@@ -394,7 +390,7 @@ namespace ZLR.VM
         }
 #pragma warning restore 0169
 
-        private void ZeroMemory(ushort address, short size)
+        internal void ZeroMemory(ushort address, short size)
         {
             for (int i = 0; i < size; i++)
                 SetByte(address + i, 0);
@@ -403,7 +399,7 @@ namespace ZLR.VM
         }
 
 #pragma warning disable 0169
-        private void SoundEffectImpl(ushort number, short effect, ushort volRepeats, ushort routine)
+        internal void SoundEffectImpl(ushort number, short effect, ushort volRepeats, ushort routine)
         {
             if (effect == 0)
             {
@@ -426,7 +422,7 @@ namespace ZLR.VM
             }
         }
 
-        private void PrintTableImpl(ushort table, short width, short height, short skip)
+        internal void PrintTableImpl(ushort table, short width, short height, short skip)
         {
             if (height == 0)
                 height = 1;
@@ -446,7 +442,7 @@ namespace ZLR.VM
             io.PutTextRectangle(lines);
         }
 
-        private void EncodeTextImpl(ushort buffer, ushort length, ushort start, ushort dest)
+        internal void EncodeTextImpl(ushort buffer, ushort length, ushort start, ushort dest)
         {
             byte[] text = new byte[length];
             for (int i = 0; i < length; i++)
@@ -459,8 +455,7 @@ namespace ZLR.VM
 
         private void PadStatusLine(int spacesToLeave)
         {
-            short x, y;
-            io.GetCursorPos(out x, out y);
+            io.GetCursorPos(out var x, out _);
 
             var width = io.WidthChars;
 
@@ -471,7 +466,7 @@ namespace ZLR.VM
             }
         }
 
-        private void ShowStatusImpl()
+        internal void ShowStatusImpl()
         {
             if (zversion > 3)
                 return;
@@ -550,22 +545,22 @@ namespace ZLR.VM
             }
         }
 
-        private short PullFromUserStack(ushort stack)
+        internal short PullFromUserStack(ushort userStack)
         {
-            var freeSlots = GetWord(stack);
+            var freeSlots = GetWord(userStack);
             freeSlots++;
-            var result = GetWord(stack + 2 * freeSlots);
-            SetWord(stack, freeSlots);
+            var result = GetWord(userStack + 2 * freeSlots);
+            SetWord(userStack, freeSlots);
             return result;
         }
 
-        private bool PushOntoUserStack(short value, ushort stack)
+        internal bool PushOntoUserStack(short value, ushort userStack)
         {
-            var freeSlots = GetWord(stack);
+            var freeSlots = GetWord(userStack);
             if (freeSlots > 0)
             {
-                SetWord(stack + 2 * freeSlots, value);
-                SetWord(stack, (short)(freeSlots - 1));
+                SetWord(userStack + 2 * freeSlots, value);
+                SetWord(userStack, (short)(freeSlots - 1));
                 return true;
             }
             else
@@ -574,13 +569,13 @@ namespace ZLR.VM
             }
         }
 
-        private void PopUserStack(short count, ushort stack)
+        internal void PopUserStack(short count, ushort userStack)
         {
-            var freeSlots = GetWord(stack);
-            SetWord(stack, (short)(freeSlots + count));
+            var freeSlots = GetWord(userStack);
+            SetWord(userStack, (short)(freeSlots + count));
         }
 
-        private void PopStack(short count)
+        internal void PopStack(short count)
         {
             for (int i = 0; i < count; i++)
                 stack.Pop();

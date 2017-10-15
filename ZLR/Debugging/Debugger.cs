@@ -1,6 +1,7 @@
 using System;
 using System.Collections.Generic;
-using System.Text;
+using System.Linq;
+using JetBrains.Annotations;
 
 namespace ZLR.VM.Debugging
 {
@@ -11,21 +12,25 @@ namespace ZLR.VM.Debugging
         Running,
     }
 
+    [PublicAPI]
     public sealed class EnterFunctionEventArgs : EventArgs
     {
-        public short PackedAddress { get; private set; }
-        public short[] Args { get; private set; }
-        public int ResultStorage { get; private set; }
-        public int ReturnPC { get; private set; }
-        public int CallDepth { get; private set; }
+        public short PackedAddress { get; }
 
-        public EnterFunctionEventArgs(short packedAddress, short[] args, int resultStorage, int returnPC, int callDepth)
+        [CanBeNull]
+        public short[] Args { get; }
+
+        public int ResultStorage { get; }
+        public int ReturnPC { get; }
+        public int CallDepth { get; }
+
+        public EnterFunctionEventArgs(short packedAddress, [CanBeNull] short[] args, int resultStorage, int returnPC, int callDepth)
         {
-            this.PackedAddress = packedAddress;
-            this.Args = args;
-            this.ResultStorage = resultStorage;
-            this.ReturnPC = returnPC;
-            this.CallDepth = callDepth;
+            PackedAddress = packedAddress;
+            Args = args;
+            ResultStorage = resultStorage;
+            ReturnPC = returnPC;
+            CallDepth = callDepth;
         }
     }
 
@@ -34,6 +39,7 @@ namespace ZLR.VM.Debugging
         event EventHandler<EnterFunctionEventArgs> EnteringFunction;
     }
 
+    [PublicAPI]
     public interface IDebugger
     {
         DebuggerState State { get; }
@@ -48,7 +54,7 @@ namespace ZLR.VM.Debugging
         void SetBreakpoint(int address, bool enabled);
         int[] GetBreakpoints();
 
-        short Call(short packedAddress, short[] args);
+        short Call(short packedAddress, [NotNull] short[] args);
 
         byte ReadByte(int address);
         short ReadWord(int address);
@@ -100,33 +106,33 @@ namespace ZLR.VM
     partial class ZMachine : IDebuggerEvents
     {
         private int stepping = -1;
-        private Dictionary<int, bool> breakpoints = new Dictionary<int, bool>();
+        private readonly Dictionary<int, bool> breakpoints = new Dictionary<int, bool>();
         private DebuggerState debugState;
 
+        [NotNull]
         public IDebugger Debug()
         {
             debugging = true;
-            if (cache != null)
-                cache.Clear();
+            cache?.Clear();
 
             return new Debugger(this);
         }
 
 #pragma warning disable 0169
-        private bool DebugCheck(int pc)
+        private bool DebugCheck(int pcToCheck)
         {
             if (stepping >= 0)
             {
                 if (--stepping < 0)
                 {
-                    this.pc = pc;
+                    pc = pcToCheck;
                     return true;
                 }
             }
-            else if (breakpoints.ContainsKey(pc))
+            else if (breakpoints.ContainsKey(pcToCheck))
             {
-                this.pc = pc;
-                this.debugState = DebuggerState.Paused;
+                pc = pcToCheck;
+                debugState = DebuggerState.Paused;
                 return true;
             }
 
@@ -146,10 +152,7 @@ namespace ZLR.VM
 
             #region IDebugger Members
 
-            public DebuggerState State
-            {
-                get { return zm.debugState; }
-            }
+            public DebuggerState State => zm.debugState;
 
             public void Restart()
             {
@@ -225,10 +228,8 @@ namespace ZLR.VM
                     zm.breakpoints.Remove(address);
             }
 
-            public int[] GetBreakpoints()
-            {
-                return new List<int>(zm.breakpoints.Keys).ToArray();
-            }
+            [NotNull]
+            public int[] GetBreakpoints() => zm.breakpoints.Keys.ToArray();
 
             public short Call(short packedAddress, short[] args)
             {
@@ -238,15 +239,9 @@ namespace ZLR.VM
                 return zm.stack.Pop();
             }
 
-            public byte ReadByte(int address)
-            {
-                return zm.zmem[address];
-            }
+            public byte ReadByte(int address) => zm.zmem[address];
 
-            public short ReadWord(int address)
-            {
-                return (short)((zm.zmem[address] << 8) | zm.zmem[address + 1]);
-            }
+            public short ReadWord(int address) => (short)((zm.zmem[address] << 8) | zm.zmem[address + 1]);
 
             public void WriteByte(int address, byte value)
             {
@@ -292,27 +287,20 @@ namespace ZLR.VM
                 }
             }
 
-            public string DecodeString(int address)
-            {
-                return zm.DecodeString(address);
-            }
+            [NotNull]
+            public string DecodeString(int address) => zm.DecodeString(address);
 
-            public int GetObjectAddress(ushort number)
-            {
-                return zm.GetObjectAddress(number);
-            }
+            public int GetObjectAddress(ushort number) => zm.GetObjectAddress(number);
 
-            public string GetObjectName(ushort number)
-            {
-                return zm.GetObjectName(number);
-            }
+            [NotNull]
+            public string GetObjectName(ushort number) => zm.GetObjectName(number);
 
-            public void ParseObject(int address, out byte[] attrs,
+            public void ParseObject(int address, [NotNull] out byte[] attrs,
                 out ushort parent, out ushort sibling, out ushort child, out int propertyTable)
             {
                 if (zm.zversion <= 3)
                 {
-                    attrs = new byte[] {
+                    attrs = new[] {
                         zm.GetByte(address),
                         zm.GetByte(address+1),
                         zm.GetByte(address+2),
@@ -325,7 +313,7 @@ namespace ZLR.VM
                 }
                 else
                 {
-                    attrs = new byte[] {
+                    attrs = new[] {
                         zm.GetByte(address),
                         zm.GetByte(address+1),
                         zm.GetByte(address+2),
@@ -346,35 +334,19 @@ namespace ZLR.VM
                 throw new NotImplementedException();
             }
 
-            public int GetPropAddress(ushort obj, short prop)
-            {
-                return zm.GetPropAddr(obj, prop);
-            }
+            public int GetPropAddress(ushort obj, short prop) => zm.GetPropAddr(obj, prop);
 
-            public int GetPropLength(int address)
-            {
-                return zm.GetPropLength((ushort)address);
-            }
+            public int GetPropLength(int address) => zm.GetPropLength((ushort)address);
 
-            public short GetNextProp(ushort obj, short prop)
-            {
-                return zm.GetNextProp(obj, prop);
-            }
+            public short GetNextProp(ushort obj, short prop) => zm.GetNextProp(obj, prop);
 
-            public int CallDepth
-            {
-                get { return zm.callStack.Count; }
-            }
+            public int CallDepth => zm.callStack.Count;
 
-            public ICallFrame[] GetCallFrames()
-            {
-                return zm.callStack.ToArray();
-            }
+            [ItemNotNull]
+            [NotNull]
+            public ICallFrame[] GetCallFrames() => zm.callStack.ToArray<ICallFrame>();
 
-            public int CurrentPC
-            {
-                get { return zm.pc; }
-            }
+            public int CurrentPC => zm.pc;
 
             public string Disassemble(int address)
             {
@@ -476,7 +448,7 @@ namespace ZLR.VM
 
         private void HandleEnterFunction(short packedAddress, short[] args, int resultStorage, int returnPC)
         {
-            var handler = this.EnteringFunction;
+            var handler = EnteringFunction;
             if (handler != null)
                 handler(this, new EnterFunctionEventArgs(
                     packedAddress, args, resultStorage, returnPC, callStack.Count));

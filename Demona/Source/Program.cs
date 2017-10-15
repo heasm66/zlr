@@ -1,7 +1,8 @@
 using System;
-using System.Collections.Generic;
+using System.Diagnostics;
 using System.IO;
 using System.Windows.Forms;
+using JetBrains.Annotations;
 using ZLR.VM;
 
 namespace ZLR.Interfaces.Demona
@@ -12,7 +13,7 @@ namespace ZLR.Interfaces.Demona
         /// The main entry point for the application.
         /// </summary>
         [STAThread]
-        static void Main(string[] args)
+        static void Main([ItemNotNull] [NotNull] string[] args)
         {
             Application.EnableVisualStyles();
             Application.SetCompatibleTextRenderingDefault(false);
@@ -61,6 +62,8 @@ namespace ZLR.Interfaces.Demona
                     storyName = Path.GetFileName(dlg.FileName);
                 }
             }
+
+            Debug.Assert(storyName != null, "storyName != null");
 
             using (GlkIO io = new GlkIO(args, storyName))
             {

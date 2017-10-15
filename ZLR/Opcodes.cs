@@ -3,7 +3,7 @@ using System.Collections.Generic;
 using System.Reflection;
 using System.Text;
 using System.Reflection.Emit;
-using System.IO;
+using JetBrains.Annotations;
 
 namespace ZLR.VM
 {
@@ -21,13 +21,13 @@ namespace ZLR.VM
 
     internal struct OpcodeInfo
     {
-        public OpcodeAttribute Attr;
-        public OpcodeCompiler Compiler;
+        public readonly OpcodeAttribute Attr;
+        public readonly OpcodeCompiler Compiler;
 
         public OpcodeInfo(OpcodeAttribute attr, OpcodeCompiler compiler)
         {
-            this.Attr = attr;
-            this.Compiler = compiler;
+            Attr = attr;
+            Compiler = compiler;
         }
     }
 
@@ -56,14 +56,14 @@ namespace ZLR.VM
 
         public Opcode(ZMachine zm, OpcodeCompiler compiler, OpcodeAttribute attribute,
             int pc, int zCodeLength,
-            int argc, OperandType[] operandTypes, short[] operandValues,
+            int argc, [NotNull] OperandType[] operandTypes, [NotNull] short[] operandValues,
             string operandText, int resultStorage, bool branchIfTrue, int branchOffset)
         {
             this.zm = zm;
             this.compiler = compiler;
             this.attribute = attribute;
-            this.PC = pc;
-            this.ZCodeLength = zCodeLength;
+            PC = pc;
+            ZCodeLength = zCodeLength;
             this.argc = argc;
             this.operandTypes = new OperandType[argc];
             Array.Copy(operandTypes, this.operandTypes, argc);
@@ -75,11 +75,11 @@ namespace ZLR.VM
             this.branchOffset = branchOffset;
         }
 
-        public void Compile(ILGenerator il, ref bool compiling)
+        public bool Compile(ILGenerator il)
         {
-            this.compiling = true;
+            compiling = true;
             compiler.Invoke(this, il);
-            compiling = this.compiling;
+            return compiling;
         }
 
         public override string ToString()
@@ -87,12 +87,13 @@ namespace ZLR.VM
             return GetOpcodeName(attribute, compiler);
         }
 
-        public string Disassemble(VariableNameProvider varNamer)
+        [NotNull]
+        public string Disassemble([NotNull] VariableNameProvider varNamer)
         {
-            StringBuilder sb = new StringBuilder();
+            var sb = new StringBuilder();
             sb.Append(GetOpcodeName(attribute, compiler));
 
-            for (int i = 0; i < argc; i++)
+            for (var i = 0; i < argc; i++)
             {
                 sb.Append(' ');
 
@@ -103,18 +104,12 @@ namespace ZLR.VM
                         case OperandType.LargeConst:
                         case OperandType.SmallConst:
                             sb.Append('\'');
-                            if (operandValues[i] == 0)
-                                sb.Append("sp");
-                            else
-                                sb.Append(varNamer((byte)operandValues[i]));
+                            sb.Append(operandValues[i] == 0 ? "sp" : varNamer((byte) operandValues[i]));
                             break;
 
                         case OperandType.Variable:
                             sb.Append('[');
-                            if (operandValues[i] == 0)
-                                sb.Append("sp");
-                            else
-                                sb.Append(varNamer((byte)operandValues[i]));
+                            sb.Append(operandValues[i] == 0 ? "sp" : varNamer((byte) operandValues[i]));
                             sb.Append(']');
                             break;
                     }
@@ -134,10 +129,7 @@ namespace ZLR.VM
                             break;
 
                         case OperandType.Variable:
-                            if (operandValues[i] == 0)
-                                sb.Append("sp");
-                            else
-                                sb.Append(varNamer((byte)operandValues[i]));
+                            sb.Append(operandValues[i] == 0 ? "sp" : varNamer((byte) operandValues[i]));
                             break;
                     }
                 }
@@ -158,10 +150,7 @@ namespace ZLR.VM
             if (attribute.Store)
             {
                 sb.Append(" -> ");
-                if (resultStorage == 0)
-                    sb.Append("sp");
-                else
-                    sb.Append(varNamer((byte)resultStorage));
+                sb.Append(resultStorage == 0 ? "sp" : varNamer((byte) resultStorage));
             }
 
             if (attribute.Branch)
@@ -181,7 +170,7 @@ namespace ZLR.VM
                         break;
 
                     default:
-                        int off = branchOffset - 2;
+                        var off = branchOffset - 2;
                         if (off >= 0)
                             sb.Append('+');
                         sb.Append(off);
@@ -196,10 +185,7 @@ namespace ZLR.VM
         /// Gets a value indicating whether the opcode is a conditional branch,
         /// not including rtrue/rfalse or unconditional jumps.
         /// </summary>
-        public bool IsBranch
-        {
-            get { return attribute.Branch && branchOffset != 0 && branchOffset != 1; }
-        }
+        public bool IsBranch => attribute.Branch && branchOffset != 0 && branchOffset != 1;
 
         /// <summary>
         /// Gets a value indicating whether the opcode is a branch that will always be taken.
@@ -218,16 +204,7 @@ namespace ZLR.VM
             }
         }
 
-        public int BranchOffset
-        {
-            get
-            {
-                if (attribute.Branch)
-                    return this.branchOffset;
-                else
-                    return operandValues[0];
-            }
-        }
+        public int BranchOffset => attribute.Branch ? branchOffset : operandValues[0];
 
         /// <summary>
         /// Gets a value indicating whether the opcode is a fragment terminator:
@@ -237,18 +214,15 @@ namespace ZLR.VM
         /// Usually, this means the opcode changes PC at run time by taking a
         /// calculated branch, entering or leaving a routine, etc.
         /// </remarks>
-        public bool IsTerminator
-        {
-            get { return attribute.Terminates; }
-        }
+        public bool IsTerminator => attribute.Terminates;
 
         #region Static - Opcode Dictionary
 
-        private static Dictionary<byte, OpcodeInfo[]> oneOpInfos = new Dictionary<byte, OpcodeInfo[]>();
-        private static Dictionary<byte, OpcodeInfo[]> twoOpInfos = new Dictionary<byte, OpcodeInfo[]>();
-        private static Dictionary<byte, OpcodeInfo[]> zeroOpInfos = new Dictionary<byte, OpcodeInfo[]>();
-        private static Dictionary<byte, OpcodeInfo[]> varOpInfos = new Dictionary<byte, OpcodeInfo[]>();
-        private static Dictionary<byte, OpcodeInfo[]> extOpInfos = new Dictionary<byte, OpcodeInfo[]>();
+        private static readonly Dictionary<byte, OpcodeInfo[]> OneOpInfos = new Dictionary<byte, OpcodeInfo[]>();
+        private static readonly Dictionary<byte, OpcodeInfo[]> TwoOpInfos = new Dictionary<byte, OpcodeInfo[]>();
+        private static readonly Dictionary<byte, OpcodeInfo[]> ZeroOpInfos = new Dictionary<byte, OpcodeInfo[]>();
+        private static readonly Dictionary<byte, OpcodeInfo[]> VarOpInfos = new Dictionary<byte, OpcodeInfo[]>();
+        private static readonly Dictionary<byte, OpcodeInfo[]> ExtOpInfos = new Dictionary<byte, OpcodeInfo[]>();
 
         static Opcode()
         {
@@ -257,19 +231,19 @@ namespace ZLR.VM
 
         private static void InitOpcodeTable()
         {
-            MethodInfo[] mis = typeof(Opcode).GetMethods(
+            var mis = typeof(Opcode).GetMethods(
                 BindingFlags.NonPublic|BindingFlags.Instance);
 
-            foreach (MethodInfo mi in mis)
+            foreach (var mi in mis)
             {
-                OpcodeAttribute[] attrs = (OpcodeAttribute[])mi.GetCustomAttributes(typeof(OpcodeAttribute), false);
+                var attrs = (OpcodeAttribute[])mi.GetCustomAttributes(typeof(OpcodeAttribute), false);
                 if (attrs.Length > 0)
                 {
-                    OpcodeCompiler del = (OpcodeCompiler)Delegate.CreateDelegate(
+                    var del = (OpcodeCompiler)Delegate.CreateDelegate(
                         typeof(OpcodeCompiler), null, mi);
-                    foreach (OpcodeAttribute a in attrs)
+                    foreach (var a in attrs)
                     {
-                        OpcodeInfo info = new OpcodeInfo(a, del);
+                        var info = new OpcodeInfo(a, del);
 
                         byte num;
                         Dictionary<byte, OpcodeInfo[]> dict;
@@ -277,23 +251,23 @@ namespace ZLR.VM
                         switch (a.OpCount)
                         {
                             case OpCount.Zero:
-                                dict = zeroOpInfos;
+                                dict = ZeroOpInfos;
                                 num = (byte)(a.Number - 176);
                                 break;
                             case OpCount.One:
-                                dict = oneOpInfos;
+                                dict = OneOpInfos;
                                 num = (byte)(a.Number - 128);
                                 break;
                             case OpCount.Two:
-                                dict = twoOpInfos;
+                                dict = TwoOpInfos;
                                 num = a.Number;
                                 break;
                             case OpCount.Var:
-                                dict = varOpInfos;
+                                dict = VarOpInfos;
                                 num = (byte)(a.Number - 224);
                                 break;
                             case OpCount.Ext:
-                                dict = extOpInfos;
+                                dict = ExtOpInfos;
                                 num = a.Number;
                                 break;
                             default:
@@ -303,12 +277,12 @@ namespace ZLR.VM
                         OpcodeInfo[] array;
                         if (dict.TryGetValue(num, out array) == false)
                         {
-                            array = new OpcodeInfo[] { info };
+                            array = new[] { info };
                             dict.Add(num, array);
                         }
                         else
                         {
-                            OpcodeInfo[] newArray = new OpcodeInfo[array.Length + 1];
+                            var newArray = new OpcodeInfo[array.Length + 1];
                             Array.Copy(array, newArray, array.Length);
                             newArray[newArray.Length - 1] = info;
                             dict[num] = newArray;
@@ -325,28 +299,28 @@ namespace ZLR.VM
             switch (count)
             {
                 case OpCount.Zero:
-                    dict = zeroOpInfos;
+                    dict = ZeroOpInfos;
                     break;
                 case OpCount.One:
-                    dict = oneOpInfos;
+                    dict = OneOpInfos;
                     break;
                 case OpCount.Two:
-                    dict = twoOpInfos;
+                    dict = TwoOpInfos;
                     break;
                 case OpCount.Var:
-                    dict = varOpInfos;
+                    dict = VarOpInfos;
                     break;
                 case OpCount.Ext:
-                    dict = extOpInfos;
+                    dict = ExtOpInfos;
                     break;
                 default:
-                    throw new ArgumentOutOfRangeException("count");
+                    throw new ArgumentOutOfRangeException(nameof(count));
             }
 
             OpcodeInfo[] array;
             if (dict.TryGetValue(opnum, out array))
             {
-                foreach (OpcodeInfo info in array)
+                foreach (var info in array)
                     if (zversion >= info.Attr.MinVersion && zversion <= info.Attr.MaxVersion)
                     {
                         result = info;
@@ -358,20 +332,18 @@ namespace ZLR.VM
             return false;
         }
 
-        internal static string GetOpcodeName(OpcodeAttribute attribute, OpcodeCompiler handler)
+        [NotNull]
+        internal static string GetOpcodeName([CanBeNull] OpcodeAttribute attribute, OpcodeCompiler handler)
         {
-            if (attribute != null && attribute.Alias != null)
+            if (attribute?.Alias != null)
                 return attribute.Alias;
 
             if (handler == null)
                 return "<unknown>";
 
-            MethodInfo mi = handler.Method;
-            string name = mi.Name;
-            if (name.StartsWith("op_"))
-                return name.Remove(0, 3);
-            else
-                return name;
+            var mi = handler.Method;
+            var name = mi.Name;
+            return name.StartsWith("op_") ? name.Remove(0, 3) : name;
         }
 
         #endregion
@@ -434,8 +406,8 @@ namespace ZLR.VM
                     }
                     else
                     {
-                        MethodInfo getWordMI = typeof(ZMachine).GetMethod("GetWord", BindingFlags.NonPublic | BindingFlags.Instance);
-                        int address = zm.GlobalsOffset + 2 * (value - 16);
+                        var getWordMI = ZMachine.GetMethodInfo(nameof(ZMachine.GetWord));
+                        var address = zm.GlobalsOffset + 2 * (value - 16);
                         il.Emit(OpCodes.Ldarg_0);
                         il.Emit(OpCodes.Ldc_I4, address);
                         il.Emit(OpCodes.Call, getWordMI);
@@ -444,15 +416,15 @@ namespace ZLR.VM
             }
         }
 
-        private void StoreResult(ILGenerator il)
+        private void StoreResult([NotNull] ILGenerator il)
         {
             if (resultStorage == -1)
                 throw new InvalidOperationException("Storing from a non-store instruction");
 
-            StoreResult(il, (byte)resultStorage);
+            StoreResult(il, (byte) resultStorage);
         }
 
-        private void StoreResult(ILGenerator il, byte dest)
+        private void StoreResult([NotNull] ILGenerator il, byte dest)
         {
             if (dest == 0)
             {
@@ -462,14 +434,14 @@ namespace ZLR.VM
             {
                 il.Emit(OpCodes.Stloc, zm.TempWordLocal);
                 LoadLocals(il);
-                il.Emit(OpCodes.Ldc_I4_S, (byte)(dest - 1));
+                il.Emit(OpCodes.Ldc_I4_S, (byte) (dest - 1));
                 il.Emit(OpCodes.Ldloc, zm.TempWordLocal);
                 il.Emit(OpCodes.Stelem_I2);
             }
             else
             {
-                MethodInfo setWordMI = typeof(ZMachine).GetMethod("SetWord", BindingFlags.NonPublic | BindingFlags.Instance);
-                int address = zm.GlobalsOffset + 2 * (dest - 16);
+                var setWordMI = ZMachine.GetMethodInfo(nameof(ZMachine.SetWord));
+                var address = zm.GlobalsOffset + 2 * (dest - 16);
                 il.Emit(OpCodes.Stloc, zm.TempWordLocal);
                 il.Emit(OpCodes.Ldarg_0);
                 il.Emit(OpCodes.Ldc_I4, address);
@@ -478,17 +450,17 @@ namespace ZLR.VM
             }
         }
 
-        private void PopFromStack(ILGenerator il)
+        private void PopFromStack([NotNull] ILGenerator il)
         {
-            MethodInfo popMI = typeof(Stack<short>).GetMethod("Pop");
+            var popMI = typeof(Stack<short>).GetMethod(nameof(Stack<short>.Pop));
 
             il.Emit(OpCodes.Ldloc, zm.StackLocal);
             il.Emit(OpCodes.Call, popMI);
         }
 
-        private void PushOntoStack(ILGenerator il)
+        private void PushOntoStack([NotNull] ILGenerator il)
         {
-            MethodInfo pushMI = typeof(Stack<short>).GetMethod("Push");
+            var pushMI = typeof(Stack<short>).GetMethod(nameof(Stack<short>.Push));
 
             il.Emit(OpCodes.Stloc, zm.TempWordLocal);
             il.Emit(OpCodes.Ldloc, zm.StackLocal);
@@ -496,7 +468,7 @@ namespace ZLR.VM
             il.Emit(OpCodes.Call, pushMI);
         }
 
-        private void LoadLocals(ILGenerator il)
+        private void LoadLocals([NotNull] ILGenerator il)
         {
             il.Emit(OpCodes.Ldloc, zm.LocalsLocal);
         }
@@ -504,23 +476,21 @@ namespace ZLR.VM
         /// <summary>
         /// Generates code to enter a function.
         /// </summary>
-        /// <param name="argc">The number of arguments, including the function address. Must be at least 1.</param>
-        /// <param name="operandTypes">An array of operand types.</param>
-        /// <param name="argv">An array of operand values or addresses.</param>
+        /// <param name="il">The IL generator.</param>
         /// <param name="store">If true, a storage location will be read from the current PC (and PC
         /// will be advanced); otherwise, the function result will be discarded.</param>
-        private void EnterFunction(ILGenerator il, bool store)
+        private void EnterFunction([NotNull] ILGenerator il, bool store)
         {
-            int dest = store ? resultStorage : -1;
+            var dest = store ? resultStorage : -1;
             EnterFunction(il, dest);
         }
 
-        private void EnterFunction(ILGenerator il, int dest)
+        private void EnterFunction([NotNull] ILGenerator il, int dest)
         {
-            MethodInfo impl = typeof(ZMachine).GetMethod("EnterFunctionImpl", BindingFlags.NonPublic | BindingFlags.Instance);
+            var impl = ZMachine.GetMethodInfo(nameof(ZMachine.EnterFunctionImpl));
 
             // if the first operand is sp, save it in the temp local, since we don't use it until later
-            bool addressInTemp = false;
+            var addressInTemp = false;
             if (operandTypes[0] == OperandType.Variable && operandValues[0] == 0)
             {
                 PopFromStack(il);
@@ -536,7 +506,7 @@ namespace ZLR.VM
                 il.Emit(OpCodes.Newarr, typeof(short));
                 il.Emit(OpCodes.Stloc, zm.TempArrayLocal);
 
-                for (int i = 1; i < argc; i++)
+                for (var i = 1; i < argc; i++)
                 {
                     il.Emit(OpCodes.Ldloc, zm.TempArrayLocal);
                     il.Emit(OpCodes.Ldc_I4, i - 1);
@@ -571,9 +541,9 @@ namespace ZLR.VM
             compiling = false;
         }
 
-        private void LeaveFunction(ILGenerator il)
+        private void LeaveFunction([NotNull] ILGenerator il)
         {
-            MethodInfo impl = typeof(ZMachine).GetMethod("LeaveFunctionImpl", BindingFlags.NonPublic | BindingFlags.Instance);
+            var impl = ZMachine.GetMethodInfo(nameof(ZMachine.LeaveFunctionImpl));
             il.Emit(OpCodes.Stloc, zm.TempWordLocal);
             il.Emit(OpCodes.Ldarg_0);
             il.Emit(OpCodes.Ldloc, zm.TempWordLocal);
@@ -581,9 +551,9 @@ namespace ZLR.VM
             compiling = false;
         }
 
-        private void LeaveFunctionConst(ILGenerator il, short result)
+        private void LeaveFunctionConst([NotNull] ILGenerator il, short result)
         {
-            MethodInfo impl = typeof(ZMachine).GetMethod("LeaveFunctionImpl", BindingFlags.NonPublic | BindingFlags.Instance);
+            var impl = ZMachine.GetMethodInfo(nameof(ZMachine.LeaveFunctionImpl));
             il.Emit(OpCodes.Ldarg_0);
             il.Emit(OpCodes.Ldc_I4, (int)result);
             il.Emit(OpCodes.Call, impl);
@@ -592,7 +562,7 @@ namespace ZLR.VM
         }
 
         // conditional version
-        private void Branch(ILGenerator il, OpCode ifTrue, OpCode ifFalse)
+        private void Branch([NotNull] ILGenerator il, OpCode ifTrue, OpCode ifFalse)
         {
             if (branchOffset == int.MinValue)
                 throw new InvalidOperationException("Branching from non-branch opcode");
@@ -604,7 +574,7 @@ namespace ZLR.VM
             }
 
             // do it the hard way
-            Label skipBranch = il.DefineLabel();
+            var skipBranch = il.DefineLabel();
             il.Emit(branchIfTrue ? ifFalse : ifTrue, skipBranch);
 
             if (branchOffset == 0)
@@ -621,7 +591,7 @@ namespace ZLR.VM
             }
             else
             {
-                FieldInfo pcFI = typeof(ZMachine).GetField("pc", BindingFlags.NonPublic | BindingFlags.Instance);
+                var pcFI = ZMachine.GetFieldInfo(nameof(ZMachine.pc));
                 il.Emit(OpCodes.Ldarg_0);
                 il.Emit(OpCodes.Ldc_I4, zm.PC + branchOffset - 2);
                 il.Emit(OpCodes.Stfld, pcFI);
@@ -633,7 +603,7 @@ namespace ZLR.VM
         }
 
         // unconditional version
-        private void Branch(ILGenerator il)
+        private void Branch([NotNull] ILGenerator il)
         {
             if (branchOffset == int.MinValue)
                 throw new InvalidOperationException("Branching from non-branch opcode");
@@ -655,7 +625,7 @@ namespace ZLR.VM
             }
             else
             {
-                FieldInfo pcFI = typeof(ZMachine).GetField("pc", BindingFlags.NonPublic | BindingFlags.Instance);
+                var pcFI = ZMachine.GetFieldInfo(nameof(ZMachine.pc));
                 il.Emit(OpCodes.Ldarg_0);
                 il.Emit(OpCodes.Ldc_I4, zm.PC + branchOffset - 2);
                 il.Emit(OpCodes.Stfld, pcFI);
@@ -664,7 +634,7 @@ namespace ZLR.VM
             compiling = false;
         }
 
-        private void BinaryOperation(ILGenerator il, OpCode op)
+        private void BinaryOperation([NotNull] ILGenerator il, OpCode op)
         {
             LoadOperand(il, 0);
             LoadOperand(il, 1);
@@ -674,69 +644,28 @@ namespace ZLR.VM
     }
 
     [AttributeUsage(AttributeTargets.Method, AllowMultiple = true)]
+    [MeansImplicitUse]
     internal class OpcodeAttribute : Attribute
     {
-        public OpcodeAttribute(OpCount count, byte opnum)
-            : this(count, opnum, false, false, false)
-        {
-        }
-
-        public OpcodeAttribute(OpCount count, byte opnum, bool store)
-            : this(count, opnum, store, false, false)
-        {
-        }
-
         public OpcodeAttribute(OpCount count, byte opnum,
-            bool store, bool branch, bool text)
+            bool store = false, bool branch = false, bool text = false)
         {
-            _count = count;
-            _opnum = opnum;
-            _store = store;
-            _branch = branch;
-            _text = text;
+            OpCount = count;
+            Number = opnum;
+            Store = store;
+            Branch = branch;
+            Text = text;
         }
 
-        private OpCount _count;
-        private byte _opnum;
-        private bool _store, _branch, _text;
-        private bool _noReturn, _indirect;
-        private byte _minVer = 1, _maxVer = 8;
-        private string _alias = null;
-
-        public OpCount OpCount { get { return _count; } }
-        public byte Number { get { return _opnum; } }
-        public bool Store { get { return _store; } }
-        public bool Branch { get { return _branch; } }
-        public bool Text { get { return _text; } }
-
-        public bool Terminates
-        {
-            get { return _noReturn; }
-            set { _noReturn = value; }
-        }
-
-        public bool IndirectVar
-        {
-            get { return _indirect; }
-            set { _indirect = value; }
-        }
-
-        public byte MinVersion
-        {
-            get { return _minVer; }
-            set { _minVer = value; }
-        }
-
-        public byte MaxVersion
-        {
-            get { return _maxVer; }
-            set { _maxVer = value; }
-        }
-
-        public string Alias
-        {
-            get { return _alias; }
-            set { _alias = value; }
-        }
+        public OpCount OpCount { get; }
+        public byte Number { get; }
+        public bool Store { get; }
+        public bool Branch { get; }
+        public bool Text { get; }
+        public bool Terminates { get; set; }
+        public bool IndirectVar { get; set; }
+        public byte MinVersion { get; set; } = 1;
+        public byte MaxVersion { get; set; } = 8;
+        public string Alias { get; set; }
     }
 }

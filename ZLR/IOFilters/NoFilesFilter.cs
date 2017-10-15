@@ -1,12 +1,10 @@
-﻿using System;
-using System.Collections.Generic;
-using System.Text;
+﻿using JetBrains.Annotations;
 
 namespace ZLR.VM.IOFilters
 {
     public sealed class NoFilesFilter : FilterBase
     {
-        public NoFilesFilter(IZMachineIO next)
+        public NoFilesFilter([NotNull] IZMachineIO next)
             : base(next)
         {
         }

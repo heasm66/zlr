@@ -3,6 +3,7 @@ using System.Collections.Generic;
 using System.IO;
 using System.Text;
 using System.Threading;
+using JetBrains.Annotations;
 using ZLR.VM;
 
 namespace ZLR.Interfaces.SystemConsole
@@ -10,10 +11,8 @@ namespace ZLR.Interfaces.SystemConsole
     internal class ConsoleIO : IZMachineIO
     {
         private readonly string fileBase;
-        private string suppliedCommandFile;
-        private bool hideMorePrompts;
-        private int split = 0;
-        private bool upper = false;
+        private int split;
+        private bool upper;
         private int xupper = 1, yupper = 1, xlower = 1, ylower = 1;
         private ConsoleColor bgupper = ConsoleColor.Black, fgupper = ConsoleColor.Gray;
         private ConsoleColor bglower = ConsoleColor.Black, fglower = ConsoleColor.Gray;
@@ -23,21 +22,18 @@ namespace ZLR.Interfaces.SystemConsole
         private const uint STYLE_FLAG = 0x80000000;
         private bool buffering = true;
         private int bufferLength;
-        private List<uint> buffer = new List<uint>();
+        private readonly List<uint> buffer = new List<uint>();
         private int lineCount;
 
         private const int MAX_COMMAND_HISTORY = 10;
-        private List<string> history = new List<string>();
+        private readonly List<string> history = new List<string>();
 
-        private int origBufHeight;
-        private bool weakConsole;
+        private readonly int origBufHeight;
+        private readonly bool weakConsole;
 
         public ConsoleIO(string fileName)
         {
-            if (fileName == null)
-                throw new ArgumentNullException("fileBase");
-
-            fileBase = Path.GetFileName(fileName);
+            fileBase = Path.GetFileName(fileName) ?? throw new ArgumentNullException(nameof(fileName));
 
             try
             {
@@ -66,17 +62,10 @@ namespace ZLR.Interfaces.SystemConsole
             origBufHeight = Console.BufferHeight;
         }
 
-        public string SuppliedCommandFile
-        {
-            get { return suppliedCommandFile; }
-            set { suppliedCommandFile = value; }
-        }
+        [PublicAPI]
+        public string SuppliedCommandFile { get; set; }
 
-        public bool HideMorePrompts
-        {
-            get { return hideMorePrompts; }
-            set { hideMorePrompts = value; }
-        }
+        public bool HideMorePrompts { get; set; }
 
         public string ReadLine(string initial, int time, TimedInputCallback callback,
             byte[] terminatingKeys, out byte terminator)
@@ -117,21 +106,18 @@ namespace ZLR.Interfaces.SystemConsole
                             sleeps = 0;
                             int cx = Console.CursorLeft;
                             int cy = Console.CursorTop;
-                            if (callback() == true)
+                            if (callback())
                             {
                                 terminator = 0;
                                 return string.Empty;
                             }
-                            else
+                            // the game may have printed something anyway
+                            if (Console.CursorLeft != cx ||
+                                Console.CursorTop != cy)
                             {
-                                // the game may have printed something anyway
-                                if (Console.CursorLeft != cx ||
-                                    Console.CursorTop != cy)
-                                {
-                                    Console.Write(sb.ToString());
-                                    for (int i = cursor; i < sb.Length; i++)
-                                        Console.Write('\x08');
-                                }
+                                Console.Write(sb.ToString());
+                                for (int i = cursor; i < sb.Length; i++)
+                                    Console.Write('\x08');
                             }
                         }
                     }
@@ -208,10 +194,7 @@ namespace ZLR.Interfaces.SystemConsole
 
                             histIdx++;
                             sb.Length = 0;
-                            if (histIdx == history.Count)
-                                sb.Append(savedEntry);
-                            else
-                                sb.Append(history[histIdx]);
+                            sb.Append(histIdx == history.Count ? savedEntry : history[histIdx]);
                             Console.Write(sb.ToString());
                             cursor = sb.Length;
                         }
@@ -320,7 +303,7 @@ namespace ZLR.Interfaces.SystemConsole
                         if (sleeps == time)
                         {
                             sleeps = 0;
-                            if (callback() == true)
+                            if (callback())
                                 return 0;
                         }
                     }
@@ -337,8 +320,10 @@ namespace ZLR.Interfaces.SystemConsole
             }
         }
 
+        // ReSharper disable once CyclomaticComplexity
         private static byte ConsoleKeyToZSCII(ConsoleKey key)
         {
+            // ReSharper disable once SwitchStatementMissingSomeCases
             switch (key)
             {
                 case ConsoleKey.Delete: return 8;
@@ -424,11 +409,10 @@ namespace ZLR.Interfaces.SystemConsole
 
             if (bufferLength == 0)
             {
-                ConsoleColor fg, bg;
-                GetConsoleColors(out fg, out bg);
+                GetConsoleColors(out var fg, out var bg);
                 buffer.Add(STYLE_FLAG | ((uint)bg << 16) | (uint)fg);
             }
-            buffer.Add((uint)ch);
+            buffer.Add(ch);
             bufferLength++;
         }
 
@@ -474,8 +458,7 @@ namespace ZLR.Interfaces.SystemConsole
 
         private void SetConsoleColors()
         {
-            ConsoleColor bg, fg;
-            GetConsoleColors(out fg, out bg);
+            GetConsoleColors(out var fg, out var bg);
             Console.BackgroundColor = bg;
             Console.ForegroundColor = fg;
         }
@@ -505,8 +488,7 @@ namespace ZLR.Interfaces.SystemConsole
             }
             else
             {
-                ConsoleColor fg, bg;
-                GetConsoleColors(out fg, out bg);
+                GetConsoleColors(out ConsoleColor fg, out ConsoleColor bg);
                 buffer.Add(STYLE_FLAG | ((uint)bg << 16) | (uint)fg);
             }
         }
@@ -519,10 +501,7 @@ namespace ZLR.Interfaces.SystemConsole
             split = Math.Min(lines, Console.WindowHeight);
             if (!weakConsole)
             {
-                if (split == 0)
-                    Console.BufferHeight = origBufHeight;
-                else
-                    Console.BufferHeight = Console.WindowHeight;
+                Console.BufferHeight = split == 0 ? origBufHeight : Console.WindowHeight;
             }
 
             if (upper)
@@ -735,32 +714,18 @@ namespace ZLR.Interfaces.SystemConsole
             set { /* nada */ }
         }
 
-        public bool BoldAvailable
-        {
-            get { return true; }
-        }
+        public bool BoldAvailable => true;
 
-        public bool ItalicAvailable
-        {
-            get { return true; }
-        }
+        public bool ItalicAvailable => true;
 
-        public bool FixedPitchAvailable
-        {
-            get { return false; }
-        }
+        public bool FixedPitchAvailable => false;
 
-        public bool VariablePitchAvailable
-        {
-            get { return false; }
-        }
+        public bool VariablePitchAvailable => false;
 
         public bool ScrollFromBottom
         {
-            get
-            {
-                return scrollFromBottom;
-            }
+            get => scrollFromBottom;
+
             set
             {
                 if (scrollFromBottom != value)
@@ -786,10 +751,7 @@ namespace ZLR.Interfaces.SystemConsole
         }
 
 
-        public bool TimedInputAvailable
-        {
-            get { return true; }
-        }
+        public bool TimedInputAvailable => true;
 
         public bool Transcripting
         {
@@ -865,35 +827,17 @@ namespace ZLR.Interfaces.SystemConsole
             }
         }
 
-        public byte WidthChars
-        {
-            get { return (byte)Console.WindowWidth; }
-        }
+        public byte WidthChars => (byte)Console.WindowWidth;
 
-        public short WidthUnits
-        {
-            get { return (short)Console.WindowWidth; }
-        }
+        public short WidthUnits => (short)Console.WindowWidth;
 
-        public byte HeightChars
-        {
-            get { return (byte)Console.WindowHeight; }
-        }
+        public byte HeightChars => (byte)Console.WindowHeight;
 
-        public short HeightUnits
-        {
-            get { return (short)Console.WindowHeight; }
-        }
+        public short HeightUnits => (short)Console.WindowHeight;
 
-        public byte FontHeight
-        {
-            get { return 1; }
-        }
+        public byte FontHeight => 1;
 
-        public byte FontWidth
-        {
-            get { return 1; }
-        }
+        public byte FontWidth => 1;
 
         public event EventHandler SizeChanged
         {
@@ -901,20 +845,11 @@ namespace ZLR.Interfaces.SystemConsole
             remove { /* nada */ }
         }
 
-        public bool ColorsAvailable
-        {
-            get { return true; }
-        }
+        public bool ColorsAvailable => true;
 
-        public byte DefaultForeground
-        {
-            get { return 9; /* white */ }
-        }
+        public byte DefaultForeground => 9; // white
 
-        public byte DefaultBackground
-        {
-            get { return 2; /* black */ }
-        }
+        public byte DefaultBackground => 2; // black
 
         public Stream OpenSaveFile(int size)
         {
@@ -923,7 +858,7 @@ namespace ZLR.Interfaces.SystemConsole
             FlushBuffer();
             lineCount = 0;
 
-            string filename = null;
+            string filename;
             do
             {
                 Console.Write("Enter a new saved game file (\".\" to quit) [{0}]: ",
@@ -937,15 +872,7 @@ namespace ZLR.Interfaces.SystemConsole
 
                 if (File.Exists(filename))
                 {
-                    string yorn;
-                    do
-                    {
-                        Console.Write("\"{0}\" exists. Are you sure (y/n)? ", filename);
-                        yorn = Console.ReadLine().ToLower().Trim();
-                    }
-                    while (yorn.Length == 0);
-
-                    if (yorn[0] != 'y')
+                    if (!YesOrNoPrompt($"\"{filename}\" exists. Are you sure (y/n)? "))
                         filename = null;
                 }
             }
@@ -964,7 +891,7 @@ namespace ZLR.Interfaces.SystemConsole
             {
                 Console.Write("Enter an existing saved game file (blank to cancel): ");
                 filename = Console.ReadLine();
-                if (filename == "")
+                if (string.IsNullOrWhiteSpace(filename))
                     return null;
 
                 if (File.Exists(filename))
@@ -998,10 +925,10 @@ namespace ZLR.Interfaces.SystemConsole
             lineCount = 0;
 
             string filename;
-            if (suppliedCommandFile != null)
+            if (SuppliedCommandFile != null)
             {
-                filename = suppliedCommandFile;
-                suppliedCommandFile = null;
+                filename = SuppliedCommandFile;
+                SuppliedCommandFile = null;
             }
             else
             {
@@ -1010,26 +937,13 @@ namespace ZLR.Interfaces.SystemConsole
                     Console.Write("Enter the name of a command file to {0} (blank to cancel): ",
                         writing ? "record" : "play back");
                     filename = Console.ReadLine();
-                    if (filename == "")
+                    if (string.IsNullOrWhiteSpace(filename))
                         return null;
 
                     if (writing)
                     {
                         // if the file exists, prompt to overwrite it
-                        if (File.Exists(filename))
-                        {
-                            string yorn;
-                            do
-                            {
-                                Console.Write("\"{0}\" exists. Are you sure (y/n)? ", filename);
-                                yorn = Console.ReadLine().ToLower().Trim();
-                            }
-                            while (yorn.Length == 0);
-
-                            if (yorn[0] == 'y')
-                                break;
-                        }
-                        else
+                        if (!File.Exists(filename) || YesOrNoPrompt($"\"{filename}\" exists. Are you sure (y/n)? "))
                             break;
                     }
                     else
@@ -1047,14 +961,26 @@ namespace ZLR.Interfaces.SystemConsole
                     writing ? FileAccess.Write : FileAccess.Read);
         }
 
-        private static readonly char[] badChars = { ':', '"', '<', '>', '\\', '/', '*', '?', '|' };
+        private static bool YesOrNoPrompt(string prompt)
+        {
+            string yorn;
+            do
+            {
+                Console.Write(prompt);
+                yorn = Console.ReadLine()?.ToLower().Trim() ?? "n";
+            } while (yorn.Length == 0);
 
-        private static bool InvalidAuxFileName(string name)
+            return yorn[0] == 'y';
+        }
+
+        private static readonly char[] BadChars = { ':', '"', '<', '>', '\\', '/', '*', '?', '|' };
+
+        private static bool InvalidAuxFileName([NotNull] string name)
         {
             if (name.Trim().Length == 0)
                 return true;
 
-            if (name.IndexOfAny(badChars) > 0)
+            if (name.IndexOfAny(BadChars) > 0)
                 return true;
 
             return false;
@@ -1070,10 +996,7 @@ namespace ZLR.Interfaces.SystemConsole
             return 0;
         }
 
-        public bool GraphicsFontAvailable
-        {
-            get { return false; }
-        }
+        public bool GraphicsFontAvailable => false;
 
         public void PlaySoundSample(ushort num, SoundAction action, byte volume, byte repeats,
             SoundFinishedCallback callback)
@@ -1086,17 +1009,12 @@ namespace ZLR.Interfaces.SystemConsole
             Console.Beep(highPitch ? 1600 : 800, 200);
         }
 
-        public bool SoundSamplesAvailable
-        {
-            get { return false; }
-        }
+        public bool SoundSamplesAvailable => false;
 
         public bool Buffering
         {
-            get
-            {
-                return buffering;
-            }
+            get => buffering;
+
             set
             {
                 if (buffering != value)
@@ -1156,7 +1074,7 @@ namespace ZLR.Interfaces.SystemConsole
 
         private void CheckMore()
         {
-            if (!hideMorePrompts && !upper && Console.CursorLeft == 0)
+            if (!HideMorePrompts && !upper && Console.CursorLeft == 0)
             {
                 lineCount++;
                 if (lineCount >= Console.WindowHeight - split - 1)

@@ -1,27 +1,26 @@
 using System;
 using System.Collections.Generic;
-using System.Text;
 using System.IO;
 using ZLR.VM;
-using System.Threading;
 using System.Reflection;
+using JetBrains.Annotations;
 using ZLR.Debugging;
 
 namespace ZLR.Interfaces.SystemConsole
 {
-    class Program
+    static class Program
     {
         enum DisplayType { FullScreen, Dumb, DumbBottomWinOnly }
 
-        static int Main(string[] args)
+        static int Main([ItemNotNull] [NotNull] string[] args)
         {
             try
             {
                 Console.Title = "ConsoleZLR";
 
-                Stream gameStream = null, debugStream = null;
-                string gameDir = null, debugDir = null;
-                string fileName = null, commandFile = null;
+                Stream gameStream, debugStream = null;
+                string gameDir, debugDir = null;
+                string fileName, commandFile = null;
                 DisplayType displayType = DisplayType.FullScreen;
                 bool debugger = false, predictable = false;
                 bool wait = true;
@@ -113,8 +112,7 @@ namespace ZLR.Interfaces.SystemConsole
                         throw new NotImplementedException();
                 }
 
-                ZMachine zm = new ZMachine(gameStream, io);
-                zm.PredictableRandom = predictable;
+                ZMachine zm = new ZMachine(gameStream, io) {PredictableRandom = predictable};
                 if (commandFile != null)
                     zm.ReadingCommandsFromFile = true;
                 if (debugStream != null)
@@ -172,19 +170,20 @@ namespace ZLR.Interfaces.SystemConsole
             return 2;
         }
 
-        private static void DebuggerLoop(ZMachine zm, string[] sourcePath)
+        private static readonly byte[] DummyTerminatingKeys = { };
+
+        private static void DebuggerLoop([NotNull] ZMachine zm, string[] sourcePath)
         {
             var console = new DebuggingConsole(zm, zm.IO, sourcePath);
 
             console.Activate();
 
-            TimedInputCallback cb = () => false;
-            byte[] terminatingKeys = { };
+            bool DummyTimedInputCallback() => false;
+            
 
             while (console.Active)
             {
-                byte terminator;
-                string cmd = zm.IO.ReadLine(string.Empty, 0, cb, terminatingKeys, out terminator);
+                string cmd = zm.IO.ReadLine(string.Empty, 0, DummyTimedInputCallback, DummyTerminatingKeys, out _);
 
                 console.HandleCommand(cmd);
             }

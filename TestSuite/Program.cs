@@ -1,21 +1,21 @@
 using System;
 using System.Collections.Generic;
-using System.Text;
-using ZLR.VM;
-using System.Reflection;
 using System.IO;
+using System.Reflection;
 using System.Text.RegularExpressions;
+using JetBrains.Annotations;
+using ZLR.VM;
 
 namespace TestSuite
 {
-    class Program
+    static class Program
     {
         private static Dictionary<string, TestCase> testCases;
         private static string testPath;
 
         private const string TESTCASES_DIR_NAME = "Test Cases";
 
-        static void Main(string[] args)
+        static void Main()
         {
             Console.WriteLine("ZLR Test Suite {0}", ZMachine.ZLR_VERSION);
             Console.WriteLine();
@@ -44,7 +44,7 @@ namespace TestSuite
                 Console.WriteLine();
                 Console.Write("Choice: ");
 
-                ConsoleKeyInfo info = Console.ReadKey();
+                var info = Console.ReadKey();
                 Console.WriteLine();
                 Console.WriteLine();
 
@@ -78,10 +78,11 @@ namespace TestSuite
             while (true);
         }
 
+        [CanBeNull]
         static string FindTestCases()
         {
-            string path = Path.GetDirectoryName(Assembly.GetExecutingAssembly().Location);
-            while (path.Length > 0)
+            var path = Path.GetDirectoryName(Assembly.GetExecutingAssembly().Location);
+            while (!string.IsNullOrEmpty(path))
             {
                 if (Directory.Exists(Path.Combine(path, TESTCASES_DIR_NAME)))
                     return Path.Combine(path, TESTCASES_DIR_NAME);
@@ -94,20 +95,22 @@ namespace TestSuite
 
         private static void RecordExpectedOutcome()
         {
-            TestCase selected = PromptForTestCase();
+            var selected = PromptForTestCase();
 
             if (selected != null)
             {
                 try
                 {
-                    using (Stream zcode = selected.GetZCode())
+                    using (var zcode = selected.GetZCode())
                     {
-                        RecordingIO io = new RecordingIO(selected.InputFile);
-                        ZMachine zm = new ZMachine(zcode, io);
-                        zm.PredictableRandom = true;
-                        zm.WritingCommandsToFile = true;
+                        var io = new RecordingIO(selected.InputFile);
+                        var zm = new ZMachine(zcode, io)
+                        {
+                            PredictableRandom = true,
+                            WritingCommandsToFile = true
+                        };
 
-                        string output = RunAndCollectOutput(zm, io);
+                        var output = RunAndCollectOutput(zm, io);
                         File.WriteAllText(selected.OutputFile, output);
                     }
                 }
@@ -118,7 +121,8 @@ namespace TestSuite
             }
         }
 
-        private static string RunAndCollectOutput(ZMachine zm, TestCaseIO io)
+        [NotNull]
+        private static string RunAndCollectOutput([NotNull] ZMachine zm, [NotNull] TestCaseIO io)
         {
             string output = null;
 
@@ -128,12 +132,13 @@ namespace TestSuite
                 zm.Run();
                 output = io.CollectOutput();
             }
+            // ReSharper disable once CatchAllClause
             catch (Exception ex)
             {
                 if (output == null)
                     output = io.CollectOutput();
 
-                output += "\n\n*** Exception ***\n" + ex.ToString();
+                output += "\n\n*** Exception ***\n" + ex;
             }
 
             return output;
@@ -141,7 +146,7 @@ namespace TestSuite
 
         private static void RunOneTest()
         {
-            TestCase selected = PromptForTestCase();
+            var selected = PromptForTestCase();
 
             if (selected != null)
             {
@@ -158,83 +163,80 @@ namespace TestSuite
 
         private static void RunAllTests()
         {
-            List<string> names = new List<string>(testCases.Keys);
+            var names = new List<string>(testCases.Keys);
             names.Sort();
 
             if (names.Count == 0)
             {
                 Console.WriteLine("No tests to run.");
+                return;
             }
-            else
+
+            var failures = 0;
+
+            foreach (var name in names)
             {
-                int failures = 0;
+                var test = testCases[name];
 
-                foreach (string name in names)
-                {
-                    TestCase test = testCases[name];
+                Console.Write("{0} - ", name);
 
-                    Console.Write("{0} - ", name);
+                if (RunOneTest(test) == false)
+                    failures++;
+            }
 
-                    if (RunOneTest(test) == false)
-                        failures++;
-                }
-
-                if (failures > 0)
-                {
-                    Console.WriteLine();
-                    Console.WriteLine("{0} test{1} failed. The actual output is saved with the suffix \".failed-output.txt\".",
-                        failures,
-                        failures == 1 ? "" : "s");
-                }
+            if (failures > 0)
+            {
+                Console.WriteLine();
+                Console.WriteLine("{0} test{1} failed. The actual output is saved with the suffix \".failed-output.txt\".",
+                    failures,
+                    failures == 1 ? "" : "s");
             }
         }
 
-        private static bool? RunOneTest(TestCase test)
+        private static bool? RunOneTest([NotNull] TestCase test)
         {
             if (!File.Exists(test.InputFile) || !File.Exists(test.OutputFile))
             {
                 Console.WriteLine("skipping (expected outcome not recorded).");
                 return null;
             }
-            else
+            try
             {
-                try
+                using (var zcode = test.GetZCode())
                 {
-                    using (Stream zcode = test.GetZCode())
+                    var io = new ReplayIO(test.InputFile);
+                    var zm = new ZMachine(zcode, io)
                     {
-                        ReplayIO io = new ReplayIO(test.InputFile);
-                        ZMachine zm = new ZMachine(zcode, io);
+                        PredictableRandom = true,
+                        ReadingCommandsFromFile = true
+                    };
 
-                        zm.PredictableRandom = true;
-                        zm.ReadingCommandsFromFile = true;
+                    var output = RunAndCollectOutput(zm, io);
+                    var expectedOutput = File.ReadAllText(test.OutputFile);
 
-                        string output = RunAndCollectOutput(zm, io);
-                        string expectedOutput = File.ReadAllText(test.OutputFile);
-
-                        if (OutputDiffers(expectedOutput, output))
-                        {
-                            Console.WriteLine("failed!");
-                            File.WriteAllText(test.FailureFile, output);
-                            return false;
-                        }
-                        else
-                        {
-                            Console.WriteLine("passed.");
-                            return true;
-                        }
+                    if (OutputDiffers(expectedOutput, output))
+                    {
+                        Console.WriteLine("failed!");
+                        File.WriteAllText(test.FailureFile, output);
+                        return false;
+                    }
+                    else
+                    {
+                        Console.WriteLine("passed.");
+                        return true;
                     }
                 }
-                finally
-                {
-                    test.CleanUp();
-                }
+            }
+            finally
+            {
+                test.CleanUp();
             }
         }
 
         private static bool OutputDiffers(string expected, string actual)
         {
             // ignore compilation dates and tool versions in the output
-            Regex rex = new Regex(
+            var rex = new Regex(
                 @"serial number \d{6}|sn \d{6}|" +                              // serial number
                 @"inform \d+ build .{4}|i\d/v\d\.\d+|lib \d+/\d+n?( [sd]+)?|" +  // I7 versions
                 @"inform v\d\.\d+|library \d+/\d+n?( [sd]+)?",                  // I6 versions
@@ -247,7 +249,7 @@ namespace TestSuite
 
         private static void ListAllTests()
         {
-            List<string> names = new List<string>(testCases.Keys);
+            var names = new List<string>(testCases.Keys);
             names.Sort();
 
             if (names.Count == 0)
@@ -256,25 +258,26 @@ namespace TestSuite
             }
             else
             {
-                foreach (string name in names)
+                foreach (var name in names)
                     Console.WriteLine("{0} - {1}", name, Path.GetFileName(testCases[name].TestFile));
             }
         }
 
         private static TestCase PromptForTestCase()
         {
-            const string prompt = "Select a test case (blank to cancel, \"?\" for list): ";
+            const string PROMPT = "Select a test case (blank to cancel, \"?\" for list): ";
 
             while (true)
             {
-                Console.Write(prompt);
-                string line = Console.ReadLine().Trim();
+                Console.Write(PROMPT);
+                var line = Console.ReadLine()?.Trim();
 
                 Console.WriteLine();
 
-                if (line.Length == 0)
+                if (string.IsNullOrEmpty(line))
                     return null;
-                else if (line == "?")
+
+                if (line == "?")
                     ListAllTests();
                 else if (testCases.ContainsKey(line))
                     return testCases[line];

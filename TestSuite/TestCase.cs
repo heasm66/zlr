@@ -1,8 +1,8 @@
 using System;
 using System.Collections.Generic;
-using System.Text;
-using System.IO;
 using System.Diagnostics;
+using System.IO;
+using JetBrains.Annotations;
 
 namespace TestSuite
 {
@@ -12,60 +12,56 @@ namespace TestSuite
         private const string OUTPUT_SUFFIX = ".output.txt";
         private const string FAILURE_SUFFIX = ".failed-output.txt";
 
+        [NotNull]
         protected readonly string testFile;
 
-        protected TestCase(string file)
+        protected TestCase([NotNull] string file)
         {
-            this.testFile = file;
+            testFile = file;
         }
 
+        [NotNull]
         public abstract Stream GetZCode();
 
-        public string TestFile
-        {
-            get { return testFile; }
-        }
+        [NotNull]
+        public string TestFile => testFile;
 
-        public string InputFile
-        {
-            get { return testFile + INPUT_SUFFIX; }
-        }
+        [NotNull]
+        public string InputFile => testFile + INPUT_SUFFIX;
 
-        public string OutputFile
-        {
-            get { return testFile + OUTPUT_SUFFIX; }
-        }
+        [NotNull]
+        public string OutputFile => testFile + OUTPUT_SUFFIX;
 
-        public string FailureFile
-        {
-            get { return testFile + FAILURE_SUFFIX; }
-        }
+        [NotNull]
+        public string FailureFile => testFile + FAILURE_SUFFIX;
 
         public virtual void CleanUp()
         {
             // nada
         }
 
-        public static Dictionary<string, TestCase> LoadAll(string path)
+        [NotNull]
+        public static Dictionary<string, TestCase> LoadAll([NotNull] string path)
         {
-            Dictionary<string, TestCase> result = new Dictionary<string, TestCase>();
+            var result = new Dictionary<string, TestCase>();
 
-            foreach (string file in Directory.GetFiles(path))
+            foreach (var file in Directory.GetFiles(path))
             {
-                string shortname = Path.GetFileNameWithoutExtension(file);
+                Debug.Assert(file != null);
+                var shortname = Path.GetFileNameWithoutExtension(file);
 
                 if (result.ContainsKey(shortname))
                 {
-                    int num = 2;
-                    string shortbase = shortname;
+                    var num = 2;
+                    var shortbase = shortname;
                     do
                     {
-                        shortname = shortbase + num.ToString();
+                        shortname = shortbase + num;
                         num++;
                     } while (result.ContainsKey(shortname));
                 }
 
-                string ext = Path.GetExtension(file).ToLower();
+                var ext = Path.GetExtension(file).ToLower();
                 switch (ext)
                 {
                     case ".z1":
@@ -94,7 +90,7 @@ namespace TestSuite
 
     class CompiledTestCase : TestCase
     {
-        public CompiledTestCase(string file) : base(file) { }
+        public CompiledTestCase([NotNull] string file) : base(file) { }
 
         public override Stream GetZCode()
         {
@@ -104,10 +100,12 @@ namespace TestSuite
 
     class SourceCodeTestCase : TestCase, IDisposable
     {
+        [NotNull]
         private readonly string compiler;
+
         private string zfile;
 
-        public SourceCodeTestCase(string compiler, string file)
+        protected SourceCodeTestCase([NotNull] string compiler, [NotNull] string file)
             : base(file)
         {
             this.compiler = compiler;
@@ -118,24 +116,27 @@ namespace TestSuite
 
         public override Stream GetZCode()
         {
-            string path = Path.GetDirectoryName(testFile);
-            string compiler = Path.Combine(path, this.compiler);
-            string infbase = Path.GetFileNameWithoutExtension(testFile);
+            var path = Path.GetDirectoryName(testFile);
+            Debug.Assert(path != null, "path != null");
+            var compilerPath = Path.Combine(path, compiler);
+            var infbase = Path.GetFileNameWithoutExtension(testFile);
 
-            ProcessStartInfo info = new ProcessStartInfo();
-            info.WorkingDirectory = path;
-            info.FileName = compiler;
-            info.Arguments = infbase;
+            var info = new ProcessStartInfo
+            {
+                WorkingDirectory = path,
+                FileName = compilerPath,
+                Arguments = infbase
+            };
 
             // TODO: check for compiler errors
 
-            using (Process compilerProcess = Process.Start(info))
+            using (var compilerProcess = Process.Start(info))
             {
-                compilerProcess.WaitForExit();
+                compilerProcess?.WaitForExit();
             }
 
-            string outpath = Path.Combine(path, "Compiled");
-            string outfile = Path.Combine(outpath, infbase + ".zcode");
+            var outpath = Path.Combine(path, "Compiled");
+            var outfile = Path.Combine(outpath, infbase + ".zcode");
             if (!File.Exists(outfile))
                 throw new Exception("Failed to compile test case");
 
@@ -151,7 +152,8 @@ namespace TestSuite
                 try
                 {
                     File.Delete(zfile);
-                    File.Delete(Path.ChangeExtension(zfile, ".dbg"));
+                    var dbgFile = Path.ChangeExtension(zfile, ".dbg");
+                    if (dbgFile != null) File.Delete(dbgFile);
                 }
                 catch
                 {
@@ -176,7 +178,7 @@ namespace TestSuite
 
     class InformTestCase : SourceCodeTestCase
     {
-        public InformTestCase(string file) :
+        public InformTestCase([NotNull] string file) :
             base("compile-inform-case.bat", file)
         {
         }

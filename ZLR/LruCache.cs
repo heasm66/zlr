@@ -1,33 +1,36 @@
 using System;
 using System.Collections.Generic;
-using System.Text;
+using System.Linq;
+using JetBrains.Annotations;
 
 namespace ZLR.VM
 {
     /// <summary>
     /// Implements a cache which discards the least recently used items.
     /// </summary>
-    /// <typeparam name="K">The type of keys in the cache.</typeparam>
-    /// <typeparam name="V">The type of values being cached.</typeparam>
-    public class LruCache<K,V>
+    /// <typeparam name="TKey">The type of keys in the cache.</typeparam>
+    /// <typeparam name="TValue">The type of values being cached.</typeparam>
+    [PublicAPI]
+    public class LruCache<TKey, TValue>
     {
         private struct Entry
         {
-            public readonly K Key;
-            public readonly V Value;
+            public readonly TKey Key;
+            public readonly TValue Value;
             public readonly int Size;
 
-            public Entry(K key, V value, int size)
+            public Entry(TKey key, TValue value, int size)
             {
-                this.Key = key;
-                this.Value = value;
-                this.Size = size;
+                Key = key;
+                Value = value;
+                Size = size;
             }
         }
 
-        private readonly Dictionary<K, LinkedListNode<Entry>> dict;
-        private readonly LinkedList<Entry> llist;
-        private int maxSize, currentSize, peakSize;
+        [NotNull] private readonly Dictionary<TKey, LinkedListNode<Entry>> dict;
+        [NotNull] private readonly LinkedList<Entry> llist;
+        private readonly int maxSize;
+        private int currentSize, peakSize;
 
         /// <summary>
         /// Initializes a new instance.
@@ -36,45 +39,25 @@ namespace ZLR.VM
         /// reach before it starts discarding items.</param>
         public LruCache(int cacheSize)
         {
-            this.maxSize = cacheSize;
+            maxSize = cacheSize;
 
-            dict = new Dictionary<K, LinkedListNode<Entry>>();
+            dict = new Dictionary<TKey, LinkedListNode<Entry>>();
             llist = new LinkedList<Entry>();
         }
 
-        public int Count
-        {
-            get { return dict.Count; }
-        }
+        public int Count => dict.Count;
 
-        public int CurrentSize
-        {
-            get { return currentSize; }
-        }
+        public int CurrentSize => currentSize;
 
-        public int MaxSize
-        {
-            get { return maxSize; }
-        }
+        public int MaxSize => maxSize;
 
-        public int PeakSize
-        {
-            get { return peakSize; }
-        }
+        public int PeakSize => peakSize;
 
-        public IEnumerable<K> Keys
-        {
-            get { return dict.Keys; }
-        }
+        [NotNull]
+        public IEnumerable<TKey> Keys => dict.Keys;
 
-        public IEnumerable<V> Values
-        {
-            get
-            {
-                foreach (Entry e in llist)
-                    yield return e.Value;
-            }
-        }
+        [NotNull]
+        public IEnumerable<TValue> Values => llist.Select(e => e.Value);
 
         /// <summary>
         /// Stores a value into the cache.
@@ -82,16 +65,16 @@ namespace ZLR.VM
         /// <param name="key">The cache key or address.</param>
         /// <param name="value">The value to store.</param>
         /// <param name="size">The amount of cache space this value occupied by this value.</param>
-        public void Add(K key, V value, int size)
+        public void Add([NotNull] TKey key, TValue value, int size)
         {
             if (dict.ContainsKey(key))
-                throw new ArgumentException("Key already exists in cache", "key");
+                throw new ArgumentException("Key already exists in cache", nameof(key));
 
-            LinkedListNode<Entry> node = new LinkedListNode<Entry>(new Entry(key, value, size));
+            var node = new LinkedListNode<Entry>(new Entry(key, value, size));
 
             while (currentSize + size > maxSize && dict.Count > 0)
             {
-                Entry lastEntry = llist.Last.Value;
+                var lastEntry = llist.Last.Value;
                 llist.RemoveLast();
                 dict.Remove(lastEntry.Key);
                 currentSize -= lastEntry.Size;
@@ -121,12 +104,12 @@ namespace ZLR.VM
         /// <param name="key">The cache key or address to search for.</param>
         /// <param name="value">Set to the cached value, if it was found.</param>
         /// <returns><b>true</b> if the value was found in the cache.</returns>
-        public bool TryGetValue(K key, out V value)
+        public bool TryGetValue([NotNull] TKey key, out TValue value)
         {
             LinkedListNode<Entry> node;
             if (dict.TryGetValue(key, out node) == false)
             {
-                value = default(V);
+                value = default(TValue);
                 return false;
             }
 
@@ -145,7 +128,7 @@ namespace ZLR.VM
         /// </summary>
         /// <param name="key">The key to search for.</param>
         /// <returns><b>true</b> if the key is present in the cache.</returns>
-        public bool ContainsKey(K key)
+        public bool ContainsKey([NotNull] TKey key)
         {
             return dict.ContainsKey(key);
         }

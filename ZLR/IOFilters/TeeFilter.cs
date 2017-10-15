@@ -1,6 +1,5 @@
 ﻿using System;
-using System.Collections.Generic;
-using System.Text;
+using JetBrains.Annotations;
 
 namespace ZLR.VM.IOFilters
 {
@@ -8,13 +7,10 @@ namespace ZLR.VM.IOFilters
     {
         private readonly IZMachineIO side;
 
-        public TeeFilter(IZMachineIO next, IZMachineIO side)
+        public TeeFilter([NotNull] IZMachineIO next, [NotNull] IZMachineIO side)
             : base(next)
         {
-            if (side == null)
-                throw new ArgumentNullException("side");
-
-            this.side = side;
+            this.side = side ?? throw new ArgumentNullException(nameof(side));
         }
 
         public bool PassSound { get; set; }

@@ -1,7 +1,5 @@
-﻿using System;
-using System.Collections.Generic;
-using System.IO;
-using System.Text;
+﻿using System.IO;
+using JetBrains.Annotations;
 
 namespace ZLR.VM.IOFilters
 {
@@ -9,12 +7,13 @@ namespace ZLR.VM.IOFilters
     {
         private MemoryStream saveData;
 
-        public InternalSaveFilter(IZMachineIO next)
+        public InternalSaveFilter([NotNull] IZMachineIO next)
             : base(next)
         {
         }
 
-        public override System.IO.Stream OpenSaveFile(int size)
+        [NotNull]
+        public override Stream OpenSaveFile(int size)
         {
             saveData = new MemoryStream(size);
             return saveData;

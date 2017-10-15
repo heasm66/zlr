@@ -1,15 +1,12 @@
 ﻿using System;
 using System.Runtime.Serialization;
+using JetBrains.Annotations;
 
 namespace ZLR.Debugging
 {
     [Serializable]
     internal class DebuggerException : Exception
     {
-        public DebuggerException()
-        {
-        }
-
         public DebuggerException(string message) : base(message)
         {
         }
@@ -18,7 +15,7 @@ namespace ZLR.Debugging
         {
         }
 
-        protected DebuggerException(SerializationInfo info, StreamingContext context) : base(info, context)
+        protected DebuggerException([NotNull] SerializationInfo info, StreamingContext context) : base(info, context)
         {
         }
     }

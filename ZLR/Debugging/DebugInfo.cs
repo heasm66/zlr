@@ -1,7 +1,9 @@
 using System;
 using System.Collections.Generic;
-using System.Text;
 using System.IO;
+using System.Linq;
+using System.Text;
+using JetBrains.Annotations;
 
 namespace ZLR.VM.Debugging
 {
@@ -13,54 +15,38 @@ namespace ZLR.VM.Debugging
             public ushort LineNum;
             public byte Column;
 
-            public bool IsValid
-            {
-                get
-                {
-                    if (FileNum == 0 || FileNum == 255)
-                        return false;
-                    else
-                        return true;
-                }
-            }
+            public bool IsValid => FileNum != 0 && FileNum != 255;
         }
 
-        private List<RoutineInfo> routines = new List<RoutineInfo>();
-        private List<ObjectInfo> objects = new List<ObjectInfo>();
-        private DoubleMap<string, byte> globals = new DoubleMap<string, byte>();
-        private DoubleMap<string, ushort> arrays = new DoubleMap<string, ushort>();
-        private DoubleMap<string, ushort> attributes = new DoubleMap<string, ushort>();
-        private DoubleMap<string, ushort> properties = new DoubleMap<string, ushort>();
-        private DoubleMap<string, ushort> actions = new DoubleMap<string, ushort>();
-        private byte[] matchingHeader;
+        private readonly List<ObjectInfo> objects = new List<ObjectInfo>();
+        private readonly byte[] matchingHeader;
 
-        public DebugInfo(Stream fromStream)
+        public DebugInfo([NotNull] Stream fromStream)
         {
-            using (BinaryReader br = new BinaryReader(fromStream))
+            using (var br = new BinaryReader(fromStream))
             {
                 if (ReadWord(br) != 0xDEBF)
-                    throw new ArgumentException("Invalid debug file header");
+                    throw new ArgumentException("Invalid debug file header", nameof(fromStream));
                 if (ReadWord(br) != 0)
-                    throw new ArgumentException("Unrecognized debug file version");
+                    throw new ArgumentException("Unrecognized debug file version", nameof(fromStream));
                 ReadWord(br); // skip Inform version
 
-                Dictionary<byte, string> filenames = new Dictionary<byte, string>(5);
-                Dictionary<ushort, int> routineStarts = new Dictionary<ushort, int>();
+                var filenames = new Dictionary<byte, string>(5);
 
-                int i, codeArea = 0;
-                byte b;
-                ushort w, w2;
-                string str;
-                LineRef line;
+                var codeArea = 0;
                 RoutineInfo routine = null;
-                ObjectInfo obj = null;
-                List<string> localList = new List<string>();
-                List<LineInfo> lineList = new List<LineInfo>();
-                List<ushort> offsetList = new List<ushort>();
+                var localList = new List<string>();
+                var lineList = new List<LineInfo>();
+                var offsetList = new List<ushort>();
 
                 while (fromStream.Position < fromStream.Length)
                 {
-                    byte type = br.ReadByte();
+                    var type = br.ReadByte();
+                    int i;
+                    byte b;
+                    ushort w;
+                    string str;
+                    LineRef line;
                     switch (type)
                     {
                         case 0:
@@ -85,7 +71,7 @@ namespace ZLR.VM.Debugging
 
                         case 3:
                             // OBJECT_DBR
-                            obj = new ObjectInfo();
+                            var obj = new ObjectInfo();
                             objects.Add(obj);
                             obj.Number = ReadWord(br);
                             obj.Name = ReadString(br);
@@ -102,32 +88,32 @@ namespace ZLR.VM.Debugging
                             // GLOBAL_DBR
                             b = br.ReadByte();
                             str = ReadString(br);
-                            globals.Add(str, b);
+                            Globals.Add(str, b);
                             break;
 
                         case 12: // ARRAY_DBR
                             w = ReadWord(br);
                             str = ReadString(br);
-                            arrays.Add(str, w);
+                            Arrays.Add(str, w);
                             break;
 
                         case 5: // ATTR_DBR
                             w = ReadWord(br);
                             str = ReadString(br);
-                            attributes.Add(str, w);
+                            Attributes.Add(str, w);
                             break;
 
                         case 6: // PROP_DBR
                             w = ReadWord(br);
                             str = ReadString(br);
-                            properties.Add(str, w);
+                            Properties.Add(str, w);
                             break;
 
                         case 7: // FAKE_ACTION_DBR
                         case 8: // ACTION_DBR
                             w = ReadWord(br);
                             str = ReadString(br);
-                            actions.Add(str, w);
+                            Actions.Add(str, w);
                             break;
 
                         case 9:
@@ -138,8 +124,8 @@ namespace ZLR.VM.Debugging
                         case 11:
                             // ROUTINE_DBR
                             routine = new RoutineInfo();
-                            routines.Add(routine);
-                            w = ReadWord(br);
+                            Routines.Add(routine);
+                            ReadWord(br);
                             line = ReadLineRef(br);
                             if (line.IsValid)
                                 routine.DefinedAt = new LineInfo(
@@ -147,7 +133,6 @@ namespace ZLR.VM.Debugging
                                     line.LineNum,
                                     line.Column);
                             routine.CodeStart = ReadAddress(br);
-                            routineStarts[w] = routine.CodeStart;
                             routine.Name = ReadString(br);
                             localList.Clear();
                             while ((str = ReadString(br)) != "")
@@ -166,7 +151,7 @@ namespace ZLR.VM.Debugging
                             while (w-- > 0)
                             {
                                 line = ReadLineRef(br);
-                                w2 = ReadWord(br);
+                                var w2 = ReadWord(br);
                                 if (line.IsValid)
                                 {
                                     lineList.Add(new LineInfo(
@@ -184,9 +169,12 @@ namespace ZLR.VM.Debugging
                             ReadWord(br); // skip routine number
                             ReadLineRef(br); // skip defn end
                             i = ReadAddress(br);
-                            routine.CodeLength = i - routine.CodeStart;
-                            routine.LineInfos = lineList.ToArray();
-                            routine.LineOffsets = offsetList.ToArray();
+                            if (routine != null)
+                            {
+                                routine.CodeLength = i - routine.CodeStart;
+                                routine.LineInfos = lineList.ToArray();
+                                routine.LineOffsets = offsetList.ToArray();
+                            }
                             break;
 
                         case 13:
@@ -206,32 +194,33 @@ namespace ZLR.VM.Debugging
                 }
 
                 // patch routine addresses
-                foreach (RoutineInfo ri in routines)
+                foreach (var ri in Routines)
                     ri.CodeStart += codeArea;
 
-                routines.Sort(delegate(RoutineInfo r1, RoutineInfo r2) { return r1.CodeStart - r2.CodeStart; });
+                Routines.Sort((r1, r2) => r1.CodeStart - r2.CodeStart);
             }
         }
 
-        private static ushort ReadWord(BinaryReader rdr)
+        private static ushort ReadWord([NotNull] BinaryReader rdr)
         {
-            byte b1 = rdr.ReadByte();
-            byte b2 = rdr.ReadByte();
+            var b1 = rdr.ReadByte();
+            var b2 = rdr.ReadByte();
             return (ushort)((b1 << 8) + b2);
         }
 
-        private static int ReadAddress(BinaryReader rdr)
+        private static int ReadAddress([NotNull] BinaryReader rdr)
         {
-            byte b1 = rdr.ReadByte();
-            byte b2 = rdr.ReadByte();
-            byte b3 = rdr.ReadByte();
+            var b1 = rdr.ReadByte();
+            var b2 = rdr.ReadByte();
+            var b3 = rdr.ReadByte();
             return (b1 << 16) + (b2 << 8) + b3;
         }
 
-        private static string ReadString(BinaryReader rdr)
+        [NotNull]
+        private static string ReadString([NotNull] BinaryReader rdr)
         {
-            StringBuilder sb = new StringBuilder();
-            byte b = rdr.ReadByte();
+            var sb = new StringBuilder();
+            var b = rdr.ReadByte();
             while (b != 0)
             {
                 sb.Append((char)b);
@@ -240,7 +229,7 @@ namespace ZLR.VM.Debugging
             return sb.ToString();
         }
 
-        private static LineRef ReadLineRef(BinaryReader rdr)
+        private static LineRef ReadLineRef([NotNull] BinaryReader rdr)
         {
             LineRef result;
             result.FileNum = rdr.ReadByte();
@@ -254,58 +243,54 @@ namespace ZLR.VM.Debugging
             if (matchingHeader == null)
                 return true;
 
-            byte[] gameHeader = new byte[64];
+            var gameHeader = new byte[64];
             gameFile.Seek(0, SeekOrigin.Begin);
-            int len = gameFile.Read(gameHeader, 0, 64);
+            var len = gameFile.Read(gameHeader, 0, 64);
             if (len < 64)
                 return false;
 
-            for (int i = 0; i < 64; i++)
+            for (var i = 0; i < 64; i++)
                 if (gameHeader[i] != matchingHeader[i])
                     return false;
 
             return true;
         }
 
-        public IEnumerable<RoutineInfo> Routines
-        {
-            get { return routines; }
-        }
+        [NotNull]
+        [PublicAPI]
+        public List<RoutineInfo> Routines { get; } = new List<RoutineInfo>();
 
-        public DoubleMap<string, byte> Globals
-        {
-            get { return globals; }
-        }
+        [NotNull]
+        [PublicAPI]
+        public DoubleMap<string, byte> Globals { get; } = new DoubleMap<string, byte>();
 
-        public DoubleMap<string, ushort> Arrays
-        {
-            get { return arrays; }
-        }
+        [NotNull]
+        [PublicAPI]
+        public DoubleMap<string, ushort> Arrays { get; } = new DoubleMap<string, ushort>();
 
-        public DoubleMap<string, ushort> Attributes
-        {
-            get { return attributes; }
-        }
+        [NotNull]
+        [PublicAPI]
+        public DoubleMap<string, ushort> Attributes { get; } = new DoubleMap<string, ushort>();
 
-        public DoubleMap<string, ushort> Properties
-        {
-            get { return properties; }
-        }
+        [NotNull]
+        [PublicAPI]
+        public DoubleMap<string, ushort> Properties { get; } = new DoubleMap<string, ushort>();
 
-        public DoubleMap<string, ushort> Actions
-        {
-            get { return actions; }
-        }
+        [NotNull]
+        [PublicAPI]
+        public DoubleMap<string, ushort> Actions { get; } = new DoubleMap<string, ushort>();
 
+        [CanBeNull]
+        [PublicAPI]
         public RoutineInfo FindRoutine(int pc)
         {
-            int start = 0, end = routines.Count;
+            int start = 0, end = Routines.Count;
 
             while (start < end)
             {
-                int mid = (start + end) / 2;
+                var mid = (start + end) / 2;
 
-                RoutineInfo ri = routines[mid];
+                var ri = Routines[mid];
                 if (pc >= ri.CodeStart && pc < ri.CodeStart + ri.CodeLength)
                     return ri;
 
@@ -318,41 +303,23 @@ namespace ZLR.VM.Debugging
             return null;
         }
 
-        public RoutineInfo FindRoutine(string name)
-        {
-            for (int i = 0; i < routines.Count; i++)
-                if (routines[i].Name == name)
-                    return routines[i];
+        [CanBeNull]
+        public RoutineInfo FindRoutine([NotNull] string name) => Routines.FirstOrDefault(t => t.Name == name);
 
-            return null;
-        }
+        [CanBeNull]
+        public ObjectInfo FindObject(int number) => objects.FirstOrDefault(t => t.Number == number);
 
-        public ObjectInfo FindObject(int number)
-        {
-            for (int i = 0; i < objects.Count; i++)
-                if (objects[i].Number == number)
-                    return objects[i];
-
-            return null;
-        }
-
-        public ObjectInfo FindObject(string name)
-        {
-            for (int i = 0; i < objects.Count; i++)
-                if (objects[i].Name == name)
-                    return objects[i];
-
-            return null;
-        }
+        [CanBeNull]
+        public ObjectInfo FindObject([NotNull] string name) => objects.FirstOrDefault(t => t.Name == name);
 
         public LineInfo? FindLine(int pc)
         {
-            RoutineInfo rtn = FindRoutine(pc);
+            var rtn = FindRoutine(pc);
             if (rtn == null)
                 return null;
 
-            ushort offset = (ushort)(pc - rtn.CodeStart);
-            int idx = Array.BinarySearch(rtn.LineOffsets, offset);
+            var offset = (ushort)(pc - rtn.CodeStart);
+            var idx = Array.BinarySearch(rtn.LineOffsets, offset);
             if (idx >= 0)
                 return rtn.LineInfos[idx];
 
@@ -363,12 +330,11 @@ namespace ZLR.VM.Debugging
             return null;
         }
 
-        public int FindCodeAddress(string filename, int line)
+        public int FindCodeAddress([NotNull] string filename, int line)
         {
-            for (int i = 0; i < routines.Count; i++)
+            foreach (var rtn in Routines)
             {
-                RoutineInfo rtn = routines[i];
-                for (int j = 0; j < rtn.LineInfos.Length; j++)
+                for (var j = 0; j < rtn.LineInfos.Length; j++)
                     if (rtn.LineInfos[j].File == filename && rtn.LineInfos[j].Line == line)
                         return rtn.CodeStart + rtn.LineOffsets[j];
             }
@@ -377,6 +343,7 @@ namespace ZLR.VM.Debugging
         }
     }
 
+    [PublicAPI]
     public class RoutineInfo
     {
         public string Name;
@@ -388,6 +355,7 @@ namespace ZLR.VM.Debugging
         public LineInfo[] LineInfos;
     }
 
+    [PublicAPI]
     public class ObjectInfo
     {
         public string Name;
@@ -395,22 +363,23 @@ namespace ZLR.VM.Debugging
         public LineInfo DefinedAt;
     }
 
+    [PublicAPI]
     public struct LineInfo
     {
-        public string File;
-        public int Line;
-        public int Position;
+        public readonly string File;
+        public readonly int Line;
+        public readonly int Position;
 
         public LineInfo(string file, int line, int position)
         {
-            this.File = file;
-            this.Line = line;
-            this.Position = position;
+            File = file;
+            Line = line;
+            Position = position;
         }
 
         public override int GetHashCode()
         {
-            int result = Line.GetHashCode() ^ Position.GetHashCode();
+            var result = Line.GetHashCode() ^ Position.GetHashCode();
             if (File != null)
                 result ^= File.GetHashCode();
             return result;
@@ -418,18 +387,15 @@ namespace ZLR.VM.Debugging
 
         public override bool Equals(object obj)
         {
-            if (obj is LineInfo)
-                return Equals((LineInfo)obj);
-            else
-                return false;
+            return obj is LineInfo li && Equals(li);
         }
 
         public bool Equals(LineInfo other)
         {
             return
-                this.File == other.File &&
-                this.Line == other.Line &&
-                this.Position == other.Position;
+                File == other.File &&
+                Line == other.Line &&
+                Position == other.Position;
         }
 
         public static bool operator ==(LineInfo a, LineInfo b)
@@ -443,27 +409,21 @@ namespace ZLR.VM.Debugging
         }
     }
 
-    public class DoubleMap<K, V> : IEnumerable<KeyValuePair<K, V>>
+    [PublicAPI]
+    public class DoubleMap<TKey, TValue> : IEnumerable<KeyValuePair<TKey, TValue>>
     {
-        private Dictionary<K, V> forward = new Dictionary<K, V>();
-        private Dictionary<V, K> backward = new Dictionary<V, K>();
+        private readonly Dictionary<TKey, TValue> forward = new Dictionary<TKey, TValue>();
+        private readonly Dictionary<TValue, TKey> backward = new Dictionary<TValue, TKey>();
 
-        public int Count
-        {
-            get { return forward.Count; }
-        }
+        public int Count => forward.Count;
 
-        public IEnumerable<K> Keys
-        {
-            get { return forward.Keys; }
-        }
+        [NotNull]
+        public IEnumerable<TKey> Keys => forward.Keys;
 
-        public IEnumerable<V> Values
-        {
-            get { return forward.Values; }
-        }
+        [NotNull]
+        public IEnumerable<TValue> Values => forward.Values;
 
-        public void Add(K key, V value)
+        public void Add([NotNull] TKey key, [NotNull] TValue value)
         {
             if (forward.ContainsKey(key))
                 throw new InvalidOperationException("key already present");
@@ -474,60 +434,34 @@ namespace ZLR.VM.Debugging
             backward.Add(value, key);
         }
 
-        public void Remove(K key)
+        public void Remove([NotNull] TKey key)
         {
-            V value;
-            if (forward.TryGetValue(key, out value))
+            if (forward.TryGetValue(key, out TValue value))
             {
                 forward.Remove(key);
                 backward.Remove(value);
             }
         }
 
-        public void Remove(V value)
+        public void Remove([NotNull] TValue value)
         {
-            K key;
-            if (backward.TryGetValue(value, out key))
+            if (backward.TryGetValue(value, out TKey key))
             {
                 forward.Remove(key);
                 backward.Remove(value);
             }
         }
 
-        public bool Contains(K key)
-        {
-            return forward.ContainsKey(key);
-        }
+        public bool Contains([NotNull] TKey key) => forward.ContainsKey(key);
 
-        public bool Contains(V value)
-        {
-            return backward.ContainsKey(value);
-        }
+        public bool Contains([NotNull] TValue value) => backward.ContainsKey(value);
 
-        public V this[K key]
-        {
-            get
-            {
-                return forward[key];
-            }
-        }
+        public TValue this[[NotNull] TKey key] => forward[key];
 
-        public K this[V value]
-        {
-            get
-            {
-                return backward[value];
-            }
-        }
+        public TKey this[[NotNull] TValue value] => backward[value];
 
-        public IEnumerator<KeyValuePair<K, V>> GetEnumerator()
-        {
-            return forward.GetEnumerator();
-        }
+        public IEnumerator<KeyValuePair<TKey, TValue>> GetEnumerator() => forward.GetEnumerator();
 
-        System.Collections.IEnumerator System.Collections.IEnumerable.GetEnumerator()
-        {
-            return GetEnumerator();
-        }
+        System.Collections.IEnumerator System.Collections.IEnumerable.GetEnumerator() => GetEnumerator();
     }
 }

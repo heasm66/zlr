@@ -1,25 +1,26 @@
 using System;
-using System.Collections.Generic;
 using System.Text;
 using System.Runtime.InteropServices;
+using JetBrains.Annotations;
+
+// ReSharper disable InconsistentNaming
+#pragma warning disable IDE1006 // Naming Styles
+#pragma warning disable 649
 
 namespace ZLR.Interfaces.Demona
 {
-#pragma warning disable 649
     // opaque structure definitions (these are actually pointers to structs defined by the Glk library)
+    [PublicAPI]
     internal struct winid_t
     {
-        int value;
-        public bool IsNull { get { return value == 0; } }
-        public static readonly winid_t Null = new winid_t();
+        private readonly int value;
+        public bool IsNull => value == 0;
+        public static readonly winid_t Null;
         public static bool operator ==(winid_t a, winid_t b) { return a.value == b.value; }
         public static bool operator !=(winid_t a, winid_t b) { return a.value != b.value; }
         public override bool Equals(object obj)
         {
-            if (obj is winid_t)
-                return (winid_t)obj == this;
-            else
-                return false;
+            return obj is winid_t win && win == this;
         }
         public override int GetHashCode()
         {
@@ -27,28 +28,32 @@ namespace ZLR.Interfaces.Demona
         }
     }
 
+    [PublicAPI]
     internal struct strid_t
     {
-        int value;
-        public bool IsNull { get { return value == 0; } }
-        public static readonly strid_t Null = new strid_t();
+        readonly int value;
+        public bool IsNull => value == 0;
+        public static readonly strid_t Null;
     }
 
+    [PublicAPI]
     internal struct frefid_t
     {
-        int value;
-        public bool IsNull { get { return value == 0; } }
-        public static readonly frefid_t Null = new frefid_t();
+        readonly int value;
+        public bool IsNull => value == 0;
+        public static readonly frefid_t Null;
     }
 
+    [PublicAPI]
     internal struct schanid_t
     {
-        int value;
-        public bool IsNull { get { return value == 0; } }
-        public static readonly schanid_t Null = new schanid_t();
+        readonly int value;
+        public bool IsNull => value == 0;
+        public static readonly schanid_t Null;
     }
 
     // non-opaque structures
+    [PublicAPI]
     internal struct event_t
     {
         public EvType type;
@@ -56,14 +61,16 @@ namespace ZLR.Interfaces.Demona
         public uint val1, val2;
     }
 
+    [PublicAPI]
     internal struct stream_result_t
     {
         public uint readcount;
         public uint writecount;
     }
-#pragma warning restore
+#pragma warning restore 649
 
     // gestalt_* constants
+    [PublicAPI]
     internal enum Gestalt
     {
         Version = 0,
@@ -88,6 +95,7 @@ namespace ZLR.Interfaces.Demona
     }
 
     // evtype_* constants
+    [PublicAPI]
     internal enum EvType
     {
         None = 0,
@@ -102,6 +110,7 @@ namespace ZLR.Interfaces.Demona
     }
 
     // keycode_* constants
+    [PublicAPI]
     internal enum KeyCode : uint
     {
         Unknown = 0xffffffff,
@@ -133,6 +142,7 @@ namespace ZLR.Interfaces.Demona
     }
 
     // style_* constants
+    [PublicAPI]
     internal enum Style
     {
         Normal = 0,
@@ -150,6 +160,7 @@ namespace ZLR.Interfaces.Demona
     }
 
     // wintype_* constants
+    [PublicAPI]
     internal enum WinType
     {
         AllTypes = 0,
@@ -161,6 +172,8 @@ namespace ZLR.Interfaces.Demona
     }
 
     // winmethod_* constants
+    [PublicAPI]
+    [Flags]
     internal enum WinMethod
     {
         Left = 0x00,
@@ -175,6 +188,8 @@ namespace ZLR.Interfaces.Demona
     }
 
     // fileusage_* constants
+    [PublicAPI]
+    [Flags]
     internal enum FileUsage
     {
         Data = 0x00,
@@ -188,6 +203,7 @@ namespace ZLR.Interfaces.Demona
     }
 
     // filemode_* constants
+    [PublicAPI]
     internal enum FileMode
     {
         Write = 0x01,
@@ -197,6 +213,7 @@ namespace ZLR.Interfaces.Demona
     }
 
     // seekmode_* constants
+    [PublicAPI]
     internal enum SeekMode
     {
         Start = 0,
@@ -205,6 +222,7 @@ namespace ZLR.Interfaces.Demona
     }
 
     // stylehint_* constants
+    [PublicAPI]
     internal enum StyleHint
     {
         Indentation = 0,
@@ -226,6 +244,7 @@ namespace ZLR.Interfaces.Demona
     }
 
     // giblorb_err_* constants
+    [PublicAPI]
     internal enum BlorbError
     {
         None = 0,
@@ -238,6 +257,7 @@ namespace ZLR.Interfaces.Demona
     }
 
     // zcolor_* constants
+    [PublicAPI]
     internal enum Zcolor
     {
         Current = 0,
@@ -256,6 +276,7 @@ namespace ZLR.Interfaces.Demona
     }
 
     // import the Glk functions from a DLL
+    [PublicAPI]
     internal static class Glk
     {
         private const string GLKDLL = "libgarglk.dll";
@@ -266,28 +287,28 @@ namespace ZLR.Interfaces.Demona
 
         // internal function: we call this directly because we aren't using the glk_main() idiom.
         [DllImport(GLKDLL)]
-        public extern static void gli_startup(int argc, IntPtr argv);
+        public static extern void gli_startup(int argc, IntPtr argv);
 
         [DllImport(GLKDLL)]
-        public extern static void garglk_set_program_name(string name);
+        public static extern void garglk_set_program_name([NotNull] string name);
 
         [DllImport(GLKDLL)]
-        public extern static void garglk_set_program_info(string info);
+        public static extern void garglk_set_program_info([NotNull] string info);
 
         [DllImport(GLKDLL)]
-        public extern static void garglk_set_story_name(string name);
+        public static extern void garglk_set_story_name([NotNull] string name);
 
         [DllImport(GLKDLL)]
-        public extern static void garglk_set_config(string name);
+        public static extern void garglk_set_config([NotNull] string name);
 
         #endregion
 
         #region Standard GLK Functions
 
         [DllImport(GLKDLL)]
-        public extern static void glk_exit();
+        public static extern void glk_exit();
         [DllImport(GLKDLL)]
-        public extern static void glk_tick();
+        public static extern void glk_tick();
 
         [DllImport(GLKDLL)]
         public static extern uint glk_gestalt(Gestalt sel, uint val);
@@ -372,7 +393,7 @@ namespace ZLR.Interfaces.Demona
         public static extern void glk_put_char_stream_uni(strid_t str, uint ch);
         [DllImport(GLKDLL)]
         private static extern void glk_put_string(IntPtr s);
-        public static void glk_put_string(string s)
+        public static void glk_put_string([NotNull] string s)
         {
             IntPtr buf = StrToLatin1(s);
             try { glk_put_string(buf); }
@@ -380,7 +401,7 @@ namespace ZLR.Interfaces.Demona
         }
         [DllImport(GLKDLL)]
         private static extern void glk_put_string_uni(IntPtr s);
-        public static void glk_put_string_uni(string s)
+        public static void glk_put_string_uni([NotNull] string s)
         {
             IntPtr buf = StrToUTF32(s);
             try { glk_put_string_uni(buf); }
@@ -388,7 +409,7 @@ namespace ZLR.Interfaces.Demona
         }
         [DllImport(GLKDLL)]
         private static extern void glk_put_string_stream(strid_t str, IntPtr s);
-        public static void glk_put_string_stream(strid_t str, string s)
+        public static void glk_put_string_stream(strid_t str, [NotNull] string s)
         {
             IntPtr buf = StrToLatin1(s);
             try { glk_put_string_stream(str, buf); }
@@ -396,7 +417,7 @@ namespace ZLR.Interfaces.Demona
         }
         [DllImport(GLKDLL)]
         private static extern void glk_put_string_stream_uni(strid_t str, IntPtr s);
-        public static void glk_put_string_stream_uni(strid_t str, string s)
+        public static void glk_put_string_stream_uni(strid_t str, [NotNull] string s)
         {
             IntPtr buf = StrToUTF32(s);
             try { glk_put_string_stream_uni(str, buf); }
@@ -551,7 +572,7 @@ namespace ZLR.Interfaces.Demona
 
         [DllImport(GLKDLL)]
         private static extern void garglk_unput_string(IntPtr s);
-        public static void garglk_unput_string(string s)
+        public static void garglk_unput_string([NotNull] string s)
         {
             IntPtr buf = StrToLatin1(s);
             try { garglk_unput_string(buf); }
@@ -559,7 +580,7 @@ namespace ZLR.Interfaces.Demona
         }
         [DllImport(GLKDLL)]
         private static extern void garglk_unput_string_uni(IntPtr s);
-        public static void garglk_unput_string_uni(string s)
+        public static void garglk_unput_string_uni([NotNull] string s)
         {
             IntPtr buf = StrToUTF32(s);
             try { garglk_unput_string_uni(buf); }
@@ -574,7 +595,7 @@ namespace ZLR.Interfaces.Demona
 
         #endregion
 
-        public static IntPtr StrToLatin1(string s)
+        public static IntPtr StrToLatin1([NotNull] string s)
         {
             byte[] bytes = Encoding.GetEncoding(LATIN1).GetBytes(s);
             IntPtr result = Marshal.AllocHGlobal(bytes.Length + 1);
@@ -586,7 +607,7 @@ namespace ZLR.Interfaces.Demona
             return result;
         }
 
-        public static void StrFromLatin1(IntPtr buf, StringBuilder sb)
+        public static void StrFromLatin1(IntPtr buf, [NotNull] StringBuilder sb)
         {
             int len = 0;
             while (Marshal.ReadByte(buf, len) != 0)
@@ -600,7 +621,7 @@ namespace ZLR.Interfaces.Demona
             sb.Append(str);
         }
 
-        public static IntPtr StrToUTF32(string s)
+        public static IntPtr StrToUTF32([NotNull] string s)
         {
             byte[] bytes = Encoding.UTF32.GetBytes(s);
             IntPtr result = Marshal.AllocHGlobal(bytes.Length + 4);
@@ -612,7 +633,7 @@ namespace ZLR.Interfaces.Demona
             return result;
         }
 
-        public static void StrFromUTF32(IntPtr buf, StringBuilder sb)
+        public static void StrFromUTF32(IntPtr buf, [NotNull] StringBuilder sb)
         {
             int len = 0;
             while (Marshal.ReadInt32(buf, len) != 0)

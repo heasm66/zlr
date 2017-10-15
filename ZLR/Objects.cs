@@ -1,10 +1,11 @@
 using System;
+using JetBrains.Annotations;
 
 namespace ZLR.VM
 {
     public partial class ZMachine
     {
-        private ushort GetPropAddr(ushort obj, short prop)
+        internal ushort GetPropAddr(ushort obj, short prop)
         {
             if (obj == 0)
                 return 0;
@@ -25,7 +26,7 @@ namespace ZLR.VM
 
                     if (num == prop)
                         return (ushort)addr;
-                    else if (num < prop)
+                    if (num < prop)
                         break;
 
                     addr += len;
@@ -47,10 +48,7 @@ namespace ZLR.VM
                     int len;
                     if ((b & 128) == 0)
                     {
-                        if ((b & 64) == 0)
-                            len = 1;
-                        else
-                            len = 2;
+                        len = (b & 64) == 0 ? 1 : 2;
                     }
                     else
                     {
@@ -63,7 +61,7 @@ namespace ZLR.VM
 
                     if (num == prop)
                         return (ushort)addr;
-                    else if (num < prop)
+                    if (num < prop)
                         break;
 
                     addr += len;
@@ -75,7 +73,7 @@ namespace ZLR.VM
         }
 
 #pragma warning disable 0169
-        private short GetNextProp(ushort obj, short prop)
+        internal short GetNextProp(ushort obj, short prop)
         {
             if (obj == 0)
                 return 0;
@@ -117,10 +115,7 @@ namespace ZLR.VM
                     int len;
                     if ((b & 128) == 0)
                     {
-                        if ((b & 64) == 0)
-                            len = 1;
-                        else
-                            len = 2;
+                        len = (b & 64) == 0 ? 1 : 2;
                     }
                     else
                     {
@@ -142,7 +137,7 @@ namespace ZLR.VM
             return 0;
         }
 
-        private short GetPropValue(ushort obj, short prop)
+        internal short GetPropValue(ushort obj, short prop)
         {
             int addr = GetPropAddr(obj, prop);
 
@@ -165,7 +160,7 @@ namespace ZLR.VM
             }
         }
 
-        private void SetPropValue(ushort obj, short prop, short value)
+        internal void SetPropValue(ushort obj, short prop, short value)
         {
             int addr = GetPropAddr(obj, prop);
 
@@ -180,7 +175,7 @@ namespace ZLR.VM
         }
 #pragma warning restore 0169
 
-        private short GetPropLength(ushort address)
+        internal short GetPropLength(ushort address)
         {
             if (address == 0)
                 return 0;
@@ -197,54 +192,49 @@ namespace ZLR.VM
                 {
                     if ((b & 64) == 0)
                         return 1;
-                    else
-                        return 2;
+                    return 2;
                 }
-                else
-                {
-                    short len = (short)(b & 63);
-                    if (len == 0)
-                        return 64;
-                    else
-                        return len;
-                }
+                short len = (short)(b & 63);
+                if (len == 0)
+                    return 64;
+                return len;
             }
         }
 
-        private ushort GetObjectParent(ushort obj)
+        internal ushort GetObjectParent(ushort obj)
         {
             if (obj == 0)
                 return 0;
 
             if (zversion <= 3)
-                return (ushort)GetByte(GetObjectAddress(obj) + 4);
+                return GetByte(GetObjectAddress(obj) + 4);
 
             return (ushort)GetWord(GetObjectAddress(obj) + 6);
         }
 
-        private ushort GetObjectSibling(ushort obj)
+        internal ushort GetObjectSibling(ushort obj)
         {
             if (obj == 0)
                 return 0;
 
             if (zversion <= 3)
-                return (ushort)GetByte(GetObjectAddress(obj) + 5);
+                return GetByte(GetObjectAddress(obj) + 5);
 
             return (ushort)GetWord(GetObjectAddress(obj) + 8);
         }
 
-        private ushort GetObjectChild(ushort obj)
+        internal ushort GetObjectChild(ushort obj)
         {
             if (obj == 0)
                 return 0;
 
             if (zversion <= 3)
-                return (ushort)GetByte(GetObjectAddress(obj) + 6);
+                return GetByte(GetObjectAddress(obj) + 6);
 
             return (ushort)GetWord(GetObjectAddress(obj) + 10);
         }
 
-        private void SetObjectParent(ushort obj, ushort value)
+        internal void SetObjectParent(ushort obj, ushort value)
         {
             if (obj != 0)
             {
@@ -255,7 +245,7 @@ namespace ZLR.VM
             }
         }
 
-        private void SetObjectSibling(ushort obj, ushort value)
+        internal void SetObjectSibling(ushort obj, ushort value)
         {
             if (obj != 0)
             {
@@ -266,7 +256,7 @@ namespace ZLR.VM
             }
         }
 
-        private void SetObjectChild(ushort obj, ushort value)
+        internal void SetObjectChild(ushort obj, ushort value)
         {
             if (obj != 0)
             {
@@ -278,7 +268,7 @@ namespace ZLR.VM
         }
 
 #pragma warning disable 0169
-        private void InsertObject(ushort obj, ushort dest)
+        internal void InsertObject(ushort obj, ushort dest)
         {
             if (obj == 0)
                 return;
@@ -316,12 +306,12 @@ namespace ZLR.VM
         {
             if (zversion <= 3)
                 return objectTable + 2 * 31 + 9 * (obj - 1);
-            else
-                return objectTable + 2 * 63 + 14 * (obj - 1);
+            return objectTable + 2 * 63 + 14 * (obj - 1);
         }
 
 #pragma warning disable 0169
-        private string GetObjectName(ushort obj)
+        [NotNull]
+        internal string GetObjectName(ushort obj)
         {
             if (obj == 0)
                 return string.Empty;
@@ -334,7 +324,7 @@ namespace ZLR.VM
             return DecodeString(propTable + 1);
         }
 
-        private bool GetObjectAttr(ushort obj, short attr)
+        internal bool GetObjectAttr(ushort obj, short attr)
         {
             if (obj == 0)
                 return false;
@@ -345,7 +335,7 @@ namespace ZLR.VM
             return (flags & bit) != 0;
         }
 
-        private void SetObjectAttr(ushort obj, short attr, bool value)
+        internal void SetObjectAttr(ushort obj, short attr, bool value)
         {
             if (obj == 0)
                 return;

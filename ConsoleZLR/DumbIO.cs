@@ -1,21 +1,21 @@
 using System;
-using System.Collections.Generic;
+using System.Diagnostics.CodeAnalysis;
 using System.IO;
-using System.Text;
 using ZLR.VM;
 
 namespace ZLR.Interfaces.SystemConsole
 {
+    [SuppressMessage("ReSharper", "LocalizableElement")]
     class DumbIO : IZMachineIO
     {
         private readonly bool bottomWinOnly;
         private string suppliedCommandFile;
-        private short curWin = 0;
+        private short curWin;
 
         public DumbIO(bool bottomWinOnly, string commandFile)
         {
             this.bottomWinOnly = bottomWinOnly;
-            this.suppliedCommandFile = commandFile;
+            suppliedCommandFile = commandFile;
         }
 
         public string ReadLine(string initial, int time, TimedInputCallback callback,
@@ -82,25 +82,25 @@ namespace ZLR.Interfaces.SystemConsole
             // not implemented
         }
 
-        public System.IO.Stream OpenSaveFile(int size)
+        public Stream OpenSaveFile(int size)
         {
             // not implemented
             return null;
         }
 
-        public System.IO.Stream OpenRestoreFile()
+        public Stream OpenRestoreFile()
         {
             // not implemented
             return null;
         }
 
-        public System.IO.Stream OpenAuxiliaryFile(string name, int size, bool writing)
+        public Stream OpenAuxiliaryFile(string name, int size, bool writing)
         {
             // not implemented
             return null;
         }
 
-        public System.IO.Stream OpenCommandFile(bool writing)
+        public Stream OpenCommandFile(bool writing)
         {
             string filename;
             if (suppliedCommandFile != null)
@@ -115,7 +115,7 @@ namespace ZLR.Interfaces.SystemConsole
                     Console.Write("Enter the name of a command file to {0} (blank to cancel): ",
                         writing ? "record" : "play back");
                     filename = Console.ReadLine();
-                    if (filename == "")
+                    if (string.IsNullOrWhiteSpace(filename))
                         return null;
 
                     if (writing)
@@ -123,15 +123,7 @@ namespace ZLR.Interfaces.SystemConsole
                         // if the file exists, prompt to overwrite it
                         if (File.Exists(filename))
                         {
-                            string yorn;
-                            do
-                            {
-                                Console.Write("\"{0}\" exists. Are you sure (y/n)? ", filename);
-                                yorn = Console.ReadLine().ToLower().Trim();
-                            }
-                            while (yorn.Length == 0);
-
-                            if (yorn[0] == 'y')
+                            if (YesOrNoPrompt($"\"{filename}\" exists. Are you sure (y/n)? "))
                                 break;
                         }
                         else
@@ -150,6 +142,18 @@ namespace ZLR.Interfaces.SystemConsole
             return new FileStream(filename,
                     writing ? FileMode.Create : FileMode.Open,
                     writing ? FileAccess.Write : FileAccess.Read);
+        }
+
+        private static bool YesOrNoPrompt(string prompt)
+        {
+            string yorn;
+            do
+            {
+                Console.Write(prompt);
+                yorn = Console.ReadLine()?.ToLower().Trim() ?? "n";
+            } while (yorn.Length == 0);
+
+            return yorn[0] == 'y';
         }
 
         public void SetTextStyle(TextStyle style)
@@ -214,25 +218,13 @@ namespace ZLR.Interfaces.SystemConsole
             set { /* nada */ }
         }
 
-        public bool BoldAvailable
-        {
-            get { return false; }
-        }
+        public bool BoldAvailable => false;
 
-        public bool ItalicAvailable
-        {
-            get { return false; }
-        }
+        public bool ItalicAvailable => false;
 
-        public bool FixedPitchAvailable
-        {
-            get { return false; }
-        }
+        public bool FixedPitchAvailable => false;
 
-        public bool VariablePitchAvailable
-        {
-            get { return false; }
-        }
+        public bool VariablePitchAvailable => false;
 
         public bool ScrollFromBottom
         {
@@ -240,50 +232,23 @@ namespace ZLR.Interfaces.SystemConsole
             set { /* nada */ }
         }
 
-        public bool GraphicsFontAvailable
-        {
-            get { return false; }
-        }
+        public bool GraphicsFontAvailable => false;
 
-        public bool TimedInputAvailable
-        {
-            get { return false; }
-        }
+        public bool TimedInputAvailable => false;
 
-        public bool SoundSamplesAvailable
-        {
-            get { return false; }
-        }
+        public bool SoundSamplesAvailable => false;
 
-        public byte WidthChars
-        {
-            get { return 80; }
-        }
+        public byte WidthChars => 80;
 
-        public short WidthUnits
-        {
-            get { return 80; }
-        }
+        public short WidthUnits => 80;
 
-        public byte HeightChars
-        {
-            get { return 25; }
-        }
+        public byte HeightChars => 25;
 
-        public short HeightUnits
-        {
-            get { return 25; }
-        }
+        public short HeightUnits => 25;
 
-        public byte FontHeight
-        {
-            get { return 1; }
-        }
+        public byte FontHeight => 1;
 
-        public byte FontWidth
-        {
-            get { return 1; }
-        }
+        public byte FontWidth => 1;
 
         public event EventHandler SizeChanged
         {
@@ -291,20 +256,11 @@ namespace ZLR.Interfaces.SystemConsole
             remove { /* nada */ }
         }
 
-        public bool ColorsAvailable
-        {
-            get { return false; }
-        }
+        public bool ColorsAvailable => false;
 
-        public byte DefaultForeground
-        {
-            get { return 9; }
-        }
+        public byte DefaultForeground => 9;
 
-        public byte DefaultBackground
-        {
-            get { return 2; }
-        }
+        public byte DefaultBackground => 2;
 
         public UnicodeCaps CheckUnicode(char ch)
         {

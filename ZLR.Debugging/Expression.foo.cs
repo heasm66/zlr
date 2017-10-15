@@ -1,11 +1,9 @@
 ﻿using Antlr4.Runtime;
 using System;
-using System.Collections.Generic;
 using System.Linq;
 using System.Text;
 using ZLR.VM;
 using ZLR.VM.Debugging;
-using Antlr4.Runtime.Tree;
 using Antlr4.Runtime.Misc;
 
 namespace ZLR.Debugging
@@ -41,8 +39,8 @@ namespace ZLR.Debugging
 
         public Value(ValueType type, int content)
         {
-            this.Type = type;
-            this.Content = content;
+            Type = type;
+            Content = content;
         }
     }
 
@@ -57,6 +55,7 @@ namespace ZLR.Debugging
             this.dbg = dbg;
         }
 
+        [JetBrains.Annotations.NotNull]
         public string Format(Value value)
         {
             switch (value.Type)
@@ -69,28 +68,20 @@ namespace ZLR.Debugging
 
                 case ValueType.Object:
                     var objInfo = zm.DebugInfo.FindObject(value.Content);
-                    return string.Format("{0}{1}#{2} (\"{3}\")",
-                        objInfo != null ? objInfo.Name : "",
-                        objInfo != null ? " " : "",
-                        value.Content,
-                        dbg.GetObjectName((ushort)value.Content));
+                    var objName = objInfo != null ? objInfo.Name + " " : "";
+                    return $"{objName}#{value.Content} (\"{dbg.GetObjectName((ushort) value.Content)}\")";
 
                 case ValueType.Routine:
                     var rtnInfo = zm.DebugInfo.FindRoutine(dbg.UnpackAddress((short)value.Content, false));
-                    if (rtnInfo != null)
-                    {
-                        return string.Format("routine {0} ${1:x5}", rtnInfo.Name, value.Content);
-                    }
-                    else
-                    {
-                        return string.Format("routine ${0:x5}", value.Content);
-                    }
+                    return rtnInfo != null
+                        ? $"routine {rtnInfo.Name} ${value.Content:x5}"
+                        : $"routine ${value.Content:x5}";
 
                 case ValueType.Attribute:
                     if (zm.DebugInfo.Attributes.Contains((ushort)value.Content))
                     {
                         var attrName = zm.DebugInfo.Attributes[(ushort)value.Content];
-                        return string.Format("attribute {0} #{1}", attrName, value.Content);
+                        return $"attribute {attrName} #{value.Content}";
                     }
                     else
                     {
@@ -101,7 +92,7 @@ namespace ZLR.Debugging
                     if (zm.DebugInfo.Properties.Contains((ushort)value.Content))
                     {
                         var propName = zm.DebugInfo.Properties[(ushort)value.Content];
-                        return string.Format("property {0} #{1}", propName, value.Content);
+                        return $"property {propName} #{value.Content}";
                     }
                     else
                     {
@@ -128,22 +119,18 @@ namespace ZLR.Debugging
                     }
                     else
                     {
-                        name = zm.DebugInfo.Globals[(byte)(value.Content - 16)];
-                        if (name == null)
-                        {
-                            name = "global_" + value.Content;
-                        }
+                        name = zm.DebugInfo.Globals[(byte) (value.Content - 16)] ?? "global_" + value.Content;
                     }
-                    return string.Format("{0} = {1}", name, dbg.ReadVariable((byte)value.Content));
+                    return $"{name} = {dbg.ReadVariable((byte) value.Content)}";
 
                 case ValueType.ByteAtAddress:
-                    return string.Format("byte at ${0:x5} = {1}", value.Content, dbg.ReadByte(value.Content));
+                    return $"byte at ${value.Content:x5} = {dbg.ReadByte(value.Content)}";
 
                 case ValueType.WordAtAddress:
-                    return string.Format("word at ${0:x5} = {1}", value.Content, dbg.ReadWord(value.Content));
+                    return $"word at ${value.Content:x5} = {dbg.ReadWord(value.Content)}";
 
                 default:
-                    return string.Format("${0:x5}", value.Content);
+                    return $"${value.Content:x5}";
             }
         }
     }
@@ -175,35 +162,35 @@ namespace ZLR.Debugging
                 this.dbg = dbg;
             }
 
-            public override Value VisitDecLiteral([NotNull] ExpressionParser.DecLiteralContext context)
+            public override Value VisitDecLiteral([JetBrains.Annotations.NotNull] [NotNull] ExpressionParser.DecLiteralContext context)
             {
                 return new Value(ValueType.Number, int.Parse(context.Decimal_literal().GetText()));
             }
 
-            public override Value VisitBinLiteral([NotNull] ExpressionParser.BinLiteralContext context)
+            public override Value VisitBinLiteral([JetBrains.Annotations.NotNull] [NotNull] ExpressionParser.BinLiteralContext context)
             {
                 return new Value(ValueType.Number, Convert.ToInt32(context.Binary_literal().GetText().Substring(2), 2));
             }
 
-            public override Value VisitHexLiteral([NotNull] ExpressionParser.HexLiteralContext context)
+            public override Value VisitHexLiteral([JetBrains.Annotations.NotNull] [NotNull] ExpressionParser.HexLiteralContext context)
             {
                 return new Value(ValueType.Number, Convert.ToInt32(context.Hex_literal().GetText().Substring(1), 16));
             }
 
-            public override Value VisitCharLiteral([NotNull] ExpressionParser.CharLiteralContext context)
+            public override Value VisitCharLiteral([JetBrains.Annotations.NotNull] [NotNull] ExpressionParser.CharLiteralContext context)
             {
                 var text = context.Char_literal().GetText();
                 return new Value(ValueType.Number, text[text.Length - 2]);
             }
 
-            public override Value VisitIdentifier([NotNull] ExpressionParser.IdentifierContext context)
+            public override Value VisitIdentifier([JetBrains.Annotations.NotNull] [NotNull] ExpressionParser.IdentifierContext context)
             {
                 var text = context.Identifier().GetText();
 
                 return ParseIdentifier(text);
             }
 
-            public override Value VisitQuotedIdentifier([NotNull] ExpressionParser.QuotedIdentifierContext context)
+            public override Value VisitQuotedIdentifier([JetBrains.Annotations.NotNull] [NotNull] ExpressionParser.QuotedIdentifierContext context)
             {
                 var sb = new StringBuilder(context.Quoted_identifier().GetText());
 
@@ -261,28 +248,28 @@ namespace ZLR.Debugging
                 return Value.Invalid;
             }
 
-            public override Value VisitAddition([NotNull] ExpressionParser.AdditionContext context)
+            public override Value VisitAddition([JetBrains.Annotations.NotNull] [NotNull] ExpressionParser.AdditionContext context)
             {
                 var left = Resolve(Visit(context.left));
                 var right = Resolve(Visit(context.right));
                 return new Value(left.Type, left.Content + right.Content);
             }
 
-            public override Value VisitSubtraction([NotNull] ExpressionParser.SubtractionContext context)
+            public override Value VisitSubtraction([JetBrains.Annotations.NotNull] [NotNull] ExpressionParser.SubtractionContext context)
             {
                 var left = Resolve(Visit(context.left));
                 var right = Resolve(Visit(context.right));
                 return new Value(left.Type, left.Content - right.Content);
             }
 
-            public override Value VisitMultiplication([NotNull] ExpressionParser.MultiplicationContext context)
+            public override Value VisitMultiplication([JetBrains.Annotations.NotNull] [NotNull] ExpressionParser.MultiplicationContext context)
             {
                 var left = Resolve(Visit(context.left));
                 var right = Resolve(Visit(context.right));
                 return new Value(left.Type, left.Content * right.Content);
             }
 
-            public override Value VisitDivision([NotNull] ExpressionParser.DivisionContext context)
+            public override Value VisitDivision([JetBrains.Annotations.NotNull] [NotNull] ExpressionParser.DivisionContext context)
             {
                 var left = Resolve(Visit(context.left));
                 var right = Resolve(Visit(context.right));
@@ -293,7 +280,7 @@ namespace ZLR.Debugging
                 return new Value(left.Type, left.Content / right.Content);
             }
 
-            public override Value VisitModulus([NotNull] ExpressionParser.ModulusContext context)
+            public override Value VisitModulus([JetBrains.Annotations.NotNull] [NotNull] ExpressionParser.ModulusContext context)
             {
                 var left = Resolve(Visit(context.left));
                 var right = Resolve(Visit(context.right));
@@ -304,72 +291,72 @@ namespace ZLR.Debugging
                 return new Value(left.Type, left.Content % right.Content);
             }
 
-            public override Value VisitBitwiseAnd([NotNull] ExpressionParser.BitwiseAndContext context)
+            public override Value VisitBitwiseAnd([JetBrains.Annotations.NotNull] [NotNull] ExpressionParser.BitwiseAndContext context)
             {
                 var left = Resolve(Visit(context.left));
                 var right = Resolve(Visit(context.right));
                 return new Value(left.Type, left.Content & right.Content);
             }
 
-            public override Value VisitBitwiseOr([NotNull] ExpressionParser.BitwiseOrContext context)
+            public override Value VisitBitwiseOr([JetBrains.Annotations.NotNull] [NotNull] ExpressionParser.BitwiseOrContext context)
             {
                 var left = Resolve(Visit(context.left));
                 var right = Resolve(Visit(context.right));
                 return new Value(left.Type, left.Content | right.Content);
             }
 
-            public override Value VisitBitwiseNot([NotNull] ExpressionParser.BitwiseNotContext context)
+            public override Value VisitBitwiseNot([JetBrains.Annotations.NotNull] [NotNull] ExpressionParser.BitwiseNotContext context)
             {
                 var right = Resolve(Visit(context.right));
                 return new Value(right.Type, ~right.Content);
             }
 
-            public override Value VisitLogicalAnd([NotNull] ExpressionParser.LogicalAndContext context)
+            public override Value VisitLogicalAnd([JetBrains.Annotations.NotNull] [NotNull] ExpressionParser.LogicalAndContext context)
             {
                 var left = Resolve(Visit(context.left));
                 var right = Resolve(Visit(context.right));
                 return new Value(left.Type, (left.Content != 0) & (right.Content != 0) ? 1 : 0);
             }
 
-            public override Value VisitLogicalOr([NotNull] ExpressionParser.LogicalOrContext context)
+            public override Value VisitLogicalOr([JetBrains.Annotations.NotNull] [NotNull] ExpressionParser.LogicalOrContext context)
             {
                 var left = Resolve(Visit(context.left));
                 var right = Resolve(Visit(context.right));
                 return new Value(left.Type, (left.Content != 0) & (right.Content != 0) ? 1 : 0);
             }
 
-            public override Value VisitLogicalNot([NotNull] ExpressionParser.LogicalNotContext context)
+            public override Value VisitLogicalNot([JetBrains.Annotations.NotNull] [NotNull] ExpressionParser.LogicalNotContext context)
             {
                 var right = Resolve(Visit(context.right));
                 return new Value(right.Type, right.Content == 0 ? 1 : 0);
             }
 
-            public override Value VisitDereferenceByte([NotNull] ExpressionParser.DereferenceByteContext context)
+            public override Value VisitDereferenceByte([JetBrains.Annotations.NotNull] [NotNull] ExpressionParser.DereferenceByteContext context)
             {
                 var left = Resolve(Visit(context.left));
                 var right = Resolve(Visit(context.right));
                 return new Value(ValueType.ByteAtAddress, left.Content + right.Content);
             }
 
-            public override Value VisitDereferenceWord([NotNull] ExpressionParser.DereferenceWordContext context)
+            public override Value VisitDereferenceWord([JetBrains.Annotations.NotNull] [NotNull] ExpressionParser.DereferenceWordContext context)
             {
                 var left = Resolve(Visit(context.left));
                 var right = Resolve(Visit(context.right));
                 return new Value(ValueType.WordAtAddress, left.Content + 2 * right.Content);
             }
 
-            public override Value VisitUnaryMinus([NotNull] ExpressionParser.UnaryMinusContext context)
+            public override Value VisitUnaryMinus([JetBrains.Annotations.NotNull] [NotNull] ExpressionParser.UnaryMinusContext context)
             {
                 var right = Resolve(Visit(context.right));
                 return new Value(ValueType.Number, -right.Content);
             }
 
-            public override Value VisitParens([NotNull] ExpressionParser.ParensContext context)
+            public override Value VisitParens([JetBrains.Annotations.NotNull] [NotNull] ExpressionParser.ParensContext context)
             {
                 return Visit(context.expression());
             }
 
-            public override Value VisitEquality([NotNull] ExpressionParser.EqualityContext context)
+            public override Value VisitEquality([JetBrains.Annotations.NotNull] [NotNull] ExpressionParser.EqualityContext context)
             {
                 var left = Resolve(Visit(context.left));
 
@@ -382,7 +369,7 @@ namespace ZLR.Debugging
                 return new Value(ValueType.Number, 0);
             }
 
-            public override Value VisitInequality([NotNull] ExpressionParser.InequalityContext context)
+            public override Value VisitInequality([JetBrains.Annotations.NotNull] [NotNull] ExpressionParser.InequalityContext context)
             {
                 var left = Resolve(Visit(context.left));
 
@@ -395,42 +382,42 @@ namespace ZLR.Debugging
                 return new Value(ValueType.Number, 1);
             }
 
-            public override Value VisitGreater([NotNull] ExpressionParser.GreaterContext context)
+            public override Value VisitGreater([JetBrains.Annotations.NotNull] [NotNull] ExpressionParser.GreaterContext context)
             {
                 var left = Resolve(Visit(context.left));
                 var right = Resolve(Visit(context.right));
                 return new Value(left.Type, left.Content > right.Content ? 1 : 0);
             }
 
-            public override Value VisitGreaterEqual([NotNull] ExpressionParser.GreaterEqualContext context)
+            public override Value VisitGreaterEqual([JetBrains.Annotations.NotNull] [NotNull] ExpressionParser.GreaterEqualContext context)
             {
                 var left = Resolve(Visit(context.left));
                 var right = Resolve(Visit(context.right));
                 return new Value(left.Type, left.Content >= right.Content ? 1 : 0);
             }
 
-            public override Value VisitLess([NotNull] ExpressionParser.LessContext context)
+            public override Value VisitLess([JetBrains.Annotations.NotNull] [NotNull] ExpressionParser.LessContext context)
             {
                 var left = Resolve(Visit(context.left));
                 var right = Resolve(Visit(context.right));
                 return new Value(left.Type, left.Content < right.Content ? 1 : 0);
             }
 
-            public override Value VisitLessEqual([NotNull] ExpressionParser.LessEqualContext context)
+            public override Value VisitLessEqual([JetBrains.Annotations.NotNull] [NotNull] ExpressionParser.LessEqualContext context)
             {
                 var left = Resolve(Visit(context.left));
                 var right = Resolve(Visit(context.right));
                 return new Value(left.Type, left.Content <= right.Content ? 1 : 0);
             }
 
-            public override Value VisitHas([NotNull] ExpressionParser.HasContext context)
+            public override Value VisitHas([JetBrains.Annotations.NotNull] [NotNull] ExpressionParser.HasContext context)
             {
                 var left = Resolve(Visit(context.left));
                 var right = Resolve(Visit(context.right));
                 return new Value(ValueType.Number, TestAttribute((ushort)left.Content, right.Content) ? 1 : 0);
             }
 
-            public override Value VisitHasnt([NotNull] ExpressionParser.HasntContext context)
+            public override Value VisitHasnt([JetBrains.Annotations.NotNull] [NotNull] ExpressionParser.HasntContext context)
             {
                 var left = Resolve(Visit(context.left));
                 var right = Resolve(Visit(context.right));
@@ -441,25 +428,21 @@ namespace ZLR.Debugging
             {
                 var objAddr = dbg.GetObjectAddress(obj);
 
-                byte[] attrs;
-                ushort parent, sibling, child;
-                int propertyTable;
-
-                dbg.ParseObject(objAddr, out attrs, out parent, out sibling, out child, out propertyTable);
+                dbg.ParseObject(objAddr, out var attrs, out _, out _, out _, out _);
 
                 int bit = 128 >> (attr & 7);
                 int offset = attr >> 3;
                 return (attrs[offset] & bit) != 0;
             }
 
-            public override Value VisitIn([NotNull] ExpressionParser.InContext context)
+            public override Value VisitIn([JetBrains.Annotations.NotNull] [NotNull] ExpressionParser.InContext context)
             {
                 var left = Resolve(Visit(context.left));
                 var right = Resolve(Visit(context.right));
                 return new Value(ValueType.Number, TestParent((ushort)left.Content, (ushort)right.Content) ? 0 : 1);
             }
 
-            public override Value VisitNotin([NotNull] ExpressionParser.NotinContext context)
+            public override Value VisitNotin([JetBrains.Annotations.NotNull] [NotNull] ExpressionParser.NotinContext context)
             {
                 var left = Resolve(Visit(context.left));
                 var right = Resolve(Visit(context.right));
@@ -470,16 +453,12 @@ namespace ZLR.Debugging
             {
                 var objAddr = dbg.GetObjectAddress(obj);
 
-                byte[] attrs;
-                ushort parent, sibling, child;
-                int propertyTable;
-
-                dbg.ParseObject(objAddr, out attrs, out parent, out sibling, out child, out propertyTable);
+                dbg.ParseObject(objAddr, out _, out var parent, out _, out _, out _);
 
                 return parent == possibleParent;
             }
 
-            public override Value VisitProvides([NotNull] ExpressionParser.ProvidesContext context)
+            public override Value VisitProvides([JetBrains.Annotations.NotNull] [NotNull] ExpressionParser.ProvidesContext context)
             {
                 var left = Resolve(Visit(context.left));
                 var right = Resolve(Visit(context.right));
@@ -488,7 +467,7 @@ namespace ZLR.Debugging
                 return new Value(ValueType.Number, propAddr != 0 ? 1 : 0);
             }
 
-            public override Value VisitAssignment([NotNull] ExpressionParser.AssignmentContext context)
+            public override Value VisitAssignment([JetBrains.Annotations.NotNull] [NotNull] ExpressionParser.AssignmentContext context)
             {
                 var left = Visit(context.left);
                 var right = Resolve(Visit(context.right));
@@ -514,7 +493,7 @@ namespace ZLR.Debugging
                 return right;
             }
 
-            public override Value VisitMember([NotNull] ExpressionParser.MemberContext context)
+            public override Value VisitMember([JetBrains.Annotations.NotNull] [NotNull] ExpressionParser.MemberContext context)
             {
                 var left = Resolve(Visit(context.left));
                 var right = Resolve(Visit(context.right));
@@ -535,14 +514,14 @@ namespace ZLR.Debugging
                 }
             }
 
-            public override Value VisitMemberAddress([NotNull] ExpressionParser.MemberAddressContext context)
+            public override Value VisitMemberAddress([JetBrains.Annotations.NotNull] [NotNull] ExpressionParser.MemberAddressContext context)
             {
                 var left = Resolve(Visit(context.left));
                 var right = Resolve(Visit(context.right));
                 return new Value(ValueType.Pointer, dbg.GetPropAddress((ushort)left.Content, (short)right.Content));
             }
 
-            public override Value VisitMemberLength([NotNull] ExpressionParser.MemberLengthContext context)
+            public override Value VisitMemberLength([JetBrains.Annotations.NotNull] [NotNull] ExpressionParser.MemberLengthContext context)
             {
                 var left = Resolve(Visit(context.left));
                 var right = Resolve(Visit(context.right));
@@ -551,7 +530,7 @@ namespace ZLR.Debugging
                 return new Value(ValueType.Number, dbg.GetPropLength(propAddr));
             }
 
-            public override Value VisitCall([NotNull] ExpressionParser.CallContext context)
+            public override Value VisitCall([JetBrains.Annotations.NotNull] [NotNull] ExpressionParser.CallContext context)
             {
                 var func = Resolve(Visit(context.left));
                 var args = context.arguments()._values.Select(v => (short)Resolve(Visit(v)).Content).ToArray();
