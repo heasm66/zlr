@@ -323,6 +323,7 @@ namespace ZLR.VM
         {
             var ioFI = ZMachine.GetFieldInfo(nameof(ZMachine.io));
             var impl = typeof(IZMachineIO).GetMethod(nameof(IZMachineIO.SetColors));
+            System.Diagnostics.Debug.Assert(impl != null);
 
             il.Emit(OpCodes.Ldarg_0);
             il.Emit(OpCodes.Ldfld, ioFI);

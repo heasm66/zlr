@@ -132,6 +132,7 @@ namespace ZLR.VM
         private void op_print_num([NotNull] ILGenerator il)
         {
             MethodInfo toStringMI = typeof(Convert).GetMethod(nameof(Convert.ToString), new[] {typeof(short)});
+            System.Diagnostics.Debug.Assert(toStringMI != null);
             MethodInfo printStringMI = ZMachine.GetMethodInfo(nameof(ZMachine.PrintString));
 
             il.Emit(OpCodes.Ldarg_0);
@@ -199,6 +200,7 @@ namespace ZLR.VM
         {
             var ioFI = ZMachine.GetFieldInfo(nameof(ZMachine.io));
             MethodInfo impl = typeof(IZMachineIO).GetMethod(nameof(IZMachineIO.SplitWindow));
+            System.Diagnostics.Debug.Assert(impl != null);
 
             il.Emit(OpCodes.Ldarg_0);
             il.Emit(OpCodes.Ldfld, ioFI);
@@ -211,6 +213,7 @@ namespace ZLR.VM
         {
             var ioFI = ZMachine.GetFieldInfo(nameof(ZMachine.io));
             MethodInfo impl = typeof(IZMachineIO).GetMethod(nameof(IZMachineIO.SelectWindow));
+            System.Diagnostics.Debug.Assert(impl != null);
 
             il.Emit(OpCodes.Ldarg_0);
             il.Emit(OpCodes.Ldfld, ioFI);
@@ -229,6 +232,7 @@ namespace ZLR.VM
         {
             var ioFI = ZMachine.GetFieldInfo(nameof(ZMachine.io));
             MethodInfo eraseWindowMI = typeof(IZMachineIO).GetMethod(nameof(IZMachineIO.EraseWindow));
+            System.Diagnostics.Debug.Assert(eraseWindowMI != null);
 
             il.Emit(OpCodes.Ldarg_0);
             il.Emit(OpCodes.Ldfld, ioFI);
@@ -241,6 +245,7 @@ namespace ZLR.VM
         {
             var ioFI = ZMachine.GetFieldInfo(nameof(ZMachine.io));
             MethodInfo eraseLineMI = typeof(IZMachineIO).GetMethod(nameof(IZMachineIO.EraseLine));
+            System.Diagnostics.Debug.Assert(eraseLineMI != null);
 
             Label? skip = null;
             if (argc >= 1)
@@ -269,6 +274,7 @@ namespace ZLR.VM
         {
             var ioFI = ZMachine.GetFieldInfo(nameof(ZMachine.io));
             MethodInfo moveCursorMI = typeof(IZMachineIO).GetMethod(nameof(IZMachineIO.MoveCursor));
+            System.Diagnostics.Debug.Assert(moveCursorMI != null);
 
             LoadOperand(il, 0);
             il.Emit(OpCodes.Stloc, zm.TempWordLocal);
@@ -295,6 +301,7 @@ namespace ZLR.VM
         {
             var ioFI = ZMachine.GetFieldInfo(nameof(ZMachine.io));
             MethodInfo impl = typeof(IZMachineIO).GetMethod(nameof(IZMachineIO.SetTextStyle));
+            System.Diagnostics.Debug.Assert(impl != null);
 
             il.Emit(OpCodes.Ldarg_0);
             il.Emit(OpCodes.Ldfld, ioFI);
@@ -307,6 +314,7 @@ namespace ZLR.VM
         {
             var ioFI = ZMachine.GetFieldInfo(nameof(ZMachine.io));
             MethodInfo impl = typeof(IZMachineIO).GetMethod("set_" + nameof(IZMachineIO.Buffering));
+            System.Diagnostics.Debug.Assert(impl != null);
 
             il.Emit(OpCodes.Ldarg_0);
             il.Emit(OpCodes.Ldfld, ioFI);

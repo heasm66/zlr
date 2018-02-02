@@ -118,6 +118,7 @@ namespace ZLR.VM
             if (operandTypes[1] == OperandType.Variable)
             {
                 MethodInfo impl = typeof(ZMachine).GetMethod(nameof(ZMachine.LogShiftImpl), BindingFlags.NonPublic | BindingFlags.Static);
+                System.Diagnostics.Debug.Assert(impl != null);
 
                 LoadOperand(il, 0);
                 LoadOperand(il, 1);
@@ -148,6 +149,7 @@ namespace ZLR.VM
             if (operandTypes[1] == OperandType.Variable)
             {
                 MethodInfo impl = typeof(ZMachine).GetMethod(nameof(ZMachine.ArtShiftImpl), BindingFlags.NonPublic | BindingFlags.Static);
+                System.Diagnostics.Debug.Assert(impl != null);
 
                 LoadOperand(il, 0);
                 LoadOperand(il, 1);
@@ -177,6 +179,7 @@ namespace ZLR.VM
         {
             var ioFI = ZMachine.GetFieldInfo(nameof(ZMachine.io));
             MethodInfo setFontMI = typeof(IZMachineIO).GetMethod(nameof(IZMachineIO.SetFont));
+            System.Diagnostics.Debug.Assert(setFontMI != null);
 
             il.Emit(OpCodes.Ldarg_0);
             il.Emit(OpCodes.Ldfld, ioFI);
@@ -226,6 +229,7 @@ namespace ZLR.VM
         {
             var ioFI = ZMachine.GetFieldInfo(nameof(ZMachine.io));
             MethodInfo checkUnicodeMI = typeof(IZMachineIO).GetMethod(nameof(IZMachineIO.CheckUnicode));
+            System.Diagnostics.Debug.Assert(checkUnicodeMI != null);
 
             il.Emit(OpCodes.Ldarg_0);
             il.Emit(OpCodes.Ldfld, ioFI);

@@ -75,6 +75,7 @@ namespace ZLR.VM
         {
             var callStackFI = ZMachine.GetFieldInfo(nameof(ZMachine.callStack));
             MethodInfo getCountMI = typeof(Stack<ZMachine.CallFrame>).GetMethod("get_" + nameof(Stack<ZMachine.CallFrame>.Count));
+            System.Diagnostics.Debug.Assert(getCountMI != null);
 
             il.Emit(OpCodes.Ldarg_0);
             il.Emit(OpCodes.Ldfld, callStackFI);

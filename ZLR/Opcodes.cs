@@ -453,6 +453,7 @@ namespace ZLR.VM
         private void PopFromStack([NotNull] ILGenerator il)
         {
             var popMI = typeof(Stack<short>).GetMethod(nameof(Stack<short>.Pop));
+            System.Diagnostics.Debug.Assert(popMI != null);
 
             il.Emit(OpCodes.Ldloc, zm.StackLocal);
             il.Emit(OpCodes.Call, popMI);
@@ -461,6 +462,7 @@ namespace ZLR.VM
         private void PushOntoStack([NotNull] ILGenerator il)
         {
             var pushMI = typeof(Stack<short>).GetMethod(nameof(Stack<short>.Push));
+            System.Diagnostics.Debug.Assert(pushMI != null);
 
             il.Emit(OpCodes.Stloc, zm.TempWordLocal);
             il.Emit(OpCodes.Ldloc, zm.StackLocal);
