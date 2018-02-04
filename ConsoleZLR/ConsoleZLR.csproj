@@ -87,8 +87,8 @@
       <Project>{601756b2-3e74-402a-8622-772195fb7946}</Project>
       <Name>ZLR.Debugging</Name>
     </ProjectReference>
-    <ProjectReference Include="..\ZLR\ZLR.VM.csproj">
-      <Project>{75CC483D-D28E-49EE-AB8F-F77CC3F58BFA}</Project>
+    <ProjectReference Include="..\ZLR.VM\ZLR.VM.csproj">
+      <Project>{fc857dd8-ab2d-4e4c-a2d7-943547694249}</Project>
       <Name>ZLR.VM</Name>
     </ProjectReference>
   </ItemGroup>

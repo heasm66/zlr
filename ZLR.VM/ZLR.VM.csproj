@@ -1,0 +1,29 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <TargetFrameworks>net451;netstandard2.0</TargetFrameworks>
+    <GeneratePackageOnBuild>true</GeneratePackageOnBuild>
+    <Version>0.9.0</Version>
+    <Authors>Jesse McGrew</Authors>
+    <Company />
+    <Product>ZLR</Product>
+    <PackageProjectUrl>https://bitbucket.org/jmcgrew/zlr</PackageProjectUrl>
+    <RepositoryUrl>https://bitbucket.org/jmcgrew/zlr</RepositoryUrl>
+    <RepositoryType>mercurial</RepositoryType>
+    <PackageLicenseUrl>http://opensource.org/licenses/gpl-2.0</PackageLicenseUrl>
+    <Copyright>Copyright 2007-2018 Jesse McGrew</Copyright>
+    <PackageTags>zlr z-machine zmachine z-code zcode infocom jit interpreter</PackageTags>
+    <PackageIconUrl>http://zlr.sourceforge.net/zlr-icon-32x32.png</PackageIconUrl>
+    <NeutralLanguage>en-US</NeutralLanguage>
+    <Description>A Z-Machine interpreter.</Description>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <PackageReference Include="JetBrains.Annotations" Version="11.1.0" />
+  </ItemGroup>
+
+  <ItemGroup Condition=" '$(TargetFramework)' == 'netstandard2.0' ">
+    <PackageReference Include="System.Reflection.Emit.Lightweight" Version="4.3.0" />
+  </ItemGroup>
+
+</Project>

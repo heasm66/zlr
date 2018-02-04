@@ -95,12 +95,6 @@
     </Compile>
   </ItemGroup>
   <ItemGroup>
-    <ProjectReference Include="..\ZLR\ZLR.VM.csproj">
-      <Project>{75CC483D-D28E-49EE-AB8F-F77CC3F58BFA}</Project>
-      <Name>ZLR.VM</Name>
-    </ProjectReference>
-  </ItemGroup>
-  <ItemGroup>
     <Content Include="garglk.ini">
       <CopyToOutputDirectory>Always</CopyToOutputDirectory>
     </Content>
@@ -138,6 +132,12 @@
       <Install>true</Install>
     </BootstrapperPackage>
   </ItemGroup>
+  <ItemGroup>
+    <ProjectReference Include="..\ZLR.VM\ZLR.VM.csproj">
+      <Project>{fc857dd8-ab2d-4e4c-a2d7-943547694249}</Project>
+      <Name>ZLR.VM</Name>
+    </ProjectReference>
+  </ItemGroup>
   <Import Project="$(MSBuildBinPath)\Microsoft.CSharp.targets" />
   <!-- To modify your build process, add your task inside one of the targets below and uncomment it. 
        Other similar extension points exist, see Microsoft.Common.targets.
@@ -147,7 +147,7 @@
   </Target>
   -->
   <PropertyGroup>
-    <PreBuildEvent>call "$(DevEnvDir)\..\..\VC\vcvarsall.bat"
-"%25WindowsSdkDir%25\bin\x86\rc.exe" /r "$(ProjectDir)icon.rc"</PreBuildEvent>
+    <PreBuildEvent>call "$(DevEnvDir)..\..\VC\Auxiliary\Build\vcvarsall.bat" x86
+"%25WindowsSdkVerBinPath%25\x86\rc.exe" /r "$(ProjectDir)icon.rc"</PreBuildEvent>
   </PropertyGroup>
 </Project>
