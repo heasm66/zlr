@@ -379,7 +379,9 @@ namespace ZLR.VM.Debugging
 
         public override int GetHashCode()
         {
+            // ReSharper disable ImpureMethodCallOnReadonlyValueField
             var result = Line.GetHashCode() ^ Position.GetHashCode();
+            // ReSharper restore ImpureMethodCallOnReadonlyValueField
             if (File != null)
                 result ^= File.GetHashCode();
             return result;
@@ -460,6 +462,7 @@ namespace ZLR.VM.Debugging
 
         public TKey this[[NotNull] TValue value] => backward[value];
 
+        // ReSharper disable once AnnotateNotNullTypeMember
         public IEnumerator<KeyValuePair<TKey, TValue>> GetEnumerator() => forward.GetEnumerator();
 
         System.Collections.IEnumerator System.Collections.IEnumerable.GetEnumerator() => GetEnumerator();

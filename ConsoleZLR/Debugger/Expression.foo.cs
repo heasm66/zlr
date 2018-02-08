@@ -1,12 +1,12 @@
-﻿using Antlr4.Runtime;
-using System;
+﻿using System;
 using System.Linq;
 using System.Text;
+using Antlr4.Runtime;
+using Antlr4.Runtime.Misc;
 using ZLR.VM;
 using ZLR.VM.Debugging;
-using Antlr4.Runtime.Misc;
 
-namespace ZLR.Debugging
+namespace ZLR.Interfaces.SystemConsole.Debugger
 {
     internal enum ValueType
     {

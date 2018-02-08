@@ -529,8 +529,7 @@ namespace ZLR.VM
                     if (idx >= 0)
                     {
                         var key = line.Substring(idx + 1, line.Length - idx - 2);
-                        int keyCode;
-                        if (int.TryParse(key, out keyCode))
+                        if (int.TryParse(key, out var keyCode))
                         {
                             line = line.Substring(0, idx);
                             terminator = (byte)keyCode;

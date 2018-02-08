@@ -163,10 +163,12 @@ namespace ZLR.VM
             var handler2 = RandomRolled;
             if (handler2 != null)
             {
+                // ReSharper disable once PossibleInvalidOperationException
                 var eventArgs = new RandomRolledEventArgs((short)result, range);
                 handler2(this, eventArgs);
             }
 
+            // ReSharper disable once PossibleInvalidOperationException
             return (short)result;
         }
 

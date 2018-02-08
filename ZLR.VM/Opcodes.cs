@@ -82,6 +82,7 @@ namespace ZLR.VM
             return compiling;
         }
 
+        // ReSharper disable once AnnotateNotNullTypeMember
         public override string ToString()
         {
             return GetOpcodeName(attribute, compiler);
@@ -274,8 +275,7 @@ namespace ZLR.VM
                                 throw new Exception("BUG:BADOPCOUNT");
                         }
 
-                        OpcodeInfo[] array;
-                        if (dict.TryGetValue(num, out array) == false)
+                        if (dict.TryGetValue(num, out var array) == false)
                         {
                             array = new[] { info };
                             dict.Add(num, array);
@@ -317,8 +317,7 @@ namespace ZLR.VM
                     throw new ArgumentOutOfRangeException(nameof(count));
             }
 
-            OpcodeInfo[] array;
-            if (dict.TryGetValue(opnum, out array))
+            if (dict.TryGetValue(opnum, out var array))
             {
                 foreach (var info in array)
                     if (zversion >= info.Attr.MinVersion && zversion <= info.Attr.MaxVersion)

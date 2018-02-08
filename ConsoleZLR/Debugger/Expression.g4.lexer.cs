@@ -1,4 +1,4 @@
-﻿namespace ZLR.Debugging
+﻿namespace ZLR.Interfaces.SystemConsole.Debugger
 {
     partial class ExpressionLexer
     {

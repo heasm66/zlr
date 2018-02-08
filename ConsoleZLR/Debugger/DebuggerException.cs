@@ -2,7 +2,7 @@
 using System.Runtime.Serialization;
 using JetBrains.Annotations;
 
-namespace ZLR.Debugging
+namespace ZLR.Interfaces.SystemConsole.Debugger
 {
     [Serializable]
     internal class DebuggerException : Exception

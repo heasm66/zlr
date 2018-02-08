@@ -4,7 +4,7 @@ using System.IO;
 using ZLR.VM;
 using System.Reflection;
 using JetBrains.Annotations;
-using ZLR.Debugging;
+using ZLR.Interfaces.SystemConsole.Debugger;
 
 namespace ZLR.Interfaces.SystemConsole
 {

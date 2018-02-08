@@ -6,7 +6,7 @@ using JetBrains.Annotations;
 using ZLR.VM;
 using ZLR.VM.Debugging;
 
-namespace ZLR.Debugging
+namespace ZLR.Interfaces.SystemConsole.Debugger
 {
     public sealed class DebuggingConsole
     {
@@ -279,10 +279,7 @@ namespace ZLR.Debugging
 
             var address = dbg.GetObjectAddress((ushort)value.Content);
 
-            byte[] attrs;
-            ushort parent, sibling, child;
-            int propertyTable;
-            dbg.ParseObject(address, out attrs, out parent, out sibling, out child, out propertyTable);
+            dbg.ParseObject(address, out var attrs, out var parent, out var sibling, out var child, out var propertyTable);
 
             io.PutString(
                 $"=== {valueFormatter.Format(new Value(ValueType.Object, value.Content))} ===\n" +
