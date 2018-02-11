@@ -14,9 +14,8 @@ namespace ZLR.VM.IOFilters
 
         #region IZMachineIO Members
 
-        public virtual string ReadLine(string initial, int time, TimedInputCallback callback, byte[] terminatingKeys,
-            out byte terminator) =>
-            next.ReadLine(initial, time, callback, terminatingKeys, out terminator);
+        public virtual ReadLineResult ReadLine(string initial, int time, TimedInputCallback callback, byte[] terminatingKeys,
+            bool allowDebuggerBreak) => next.ReadLine(initial, time, callback, terminatingKeys, allowDebuggerBreak);
 
         public virtual short ReadKey(int time, TimedInputCallback callback, CharTranslator translator) =>
             next.ReadKey(time, callback, translator);

@@ -85,7 +85,7 @@ namespace ZLR.VM
         // compilation and runtime state
         internal int pc;
         bool clearable;
-        bool debugging;
+        internal bool debugging;
 
         // runtime state
         readonly Stream gameFile;
@@ -99,7 +99,6 @@ namespace ZLR.VM
         [ItemNotNull] [NotNull]
         internal Stack<CallFrame> callStack = new Stack<CallFrame>();
 
-        CallFrame topFrame;
         Random rng = new Random();
         bool predictableRng;
         byte[] wordSeparators;
@@ -182,7 +181,7 @@ namespace ZLR.VM
             if (zversion < 1 || zversion > 8)
                 throw new ArgumentException("Z-code version must be between 1 and 8", nameof(gameStream));
 
-            io.SizeChanged += io_SizeChanged;
+            io.SizeChanged += IOSizeChanged;
         }
 
         [PublicAPI]
@@ -233,7 +232,7 @@ namespace ZLR.VM
         [NotNull]
         public IZMachineIO IO => io;
 
-        internal CallFrame TopFrame => topFrame;
+        internal CallFrame TopFrame { get; private set; }
 
         internal byte GetByte(int address)
         {
@@ -541,17 +540,15 @@ namespace ZLR.VM
                 Console.WriteLine();
 #endif
 
-                CachedCode entry;
                 var thisPC = pc;
 #if !DISABLE_CACHE
-                if (thisPC < romStart || cache.TryGetValue(thisPC, out entry) == false)
+                if (thisPC < romStart || cache.TryGetValue(thisPC, out var entry) == false)
 #endif
                 {
 #if BENCHMARK
                     cacheMisses++;
 #endif
-                    int count;
-                    var code = CompileZCode(out count);
+                    var code = CompileZCode(out var count);
                     entry = new CachedCode(pc, code);
 #if BENCHMARK
                     entry.Cycles = count;   // only used to calculate the amount of cached z-code
@@ -937,8 +934,7 @@ namespace ZLR.VM
             }
 
             // look up a method to compile this opcode
-            OpcodeInfo info;
-            if (Opcode.FindOpcodeInfo(count, opnum, zversion, out info) == false)
+            if (Opcode.FindOpcodeInfo(count, opnum, zversion, out var info) == false)
             {
                 // EXT:29 to EXT:255 are silently ignored.
                 // these are unrecognized custom opcodes, so the best we can do
@@ -1009,8 +1005,7 @@ namespace ZLR.VM
 
             if (info.Attr.Text)
             {
-                int len;
-                text = DecodeStringWithLen(pc, out len);
+                text = DecodeStringWithLen(pc, out var len);
                 pc += len;
 
 #if TRACING
@@ -1298,7 +1293,7 @@ namespace ZLR.VM
             }
         }
 
-        private void io_SizeChanged(object sender, EventArgs e)
+        private void IOSizeChanged(object sender, EventArgs e)
         {
             SetByte(0x20, io.HeightChars);          // screen height (rows)
             SetByte(0x21, io.WidthChars);           // screen width (columns)

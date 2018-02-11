@@ -39,6 +39,16 @@ namespace ZLR.VM.Debugging
         event EventHandler<EnterFunctionEventArgs> EnteringFunction;
     }
 
+    public class DebuggerBreakException : ApplicationException
+    {
+        public int ResumePC { get; }
+
+        public DebuggerBreakException(int resumePC) : base("The debuggee was paused.")
+        {
+            ResumePC = resumePC;
+        }
+    }
+
     [PublicAPI]
     public interface IDebugger
     {
@@ -54,7 +64,14 @@ namespace ZLR.VM.Debugging
         void SetBreakpoint(int address, bool enabled);
         int[] GetBreakpoints();
 
-        short Call(short packedAddress, [NotNull] short[] args);
+        /// <summary>
+        /// Calls a routine within the Z-machine, returning its result unless it's interrupted.
+        /// </summary>
+        /// <param name="packedAddress">The packed address of the routine to call.</param>
+        /// <param name="args">The arguments to pass to the routine.</param>
+        /// <returns>The value returned by the routine, or <see langword="null"/> if the
+        /// call was interrupted by a debugger break.</returns>
+        short? Call(short packedAddress, [NotNull] short[] args);
 
         byte ReadByte(int address);
         short ReadWord(int address);
@@ -164,17 +181,23 @@ namespace ZLR.VM
 
             private void OneStep()
             {
-                CachedCode entry;
                 int thisPC = zm.pc;
-                if (thisPC < zm.romStart || zm.cache.TryGetValue(thisPC, out entry) == false)
+                if (thisPC < zm.romStart || zm.cache.TryGetValue(thisPC, out var entry) == false)
                 {
-                    int count;
-                    entry = new CachedCode(zm.pc, zm.CompileZCode(out count));
+                    entry = new CachedCode(zm.pc, zm.CompileZCode(out var count));
                     if (thisPC >= zm.romStart)
                         zm.cache.Add(thisPC, entry, count);
                 }
                 zm.pc = entry.NextPC;
-                entry.Code();
+                try
+                {
+                    entry.Code();
+                }
+                catch (DebuggerBreakException ex)
+                {
+                    zm.pc = ex.ResumePC;
+                    zm.debugState = DebuggerState.Paused;
+                }
             }
 
             public void StepInto()
@@ -231,12 +254,21 @@ namespace ZLR.VM
             [NotNull]
             public int[] GetBreakpoints() => zm.breakpoints.Keys.ToArray();
 
-            public short Call(short packedAddress, short[] args)
+            public short? Call(short packedAddress, short[] args)
             {
                 zm.running = true;
                 zm.EnterFunctionImpl(packedAddress, args, 0, zm.pc);
-                zm.JitLoop();
-                return zm.stack.Pop();
+                try
+                {
+                    zm.JitLoop();
+                    return zm.stack.Pop();
+                }
+                catch (DebuggerBreakException ex)
+                {
+                    zm.pc = ex.ResumePC;
+                    zm.debugState = DebuggerState.Paused;
+                    return null;
+                }
             }
 
             public byte ReadByte(int address) => zm.zmem[address];
@@ -262,7 +294,7 @@ namespace ZLR.VM
                 }
                 else if (number < 16)
                 {
-                    return zm.topFrame.Locals[number - 1];
+                    return zm.TopFrame.Locals[number - 1];
                 }
                 else
                 {
@@ -279,7 +311,7 @@ namespace ZLR.VM
                 }
                 else if (number < 16)
                 {
-                    zm.topFrame.Locals[number - 1] = value;
+                    zm.TopFrame.Locals[number - 1] = value;
                 }
                 else
                 {
@@ -359,22 +391,17 @@ namespace ZLR.VM
 
                     Opcode opcode = zm.DecodeOneOp(types, argv);
 
-                    RoutineInfo rtn;
-                    if (zm.debugFile == null)
-                        rtn = null;
-                    else
-                        rtn = zm.debugFile.FindRoutine(address);
+                    var rtn = zm.debugFile?.FindRoutine(address);
 
                     return opcode.Disassemble(delegate(byte varnum)
                     {
                         if (rtn != null && varnum - 1 < rtn.Locals.Length)
                             return "local_" + varnum + "(" + rtn.Locals[varnum - 1] + ")";
-                        else if (varnum < 16)
+                        if (varnum < 16)
                             return "local_" + varnum;
-                        else if (zm.debugFile != null && zm.debugFile.Globals.Contains((byte)(varnum - 16)))
+                        if (zm.debugFile != null && zm.debugFile.Globals.Contains((byte)(varnum - 16)))
                             return "global_" + varnum + "(" + zm.debugFile.Globals[(byte)(varnum - 16)] + ")";
-                        else
-                            return "global_" + varnum;
+                        return "global_" + varnum;
                     });
 
                 }
@@ -384,10 +411,7 @@ namespace ZLR.VM
                 }
             }
 
-            public int StackDepth
-            {
-                get { return zm.stack.Count; }
-            }
+            public int StackDepth => zm.stack.Count;
 
             public void StackPush(short value)
             {
@@ -432,10 +456,7 @@ namespace ZLR.VM
                 }
             }
 
-            public IDebuggerEvents Events
-            {
-                get { return zm; }
-            }
+            public IDebuggerEvents Events => zm;
 
             #endregion
         }
@@ -448,9 +469,7 @@ namespace ZLR.VM
 
         private void HandleEnterFunction(short packedAddress, short[] args, int resultStorage, int returnPC)
         {
-            var handler = EnteringFunction;
-            if (handler != null)
-                handler(this, new EnterFunctionEventArgs(
+            EnteringFunction?.Invoke(this, new EnterFunctionEventArgs(
                     packedAddress, args, resultStorage, returnPC, callStack.Count));
         }
     }

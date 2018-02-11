@@ -30,6 +30,7 @@ namespace ZLR.Interfaces.SystemConsole
 
         private readonly int origBufHeight;
         private readonly bool weakConsole;
+        private int prevWinWidth, prevWinHeight;
 
         public ConsoleIO(string fileName)
         {
@@ -42,7 +43,8 @@ namespace ZLR.Interfaces.SystemConsole
                     // constrain the buffer height to something reasonable before the
                     // game has a chance to print too much, which will prevent us from
                     // shrinking the buffer later
-                    Console.BufferHeight = 25;
+                    origBufHeight = Console.BufferHeight;
+                    Console.SetBufferSize(Console.WindowWidth, Console.WindowHeight);
                 }
                 catch (ArgumentOutOfRangeException)
                 {
@@ -59,7 +61,8 @@ namespace ZLR.Interfaces.SystemConsole
                 weakConsole = true;
             }
 
-            origBufHeight = Console.BufferHeight;
+            prevWinWidth = Console.WindowWidth;
+            prevWinHeight = Console.WindowHeight;
         }
 
         [PublicAPI]
@@ -67,8 +70,8 @@ namespace ZLR.Interfaces.SystemConsole
 
         public bool HideMorePrompts { get; set; }
 
-        public string ReadLine(string initial, int time, TimedInputCallback callback,
-            byte[] terminatingKeys, out byte terminator)
+        public ReadLineResult ReadLine(string initial, int time, TimedInputCallback callback,
+            byte[] terminatingKeys, bool allowDebuggerBreak)
         {
             FlushBuffer();
             lineCount = 0;
@@ -76,6 +79,7 @@ namespace ZLR.Interfaces.SystemConsole
             int histIdx = history.Count;
             string savedEntry = string.Empty;
             int sleeps = 0;
+            byte terminator;
 
             StringBuilder sb;
             int cursor;
@@ -108,8 +112,7 @@ namespace ZLR.Interfaces.SystemConsole
                             int cy = Console.CursorTop;
                             if (callback())
                             {
-                                terminator = 0;
-                                return string.Empty;
+                                return ReadLineResult.Cancelled;
                             }
                             // the game may have printed something anyway
                             if (Console.CursorLeft != cx ||
@@ -233,6 +236,19 @@ namespace ZLR.Interfaces.SystemConsole
                             Console.Write("\x08 \x08");
                         sb.Length = 0;
                         break;
+
+                    case ConsoleKey.B:
+                        if (allowDebuggerBreak && info.Modifiers == ConsoleModifiers.Alt)
+                        {
+                            // debugger break
+                            CheckScroll(true);
+                            Console.WriteLine();
+                            return ReadLineResult.DebuggerBreak;
+                        }
+                        else
+                        {
+                            goto default;
+                        }
                         
                     default:
                         if (info.KeyChar != '\0')
@@ -261,7 +277,7 @@ namespace ZLR.Interfaces.SystemConsole
             if (history.Count > MAX_COMMAND_HISTORY)
                 history.RemoveAt(0);
 
-            return result;
+            return ReadLineResult.LineEntered(result, terminator);
         }
 
         private static bool IsTerminator(byte key, byte[] terminatingKeys)
@@ -498,28 +514,38 @@ namespace ZLR.Interfaces.SystemConsole
             if (lines < 0)
                 lines = 0;
 
+            var oldSplit = split;
             split = Math.Min(lines, Console.WindowHeight);
             if (!weakConsole)
             {
                 Console.BufferHeight = split == 0 ? origBufHeight : Console.WindowHeight;
             }
 
-            if (upper)
+            SaveCursorPos();
+
+            ylower = ylower + oldSplit - split;
+
+            if (split == 0)
             {
-                if (Console.CursorTop >= split)
-                {
-                    Console.CursorTop = Math.Max(split - 1, 0);
-                    Console.CursorLeft = 0;
-                }
+                xupper = 1;
+                yupper = 1;
+                upper = false;
             }
             else
             {
-                if (Console.CursorTop < split && split < Console.WindowHeight)
+                if (yupper > split)
                 {
-                    Console.CursorTop = split;
-                    Console.CursorLeft = 0;
+                    xupper = 1;
+                    yupper = 1;
+                }
+
+                if (ylower <= split)
+                {
+                    ylower = Math.Min(split + 1, Console.WindowHeight);
                 }
             }
+
+            RestoreCursorPos();
         }
 
         public void SelectWindow(short num)
@@ -534,6 +560,8 @@ namespace ZLR.Interfaces.SystemConsole
 
                 case 1:
                     upper = true;
+                    xupper = 1;
+                    yupper = 1;
                     break;
 
                 default:
@@ -561,108 +589,132 @@ namespace ZLR.Interfaces.SystemConsole
 
             x = Math.Min(Math.Max(x, 0), Console.WindowWidth - 1);
             y = Math.Min(Math.Max(y, 0), Console.WindowHeight - 1);
-            Console.SetCursorPosition(x, y);
+            Console.SetCursorPosition(x + Console.WindowLeft, y + Console.WindowTop);
         }
 
         private void SaveCursorPos()
         {
             if (upper)
             {
-                xupper = Console.CursorLeft + 1;
-                yupper = Console.CursorTop + 1;
+                xupper = Console.CursorLeft - Console.WindowLeft + 1;
+                yupper = Console.CursorTop - Console.WindowTop + 1;
             }
             else
             {
-                xlower = Console.CursorLeft + 1;
-                ylower = Console.CursorTop - split + 1;
+                xlower = Console.CursorLeft - Console.WindowLeft + 1;
+                ylower = Console.CursorTop - Console.WindowTop - split + 1;
             }
         }
 
         public void EraseWindow(short num)
         {
-            if (num < 1)
+            bool oldReverse = reverse;
+            try
             {
-                buffer.Clear();
-                bufferLength = 0;
-            }
+                reverse = false;
+                SetConsoleColors();
 
-            if (num < 0)
-            {
-                // -1 = erase all and unsplit, -2 = erase all but keep split
-                // both select the lower window and move its cursor to the top left
-                Console.Clear();
-
-                if (num == -1)
-                    split = 0;
-
-                upper = false;
-                xlower = 1;
-                ylower = scrollFromBottom ? Console.WindowHeight - split : 1;
-                Console.SetCursorPosition(xlower - 1, ylower - 1 + split);
-                return;
-            }
-
-            SaveCursorPos();
-
-            if (num == 0)
-            {
-                // erase lower
-                int height = Console.WindowHeight;
-                int width = Console.WindowWidth;
-                int startat = 0;
-
-                if (split > 0)
+                if (num < 1)
                 {
-                    /* we have to move the upper window's contents down one line, because
-                     * clearing the lower window will cause the whole console to scroll.
-                     * this is flickery, but there doesn't seem to be a better way. */
-                    /* actually, there is an alternative: keep the entire contents of the
-                     * upper window in an offscreen buffer, then clear the entire screen
-                     * and repaint the upper window. */
-                    Console.MoveBufferArea(0, 0, width, split, 0, 1);
-                    startat = split + 1;
+                    buffer.Clear();
+                    bufferLength = 0;
                 }
 
-                Console.BackgroundColor = bglower;
-                for (int i = startat; i < height; i++)
+                if (num < 0)
                 {
-                    Console.SetCursorPosition(0, i);
-                    for (int j = 0; j < width; j++)
-                        Console.Write(' ');
+                    // -1 = erase all and unsplit, -2 = erase all but keep split
+                    // both select the lower window and move its cursor to the top left
+                    Console.Clear();
+
+                    if (num == -1)
+                        split = 0;
+
+                    upper = false;
+                    xlower = 1;
+                    ylower = scrollFromBottom ? Console.WindowHeight - split : 1;
+                    Console.SetCursorPosition(xlower - 1 + Console.WindowLeft, ylower - 1 + split + Console.WindowTop);
+                    return;
                 }
-                xlower = 1;
-                ylower = 1;
+
+                SaveCursorPos();
+
+                if (num == 0)
+                {
+                    // erase lower
+                    int height = Console.WindowHeight;
+                    int width = Console.WindowWidth;
+                    int startat = 0;
+
+                    if (split > 0)
+                    {
+                        /* we have to move the upper window's contents down one line, because
+                         * clearing the lower window will cause the whole console to scroll.
+                         * this is flickery, but there doesn't seem to be a better way. */
+                        /* actually, there is an alternative: keep the entire contents of the
+                         * upper window in an offscreen buffer, then clear the entire screen
+                         * and repaint the upper window. */
+                        Console.MoveBufferArea(0, 0, width, split, 0, 1);
+                        startat = split + 1;
+                    }
+
+                    Console.BackgroundColor = bglower;
+                    for (int i = startat; i < height; i++)
+                    {
+                        Console.SetCursorPosition(Console.WindowLeft, i + Console.WindowTop);
+                        for (int j = 0; j < width; j++)
+                            Console.Write(' ');
+                    }
+
+                    xlower = 1;
+                    ylower = 1;
+                }
+                else if (num == 1)
+                {
+                    // erase upper
+                    int height = split;
+                    int width = Console.WindowWidth;
+                    Console.BackgroundColor = bgupper;
+                    for (int i = 0; i < height; i++)
+                    {
+                        Console.SetCursorPosition(Console.WindowLeft, i + Console.WindowTop);
+                        for (int j = 0; j < width; j++)
+                            Console.Write(' ');
+                    }
+
+                    xupper = 1;
+                    yupper = 1;
+                }
             }
-            else if (num == 1)
+            finally
             {
-                // erase upper
-                int height = split;
-                int width = Console.WindowWidth;
-                Console.BackgroundColor = bgupper;
-                for (int i = 0; i < height; i++)
-                {
-                    Console.SetCursorPosition(0, i);
-                    for (int j = 0; j < width; j++)
-                        Console.Write(' ');
-                }
-                xupper = 1;
-                yupper = 1;
+                reverse = oldReverse;
+                SetConsoleColors();
             }
 
-            // restore colors and cursor
+            // restore cursor
             RestoreCursorPos();
-            SetConsoleColors();
         }
 
         public void EraseLine()
         {
-            SaveCursorPos();
+            bool oldReverse = reverse;
+            try
+            {
+                reverse = false;
+                SetConsoleColors();
 
-            int count = Console.WindowWidth - Console.CursorLeft;
-            for (int i = 0; i < count; i++)
-                Console.Write(' ');
+                SaveCursorPos();
 
-            RestoreCursorPos();
+                int count = Console.WindowWidth - Console.CursorLeft;
+                for (int i = 0; i < count; i++)
+                    Console.Write(' ');
+
+                RestoreCursorPos();
+            }
+            finally
+            {
+                reverse = oldReverse;
+            }
         }
 
         public void MoveCursor(short x, short y)
@@ -679,12 +731,9 @@ namespace ZLR.Interfaces.SystemConsole
                     y = 1;
 
                 if (y > split)
-                {
-                    if (split == 0)
-                        split = 1;
-                    y = (short)split;
-                }
-                Console.SetCursorPosition(x - 1, y - 1);
+                    SplitWindow(y);
+
+                Console.SetCursorPosition(x - 1 + Console.WindowLeft, y - 1 + Console.WindowTop);
             }
         }
 
@@ -693,8 +742,8 @@ namespace ZLR.Interfaces.SystemConsole
             if (!upper)
                 FlushBuffer();
 
-            int cx = Console.CursorLeft;
-            int cy = Console.CursorTop;
+            int cx = Console.CursorLeft - Console.WindowLeft;
+            int cy = Console.CursorTop - Console.WindowTop;
 
             if (upper)
             {
@@ -839,11 +888,7 @@ namespace ZLR.Interfaces.SystemConsole
 
         public byte FontWidth => 1;
 
-        public event EventHandler SizeChanged
-        {
-            add { /* nada */ }
-            remove { /* nada */ }
-        }
+        public event EventHandler SizeChanged;
 
         public bool ColorsAvailable => true;
 
@@ -1039,6 +1084,15 @@ namespace ZLR.Interfaces.SystemConsole
 
         private void FlushBuffer()
         {
+            // first, take the opportunity to check for console resize
+            if (Console.WindowWidth != prevWinWidth || Console.WindowHeight != prevWinHeight)
+            {
+                prevWinWidth = Console.WindowWidth;
+                prevWinHeight = Console.WindowHeight;
+                SizeChanged?.Invoke(this, EventArgs.Empty);
+            }
+
+            // then flush the buffer
             foreach (uint item in buffer)
             {
                 if ((item & STYLE_FLAG) == 0)

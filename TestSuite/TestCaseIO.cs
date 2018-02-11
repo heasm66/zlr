@@ -23,7 +23,7 @@ namespace TestSuite
 
         #region IZMachineIO Members
 
-        public abstract string ReadLine(string initial, int time, TimedInputCallback callback, byte[] terminatingKeys, out byte terminator);
+        public abstract ReadLineResult ReadLine(string initial, int time, TimedInputCallback callback, byte[] terminatingKeys, bool allowDebuggerBreak);
 
         public abstract short ReadKey(int time, TimedInputCallback callback, CharTranslator translator);
 
@@ -211,10 +211,9 @@ namespace TestSuite
             inputFile = prevInputFile;
         }
 
-        public override string ReadLine(string initial, int time, TimedInputCallback callback, byte[] terminatingKeys, out byte terminator)
+        public override ReadLineResult ReadLine(string initial, int time, TimedInputCallback callback, byte[] terminatingKeys, bool allowDebuggerBreak)
         {
-            terminator = 13;
-            return inputBuffer.Dequeue();
+            return ReadLineResult.LineEntered(inputBuffer.Dequeue());
         }
 
         public override short ReadKey(int time, TimedInputCallback callback, CharTranslator translator)
@@ -258,10 +257,10 @@ namespace TestSuite
             inputFile = newInputFile;
         }
 
-        public override string ReadLine(string initial, int time, TimedInputCallback callback, byte[] terminatingKeys, out byte terminator)
+        public override ReadLineResult ReadLine(string initial, int time, TimedInputCallback callback, byte[] terminatingKeys, bool allowDebuggerBreak)
         {
-            terminator = 13;
-            return Console.ReadLine() ?? string.Empty;
+            var line = Console.ReadLine();
+            return line == null ? ReadLineResult.Cancelled : ReadLineResult.LineEntered(line);
         }
 
         public override short ReadKey(int time, TimedInputCallback callback, CharTranslator translator)

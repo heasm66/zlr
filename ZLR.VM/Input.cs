@@ -3,6 +3,7 @@ using System.Collections.Generic;
 using System.IO;
 using System.Text;
 using JetBrains.Annotations;
+using ZLR.VM.Debugging;
 
 namespace ZLR.VM
 {
@@ -12,7 +13,7 @@ namespace ZLR.VM
     public partial class ZMachine
     {
 #pragma warning disable 0169
-        internal short ReadImpl(ushort buffer, ushort parse, ushort time, ushort routine)
+        internal short ReadImpl(ushort buffer, ushort parse, ushort time, ushort routine, int retryPC)
         {
             byte max, initlen;
             if (zversion <= 4)
@@ -52,9 +53,19 @@ namespace ZLR.VM
                             sb.Append(CharFromZSCII(GetByte(buffer + 2 + i)));
                         initial = sb.ToString();
                     }
-                    str = io.ReadLine(initial,
+                    var result = io.ReadLine(initial,
                         time, () => HandleInputTimer(routine),
-                        terminatingChars, out terminator);
+                        terminatingChars, debugging);
+                    switch (result.Outcome)
+                    {
+                        case ReadOutcome.KeyPressed:
+                            terminator = result.Terminator;
+                            str = result.Text;
+                            break;
+
+                        default:
+                            throw new DebuggerBreakException(retryPC);
+                    }
                 }
                 else
                 {
@@ -63,6 +74,7 @@ namespace ZLR.VM
                     if (terminator == 13)
                         io.PutCommand(str + "\n");
                     else
+                        // ReSharper disable once AssignNullToNotNullAttribute
                         io.PutCommand(str);
                 }
 
@@ -73,6 +85,7 @@ namespace ZLR.VM
                 EndExternalWait();
             }
 
+            // ReSharper disable once PossibleNullReferenceException
             var chars = StringToZSCII(str.ToLower());
             if (zversion <= 4)
             {

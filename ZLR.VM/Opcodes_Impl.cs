@@ -51,7 +51,7 @@ namespace ZLR.VM
             if (args != null)
                 Array.Copy(args, frame.Locals, Math.Min(args.Length, numLocals));
             callStack.Push(frame);
-            topFrame = frame;
+            TopFrame = frame;
             pc = address;
         }
 
@@ -211,7 +211,7 @@ namespace ZLR.VM
 
         private void SetTopFrame()
         {
-            topFrame = callStack.Count > 0 ? callStack.Peek() : null;
+            TopFrame = callStack.Count > 0 ? callStack.Peek() : null;
         }
 
         internal void Restart()
@@ -221,7 +221,7 @@ namespace ZLR.VM
 
             stack.Clear();
             callStack.Clear();
-            topFrame = null;
+            TopFrame = null;
             undoStates.Clear();
 
             ResetHeaderFields();

@@ -2,6 +2,7 @@ using System;
 using System.Reflection;
 using System.Reflection.Emit;
 using JetBrains.Annotations;
+using ZLR.VM.Debugging;
 
 namespace ZLR.VM
 {
@@ -94,29 +95,78 @@ namespace ZLR.VM
         [Opcode(OpCount.Var, 228, MaxVersion = 4)]
         private void op_sread([NotNull] ILGenerator il)
         {
-            MethodInfo impl = ZMachine.GetMethodInfo(nameof(ZMachine.ReadImpl));
-
-            il.Emit(OpCodes.Ldarg_0);
-            LoadOperand(il, 0);
-            LoadOperand(il, 1);
-            LoadOperand(il, 2);
-            LoadOperand(il, 3);
-            il.Emit(OpCodes.Call, impl);
-            il.Emit(OpCodes.Pop);
+            CompileReadOp(il);
         }
 
         [Opcode(OpCount.Var, 228, true, MinVersion = 5)]
         private void op_aread([NotNull] ILGenerator il)
         {
-            MethodInfo impl = ZMachine.GetMethodInfo(nameof(ZMachine.ReadImpl));
+            CompileReadOp(il);
+        }
+
+        private void CompileReadOp([NotNull] ILGenerator il)
+        {
+            var impl = ZMachine.GetMethodInfo(nameof(ZMachine.ReadImpl));
+
+            if (zm.debugging)
+            {
+                il.BeginExceptionBlock();
+            }
 
             il.Emit(OpCodes.Ldarg_0);
             LoadOperand(il, 0);
             LoadOperand(il, 1);
             LoadOperand(il, 2);
             LoadOperand(il, 3);
+            il.Emit(OpCodes.Ldc_I4, PC);
             il.Emit(OpCodes.Call, impl);
-            StoreResult(il);
+
+            if (zm.ZVersion < 5)
+            {
+                // sread - no store
+                il.Emit(OpCodes.Pop);
+            }
+            else
+            {
+                // aread - store
+                StoreResult(il);
+            }
+
+            if (zm.debugging)
+            {
+                var pcFI = typeof(ZMachine).GetField("pc", BindingFlags.NonPublic | BindingFlags.Instance);
+                var debugStateFI = typeof(ZMachine).GetField("debugState", BindingFlags.NonPublic | BindingFlags.Instance);
+                // ReSharper disable once InconsistentNaming
+                var exceptionPCPI = typeof(DebuggerBreakException).GetProperty(nameof(DebuggerBreakException.ResumePC));
+
+                il.BeginCatchBlock(typeof(DebuggerBreakException));
+
+                var exnLocal = il.DeclareLocal(typeof(DebuggerBreakException));
+                il.Emit(OpCodes.Stloc, exnLocal);
+
+                il.Emit(OpCodes.Ldarg_0);
+                il.Emit(OpCodes.Ldloc, exnLocal);
+                il.Emit(OpCodes.Call, exceptionPCPI.GetMethod);
+                il.Emit(OpCodes.Stfld, pcFI);
+
+                il.Emit(OpCodes.Ldarg_0);
+                il.Emit(OpCodes.Ldc_I4, (int)DebuggerState.Paused);
+                il.Emit(OpCodes.Stfld, debugStateFI);
+
+                // can't use OpCodes.Ret inside an exception block...
+                var retLabel = il.DefineLabel();
+                
+                il.Emit(OpCodes.Leave_S, retLabel);
+
+                il.EndExceptionBlock();
+                var afterRetLabel = il.DefineLabel();
+                il.Emit(OpCodes.Br_S, afterRetLabel);
+
+                il.MarkLabel(retLabel);
+                il.Emit(OpCodes.Ret);
+
+                il.MarkLabel(afterRetLabel);
+            }
         }
 
         [Opcode(OpCount.Var, 229)]
@@ -199,13 +249,25 @@ namespace ZLR.VM
         private void op_split_window([NotNull] ILGenerator il)
         {
             var ioFI = ZMachine.GetFieldInfo(nameof(ZMachine.io));
-            MethodInfo impl = typeof(IZMachineIO).GetMethod(nameof(IZMachineIO.SplitWindow));
-            System.Diagnostics.Debug.Assert(impl != null);
+            MethodInfo splitWindowMI = typeof(IZMachineIO).GetMethod(nameof(IZMachineIO.SplitWindow));
+            System.Diagnostics.Debug.Assert(splitWindowMI != null);
 
             il.Emit(OpCodes.Ldarg_0);
             il.Emit(OpCodes.Ldfld, ioFI);
             LoadOperand(il, 0);
-            il.Emit(OpCodes.Call, impl);
+            il.Emit(OpCodes.Call, splitWindowMI);
+
+            if (zm.ZVersion == 3)
+            {
+                // clear the upper window after splitting
+                var eraseWindowMI = typeof(IZMachineIO).GetMethod(nameof(IZMachineIO.EraseWindow));
+                System.Diagnostics.Debug.Assert(eraseWindowMI != null);
+
+                il.Emit(OpCodes.Ldarg_0);
+                il.Emit(OpCodes.Ldfld, ioFI);
+                il.Emit(OpCodes.Ldc_I4_1);
+                il.Emit(OpCodes.Call, eraseWindowMI);
+            }
         }
 
         [Opcode(OpCount.Var, 235, MinVersion = 3)]

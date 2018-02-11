@@ -180,12 +180,11 @@ namespace ZLR.Interfaces.SystemConsole
 
             bool DummyTimedInputCallback() => false;
             
-
             while (console.Active)
             {
-                string cmd = zm.IO.ReadLine(string.Empty, 0, DummyTimedInputCallback, DummyTerminatingKeys, out _);
-
-                console.HandleCommand(cmd);
+                var result = zm.IO.ReadLine(string.Empty, 0, DummyTimedInputCallback, DummyTerminatingKeys, false);
+                System.Diagnostics.Debug.Assert(result.Outcome == ReadOutcome.KeyPressed);
+                console.HandleCommand(result.Text);
             }
         }
     }

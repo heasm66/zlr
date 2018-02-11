@@ -33,6 +33,7 @@ namespace ZLR.VM
 
     internal delegate string VariableNameProvider(byte num);
 
+    [System.Diagnostics.CodeAnalysis.SuppressMessage("Style", "IDE1006:Naming Styles", Justification = "opcode names", Scope = "class")]
     internal partial class Opcode
     {
         public readonly int PC, ZCodeLength;

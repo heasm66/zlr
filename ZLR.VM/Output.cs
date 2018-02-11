@@ -1,7 +1,8 @@
 using System;
-using System.Text;
 using System.Collections.Generic;
+using System.Diagnostics;
 using System.IO;
+using System.Text;
 using JetBrains.Annotations;
 
 namespace ZLR.VM
@@ -53,7 +54,7 @@ namespace ZLR.VM
         /// <summary>
         /// Fixed pitch text.
         /// </summary>
-        FixedPitch = 8,
+        FixedPitch = 8
     }
 
     /// <summary>
@@ -76,7 +77,86 @@ namespace ZLR.VM
         /// <summary>
         /// Evict the sound from the cache because it won't be needed again soon.
         /// </summary>
-        FinishWith = 4,
+        FinishWith = 4
+    }
+
+    /// <summary>
+    /// Indicates the reason why an input method returned.
+    /// </summary>
+    public enum ReadOutcome
+    {
+        /// <summary>
+        /// Input was cancelled by the timer callback.
+        /// </summary>
+        Cancelled,
+
+        /// <summary>
+        /// Input was terminated by a keypress.
+        /// </summary>
+        KeyPressed,
+
+        /// <summary>
+        /// The user asked to break into the debugger.
+        /// </summary>
+        DebuggerBreak
+    }
+
+    /// <summary>
+    /// Indicates the outcome of a call to <see cref="IZMachineIO.ReadLine"/>.
+    /// </summary>
+    public struct ReadLineResult
+    {
+        public ReadOutcome Outcome { get; }
+
+        [CanBeNull]
+        private readonly string text;
+
+        private readonly byte terminator;
+
+        [NotNull]
+        public string Text
+        {
+            get
+            {
+                if (Outcome != ReadOutcome.KeyPressed)
+                    throw new InvalidOperationException();
+
+                Debug.Assert(text != null);
+                // ReSharper disable once AssignNullToNotNullAttribute
+                return text;
+            }
+        }
+
+        public byte Terminator =>
+            Outcome == ReadOutcome.KeyPressed ? terminator : throw new InvalidOperationException();
+
+        private ReadLineResult(ReadOutcome outcome, [CanBeNull] string text, byte terminator)
+        {
+            Outcome = outcome;
+            this.text = text;
+            this.terminator = terminator;
+        }
+
+        /// <summary>
+        /// Input was cancelled by the timer callback.
+        /// </summary>
+        public static readonly ReadLineResult Cancelled = new ReadLineResult(ReadOutcome.Cancelled, null, 0);
+
+        /// <summary>
+        /// The user asked to break into the debugger.
+        /// </summary>
+        public static readonly ReadLineResult DebuggerBreak = new ReadLineResult(ReadOutcome.DebuggerBreak, null, 0);
+
+        /// <summary>
+        /// The user entered text and pressed a terminating key. 
+        /// </summary>
+        /// <param name="text">The entered text.</param>
+        /// <param name="terminator">The ZSCII code of the terminating key.</param>
+        /// <returns>A structure describing the result of the read.</returns>
+        public static ReadLineResult LineEntered([NotNull] string text, byte terminator = 13)
+        {
+            return new ReadLineResult(ReadOutcome.KeyPressed, text, terminator);
+        }
     }
 
     /// <summary>
@@ -105,18 +185,16 @@ namespace ZLR.VM
         /// <param name="terminatingKeys">An array of ZSCII values of function keys which should
         /// terminate input immediately if pressed. The special value 255 means "any function key" and will
         /// appear alone.</param>
-        /// <param name="terminator">Set to the ZSCII value of the key that terminated input, or 13
-        /// if input was finished normally by pressing enter.</param>
-        /// <returns>An empty string if input was cancelled by the timer callback, or the input string
-        /// if input was finished normally by pressing enter or one of the terminating keys.</returns>
+        /// <param name="allowDebuggerBreak"><b>true</b> if the function may break into the debugger by
+        /// returning <see cref="ReadLineResult.DebuggerBreak"/>.</param>
+        /// <returns>A <see cref="ReadLineResult"/> indicating how the line input request ended.</returns>
         /// <remarks>
         /// <para>If a non-empty string is supplied as <paramref name="initial"/>, the string will have
         /// already been printed by the game. The interface should avoid printing it again, but should
         /// still allow the player to edit it as if he had typed it himself. (If this cannot be achieved,
         /// it is recommended to err on the side of letting the player edit the text.)</para>
         /// </remarks>
-        [NotNull]
-        string ReadLine([NotNull] string initial, int time, [NotNull] TimedInputCallback callback, [CanBeNull] byte[] terminatingKeys, out byte terminator);
+        ReadLineResult ReadLine([NotNull] string initial, int time, [NotNull] TimedInputCallback callback, [CanBeNull] byte[] terminatingKeys, bool allowDebuggerBreak);
         /// <summary>
         /// Reads a single key of input from the player, without echoing it.
         /// </summary>
@@ -550,8 +628,7 @@ namespace ZLR.VM
             {
                 if (zversion >= 4)
                     return 9;
-                else
-                    return 6;
+                return 6;
             }
         }
 
@@ -861,8 +938,7 @@ namespace ZLR.VM
 #pragma warning disable 0169
         internal void GetCursorPos(ushort address)
         {
-            short x, y;
-            io.GetCursorPos(out x, out y);
+            io.GetCursorPos(out var x, out var y);
             SetWordChecked(address, y);
             SetWordChecked(address + 2, x);
         }

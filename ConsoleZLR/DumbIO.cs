@@ -18,11 +18,19 @@ namespace ZLR.Interfaces.SystemConsole
             suppliedCommandFile = commandFile;
         }
 
-        public string ReadLine(string initial, int time, TimedInputCallback callback,
-            byte[] terminatingKeys, out byte terminator)
+        public ReadLineResult ReadLine(string initial, int time, TimedInputCallback callback,
+            byte[] terminatingKeys, bool allowDebuggerBreak)
         {
-            terminator = 13;
-            return Console.ReadLine() ?? "";
+            var text = Console.ReadLine() ?? "";
+
+            if (allowDebuggerBreak &&
+                (text.Equals("/break", StringComparison.CurrentCultureIgnoreCase) ||
+                 text.Equals("/b", StringComparison.CurrentCultureIgnoreCase)))
+            {
+                return ReadLineResult.DebuggerBreak;
+            }
+
+            return ReadLineResult.LineEntered(text);
         }
 
         public short ReadKey(int time, TimedInputCallback callback, CharTranslator translator)

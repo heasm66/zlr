@@ -136,7 +136,7 @@ namespace ZLR.Interfaces.Demona
 
         #region IZMachineIO Members
 
-        string IZMachineIO.ReadLine(string initial, int time, TimedInputCallback callback, byte[] terminatingKeys, out byte terminator)
+        ReadLineResult IZMachineIO.ReadLine(string initial, int time, TimedInputCallback callback, byte[] terminatingKeys, bool allowDebuggerBreak)
         {
             const int BUFSIZE = 256;
             var buf = Marshal.AllocHGlobal(unicode ? BUFSIZE * 4 : BUFSIZE);
@@ -174,10 +174,10 @@ namespace ZLR.Interfaces.Demona
                     Glk.garglk_set_line_terminators(currentWin, glkTerminators, (uint)glkTerminators.Length);
                 }
 
-                terminator = 0;
+                byte terminator = 0;
 
                 event_t ev;
-                var done = false;
+                bool done = false, cancelled = false;
                 do
                 {
                     Glk.glk_select(out ev);
@@ -200,6 +200,7 @@ namespace ZLR.Interfaces.Demona
                             if (callback())
                             {
                                 done = true;
+                                cancelled = true;
                             }
                             else if (!lineInputActive)
                             {
@@ -227,13 +228,18 @@ namespace ZLR.Interfaces.Demona
                 Glk.glk_request_timer_events(0);
                 PerformSplit(targetSplit);
 
+                if (cancelled) {
+                    return ReadLineResult.Cancelled;
+                }
+
                 // convert the string from Latin-1 or UTF-32
                 var length = (int)ev.val1;
                 if (unicode)
                     length *= 4;
                 var bytes = new byte[length];
                 Marshal.Copy(buf, bytes, 0, length);
-                return encoding.GetString(bytes);
+                var text = encoding.GetString(bytes);
+                return ReadLineResult.LineEntered(text, terminator);
             }
             finally
             {
