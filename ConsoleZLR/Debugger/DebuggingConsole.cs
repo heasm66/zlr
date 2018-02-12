@@ -2,6 +2,7 @@
 using System.Collections.Generic;
 using System.IO;
 using System.Text;
+using System.Threading.Tasks;
 using JetBrains.Annotations;
 using ZLR.VM;
 using ZLR.VM.Debugging;
@@ -124,7 +125,7 @@ namespace ZLR.Interfaces.SystemConsole.Debugger
             }
         }
 
-        public void HandleCommand([NotNull] string cmd)
+        public async Task HandleCommandAsync([NotNull] string cmd)
         {
             if (cmd.Trim() == "")
             {
@@ -152,35 +153,35 @@ namespace ZLR.Interfaces.SystemConsole.Debugger
                     case "s":
                     case "step":
                         if (dbg.State == DebuggerState.Paused)
-                            dbg.StepInto();
+                            await dbg.StepIntoAsync();
                         break;
 
                     case "o":
                     case "over":
                         if (dbg.State == DebuggerState.Paused)
-                            dbg.StepOver();
+                            await dbg.StepOverAsync();
                         break;
 
                     case "up":
                         if (dbg.State == DebuggerState.Paused)
-                            dbg.StepUp();
+                            await dbg.StepUpAsync();
                         break;
 
                     case "sl":
                     case "stepline":
-                        DoStepLine();
+                        await DoStepLineAsync();
                         break;
 
                     case "ol":
                     case "overline":
-                        DoOverLine();
+                        await DoOverLineAsync();
                         break;
 
                     case "r":
                     case "run":
                         if (dbg.State == DebuggerState.Stopped)
                             dbg.Restart();
-                        dbg.Run();
+                        await dbg.RunAsync();
                         break;
 
                     case "b":
@@ -490,7 +491,7 @@ namespace ZLR.Interfaces.SystemConsole.Debugger
             }
         }
 
-        private void DoOverLine()
+        private async Task DoOverLineAsync()
         {
             if (dbg.State == DebuggerState.Paused)
             {
@@ -504,7 +505,7 @@ namespace ZLR.Interfaces.SystemConsole.Debugger
                     LineInfo? newLI;
                     do
                     {
-                        dbg.StepOver();
+                        await dbg.StepOverAsync();
                         if (dbg.State != DebuggerState.Paused)
                             break;
 
@@ -514,7 +515,7 @@ namespace ZLR.Interfaces.SystemConsole.Debugger
             }
         }
 
-        private void DoStepLine()
+        private async Task DoStepLineAsync()
         {
             if (dbg.State == DebuggerState.Paused)
             {
@@ -528,7 +529,7 @@ namespace ZLR.Interfaces.SystemConsole.Debugger
                     LineInfo? newLI;
                     do
                     {
-                        dbg.StepInto();
+                        await dbg.StepIntoAsync();
                         if (dbg.State != DebuggerState.Paused)
                             break;
 

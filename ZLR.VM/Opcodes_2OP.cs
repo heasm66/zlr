@@ -7,7 +7,7 @@ namespace ZLR.VM
     partial class Opcode
     {
 #pragma warning disable 0169
-        [Opcode(OpCount.Two, 1, false, true)]
+        [Opcode(OpCount.Two, 1, Branch = true)]
         private void op_je([NotNull] ILGenerator il)
         {
             if (argc == 1)
@@ -71,7 +71,7 @@ namespace ZLR.VM
             }
         }
 
-        [Opcode(OpCount.Two, 2, false, true)]
+        [Opcode(OpCount.Two, 2, Branch = true)]
         private void op_jl([NotNull] ILGenerator il)
         {
             LoadOperand(il, 0);
@@ -79,7 +79,7 @@ namespace ZLR.VM
             Branch(il, OpCodes.Blt, OpCodes.Bge);
         }
 
-        [Opcode(OpCount.Two, 3, false, true)]
+        [Opcode(OpCount.Two, 3, Branch = true)]
         private void op_jg([NotNull] ILGenerator il)
         {
             LoadOperand(il, 0);
@@ -87,7 +87,7 @@ namespace ZLR.VM
             Branch(il, OpCodes.Bgt, OpCodes.Ble);
         }
 
-        [Opcode(OpCount.Two, 4, false, true, IndirectVar = true)]
+        [Opcode(OpCount.Two, 4, Branch = true, IndirectVar = true)]
         private void op_dec_chk([NotNull] ILGenerator il)
         {
             var impl = ZMachine.GetMethodInfo(nameof(ZMachine.IncImpl));
@@ -101,7 +101,7 @@ namespace ZLR.VM
             Branch(il, OpCodes.Blt, OpCodes.Bge);
         }
 
-        [Opcode(OpCount.Two, 5, false, true, IndirectVar = true)]
+        [Opcode(OpCount.Two, 5, Branch = true, IndirectVar = true)]
         private void op_inc_chk([NotNull] ILGenerator il)
         {
             var impl = ZMachine.GetMethodInfo(nameof(ZMachine.IncImpl));
@@ -115,7 +115,7 @@ namespace ZLR.VM
             Branch(il, OpCodes.Bgt, OpCodes.Ble);
         }
 
-        [Opcode(OpCount.Two, 6, false, true)]
+        [Opcode(OpCount.Two, 6, Branch = true)]
         private void op_jin([NotNull] ILGenerator il)
         {
             var getParentMI = ZMachine.GetMethodInfo(nameof(ZMachine.GetObjectParent));
@@ -127,7 +127,7 @@ namespace ZLR.VM
             Branch(il, OpCodes.Beq, OpCodes.Bne_Un);
         }
 
-        [Opcode(OpCount.Two, 7, false, true)]
+        [Opcode(OpCount.Two, 7, Branch = true)]
         private void op_test([NotNull] ILGenerator il)
         {
             LoadOperand(il, 0);
@@ -139,19 +139,19 @@ namespace ZLR.VM
             Branch(il, OpCodes.Beq, OpCodes.Bne_Un);
         }
 
-        [Opcode(OpCount.Two, 8, true)]
+        [Opcode(OpCount.Two, 8, Store = true)]
         private void op_or([NotNull] ILGenerator il)
         {
             BinaryOperation(il, OpCodes.Or);
         }
 
-        [Opcode(OpCount.Two, 9, true)]
+        [Opcode(OpCount.Two, 9, Store = true)]
         private void op_and([NotNull] ILGenerator il)
         {
             BinaryOperation(il, OpCodes.And);
         }
 
-        [Opcode(OpCount.Two, 10, false, true)]
+        [Opcode(OpCount.Two, 10, Branch = true)]
         private void op_test_attr([NotNull] ILGenerator il)
         {
             var getAttrMI = ZMachine.GetMethodInfo(nameof(ZMachine.GetObjectAttr));
@@ -209,7 +209,7 @@ namespace ZLR.VM
             il.Emit(OpCodes.Call, impl);
         }
 
-        [Opcode(OpCount.Two, 15, true)]
+        [Opcode(OpCount.Two, 15, Store = true)]
         private void op_loadw([NotNull] ILGenerator il)
         {
             var getWordMI = ZMachine.GetMethodInfo(nameof(ZMachine.GetWord));
@@ -225,7 +225,7 @@ namespace ZLR.VM
             StoreResult(il);
         }
 
-        [Opcode(OpCount.Two, 16, true)]
+        [Opcode(OpCount.Two, 16, Store = true)]
         private void op_loadb([NotNull] ILGenerator il)
         {
             var getByteMI = ZMachine.GetMethodInfo(nameof(ZMachine.GetByte));
@@ -239,7 +239,7 @@ namespace ZLR.VM
             StoreResult(il);
         }
 
-        [Opcode(OpCount.Two, 17, true)]
+        [Opcode(OpCount.Two, 17, Store = true)]
         private void op_get_prop([NotNull] ILGenerator il)
         {
             var getPropMI = ZMachine.GetMethodInfo(nameof(ZMachine.GetPropValue));
@@ -251,7 +251,7 @@ namespace ZLR.VM
             StoreResult(il);
         }
 
-        [Opcode(OpCount.Two, 18, true)]
+        [Opcode(OpCount.Two, 18, Store = true)]
         private void op_get_prop_addr([NotNull] ILGenerator il)
         {
             var getPropAddrMI = ZMachine.GetMethodInfo(nameof(ZMachine.GetPropAddr));
@@ -264,7 +264,7 @@ namespace ZLR.VM
             StoreResult(il);
         }
 
-        [Opcode(OpCount.Two, 19, true)]
+        [Opcode(OpCount.Two, 19, Store = true)]
         private void op_get_next_prop([NotNull] ILGenerator il)
         {
             var getNextPropMI = ZMachine.GetMethodInfo(nameof(ZMachine.GetNextProp));
@@ -276,37 +276,37 @@ namespace ZLR.VM
             StoreResult(il);
         }
 
-        [Opcode(OpCount.Two, 20, true)]
+        [Opcode(OpCount.Two, 20, Store = true)]
         private void op_add([NotNull] ILGenerator il)
         {
             BinaryOperation(il, OpCodes.Add);
         }
 
-        [Opcode(OpCount.Two, 21, true)]
+        [Opcode(OpCount.Two, 21, Store = true)]
         private void op_sub([NotNull] ILGenerator il)
         {
             BinaryOperation(il, OpCodes.Sub);
         }
 
-        [Opcode(OpCount.Two, 22, true)]
+        [Opcode(OpCount.Two, 22, Store = true)]
         private void op_mul([NotNull] ILGenerator il)
         {
             BinaryOperation(il, OpCodes.Mul);
         }
 
-        [Opcode(OpCount.Two, 23, true)]
+        [Opcode(OpCount.Two, 23, Store = true)]
         private void op_div([NotNull] ILGenerator il)
         {
             BinaryOperation(il, OpCodes.Div);
         }
 
-        [Opcode(OpCount.Two, 24, true)]
+        [Opcode(OpCount.Two, 24, Store = true)]
         private void op_mod([NotNull] ILGenerator il)
         {
             BinaryOperation(il, OpCodes.Rem);
         }
 
-        [Opcode(OpCount.Two, 25, true, Terminates = true, MinVersion = 4)]
+        [Opcode(OpCount.Two, 25, Store = true, Terminates = true, MinVersion = 4)]
         private void op_call_2s([NotNull] ILGenerator il)
         {
             EnterFunction(il, true);

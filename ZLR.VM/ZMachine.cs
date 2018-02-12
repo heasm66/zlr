@@ -17,6 +17,7 @@ using System.IO;
 using System.Reflection;
 using System.Reflection.Emit;
 using System.Text;
+using System.Threading.Tasks;
 using JetBrains.Annotations;
 using ZLR.IFF;
 using ZLR.VM.Debugging;
@@ -91,7 +92,7 @@ namespace ZLR.VM
         readonly Stream gameFile;
         internal bool running;
         [NotNull] readonly byte[] zmem;
-        [NotNull] internal readonly IZMachineIO io;
+        [NotNull] internal readonly IAsyncZMachineIO io;
         CommandFileReader cmdRdr;
         CommandFileWriter cmdWtr;
         Stack<short> stack = new Stack<short>();
@@ -134,6 +135,12 @@ namespace ZLR.VM
         const int DEFAULT_MAX_UNDO_DEPTH = 3;
         const int DEFAULT_CACHE_SIZE = 35000;
 
+        [Obsolete("Use the IAsyncZMachineIO constructor instead.")]
+        public ZMachine([NotNull] Stream gameStream, [NotNull] IZMachineIO io)
+            : this(gameStream, AsyncZMachineIOAdapter.Wrap(io))
+        {
+        }
+
         /// <summary>
         /// Initializes a new instance of the ZLR engine from a given stream.
         /// The stream must remain open while the engine is in use.
@@ -141,11 +148,10 @@ namespace ZLR.VM
         /// <param name="gameStream">A stream containing either a plain Z-code
         /// file or a Blorb file which in turn contains a Z-code resource.</param>
         /// <param name="io"></param>
-        public ZMachine([NotNull] Stream gameStream, [NotNull] IZMachineIO io)
+        public ZMachine([NotNull] Stream gameStream, [NotNull] IAsyncZMachineIO io)
         {
             if (gameStream == null)
                 throw new ArgumentNullException(nameof(gameStream));
-
             this.io = io ?? throw new ArgumentNullException(nameof(io));
 
             // check for Blorb
@@ -169,6 +175,7 @@ namespace ZLR.VM
 
             gameFile = gameStream;
 
+            // ReSharper disable once PossibleNullReferenceException
             zmem = new byte[gameStream.Length];
             gameStream.Seek(0, SeekOrigin.Begin);
             gameStream.Read(zmem, 0, (int)gameStream.Length);
@@ -230,7 +237,7 @@ namespace ZLR.VM
 
         // ReSharper disable once InconsistentNaming
         [NotNull]
-        public IZMachineIO IO => io;
+        public IAsyncZMachineIO IO => io;
 
         internal CallFrame TopFrame { get; private set; }
 
@@ -346,7 +353,14 @@ namespace ZLR.VM
             }
         }
 
+        [Obsolete("Use the async method instead.")]
+        [PublicAPI]
         public void Run()
+        {
+            RunAsync().Wait();
+        }
+
+        public async Task RunAsync()
         {
             //DebugOut("Z-machine version {0}", zversion);
 
@@ -378,7 +392,7 @@ namespace ZLR.VM
             running = true;
             try
             {
-                JitLoop();
+                await JitLoopAsync();
             }
             finally
             {
@@ -523,7 +537,7 @@ namespace ZLR.VM
         /// Compiles and executes code, starting from the current <see cref="pc"/> and continuing
         /// until <see cref="running"/> becomes false or the current call frame is exited.
         /// </summary>
-        private void JitLoop()
+        private async Task JitLoopAsync()
         {
             var initialCallDepth = callStack.Count;
 
@@ -563,7 +577,9 @@ namespace ZLR.VM
                     cacheHits++;
 #endif
                 pc = entry.NextPC;
-                entry.Code();
+                var task = entry.Code();
+                if (task != null)
+                    await task;
             }
         }
 
@@ -588,8 +604,10 @@ namespace ZLR.VM
 
         internal int ZVersion => zversion;
 
-        private delegate void ZCodeDelegate();
-        private static readonly Type ZcodeReturnType = null;
+        [CanBeNull]
+        private delegate Task ZCodeDelegate();
+
+        private static readonly Type ZcodeReturnType = typeof(Task);
         private static readonly Type[] ZcodeParamTypes = { typeof(ZMachine) };
 
         [NotNull]
@@ -721,6 +739,7 @@ namespace ZLR.VM
 
                     if (needRet)
                     {
+                        il.Emit(OpCodes.Ldnull);
                         il.Emit(OpCodes.Ret);
                         needRet = false;
                     }
@@ -736,6 +755,7 @@ namespace ZLR.VM
                         il.Emit(OpCodes.Ldc_I4, node.PC);
                         il.Emit(OpCodes.Call, debugChkMI);
                         il.Emit(OpCodes.Brfalse_S, noBreakLabel);
+                        il.Emit(OpCodes.Ldnull);
                         il.Emit(OpCodes.Ret);
                         il.MarkLabel(noBreakLabel);
                     }
@@ -774,6 +794,7 @@ namespace ZLR.VM
                     {
                         if (needRet)
                         {
+                            il.Emit(OpCodes.Ldnull);
                             il.Emit(OpCodes.Ret);
                             needRet = false;
                         }
@@ -798,6 +819,7 @@ namespace ZLR.VM
                 }
             }
 
+            il.Emit(OpCodes.Ldnull);
             il.Emit(OpCodes.Ret);
 
             il = null;

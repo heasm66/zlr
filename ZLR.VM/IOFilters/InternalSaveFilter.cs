@@ -1,4 +1,6 @@
 ﻿using System.IO;
+using System.Threading;
+using System.Threading.Tasks;
 using JetBrains.Annotations;
 
 namespace ZLR.VM.IOFilters
@@ -7,24 +9,25 @@ namespace ZLR.VM.IOFilters
     {
         private MemoryStream saveData;
 
-        public InternalSaveFilter([NotNull] IZMachineIO next)
+        public InternalSaveFilter([NotNull] IAsyncZMachineIO next)
             : base(next)
         {
         }
 
-        [NotNull]
-        public override Stream OpenSaveFile(int size)
+        [ItemNotNull]
+        public override Task<Stream> OpenSaveFileAsync(int size, CancellationToken cancellationToken = default)
         {
             saveData = new MemoryStream(size);
-            return saveData;
+            return Task.FromResult<Stream>(saveData);
         }
 
-        public override Stream OpenRestoreFile()
+        [ItemNotNull]
+        public override Task<Stream> OpenRestoreFileAsync(CancellationToken cancellationToken = default)
         {
             if (saveData != null)
-                return new MemoryStream(saveData.ToArray(), false);
+                return Task.FromResult<Stream>(new MemoryStream(saveData.ToArray(), false));
 
-            return null;
+            return Task.FromResult<Stream>(null);
         }
     }
 }

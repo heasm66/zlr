@@ -2,6 +2,8 @@ using System;
 using System.Collections.Generic;
 using System.IO;
 using System.Text;
+using System.Threading;
+using System.Threading.Tasks;
 using JetBrains.Annotations;
 using ZLR.VM.Debugging;
 
@@ -13,7 +15,7 @@ namespace ZLR.VM
     public partial class ZMachine
     {
 #pragma warning disable 0169
-        internal short ReadImpl(ushort buffer, ushort parse, ushort time, ushort routine, int retryPC)
+        internal async Task ReadImplAsync(ushort buffer, ushort parse, ushort time, ushort routine, int retryPC, int nextPC, int resultStorage)
         {
             byte max, initlen;
             if (zversion <= 4)
@@ -48,14 +50,17 @@ namespace ZLR.VM
                     if (initlen > 0)
                     {
                         // we never get here for V1-4
+                        System.Diagnostics.Debug.Assert(ZVersion >= 5);
                         var sb = new StringBuilder(initlen);
                         for (var i = 0; i < initlen; i++)
                             sb.Append(CharFromZSCII(GetByte(buffer + 2 + i)));
                         initial = sb.ToString();
                     }
-                    var result = io.ReadLine(initial,
-                        time, () => HandleInputTimer(routine),
-                        terminatingChars, debugging);
+
+                    var result = await (time != 0
+                        ? TimedReadLineAsync(initial, time, routine, terminatingChars, debugging)
+                        : io.ReadLineAsync(initial, terminatingChars, debugging, CancellationToken.None));
+
                     switch (result.Outcome)
                     {
                         case ReadOutcome.KeyPressed:
@@ -69,16 +74,13 @@ namespace ZLR.VM
                 }
                 else
                 {
-                    str = cmdRdr.ReadLine(out terminator);
+                    (str, terminator) = await cmdRdr.ReadLineAsync();
                     System.Diagnostics.Debug.Assert(str != null, "str != null");
-                    if (terminator == 13)
-                        io.PutCommand(str + "\n");
-                    else
-                        // ReSharper disable once AssignNullToNotNullAttribute
-                        io.PutCommand(str);
+                    // ReSharper disable once AssignNullToNotNullAttribute
+                    io.PutCommand(terminator == 13 ? str + "\n" : str);
                 }
 
-                cmdWtr?.WriteLine(str, terminator);
+                cmdWtr?.WriteLineAsync(str, terminator);
             }
             finally
             {
@@ -103,16 +105,31 @@ namespace ZLR.VM
             if (parse != 0)
                 Tokenize(buffer, parse, 0, false);
 
-            return terminator;
+            if (resultStorage >= 0)
+            {
+                StoreResult((byte)resultStorage, terminator);
+            }
+
+            pc = nextPC;
         }
 
-        internal short ReadCharImpl(ushort time, ushort routine)
+        [NotNull]
+        private Task<ReadLineResult> TimedReadLineAsync([NotNull] string initial, ushort time, ushort routine,
+            [CanBeNull] byte[] terminatingKeys, bool allowDebuggerBreak, CancellationToken cancellationToken = default)
         {
+            return TimedReadAsync(time, routine,
+                ct => io.ReadLineAsync(initial, terminatingKeys, allowDebuggerBreak, ct), cancellationToken);
+        }
+
+        // ReSharper disable once UnusedParameter.Global
+        internal async Task ReadCharImplAsync(ushort time, ushort routine, int retryPC, int nextPC, int resultStorage)
+        {
+            // TODO: support debugger break in read_char
+            short result;
+
             BeginExternalWait();
             try
             {
-                short result;
-
                 if (cmdRdr != null && cmdRdr.EOF)
                 {
                     cmdRdr.Dispose();
@@ -120,31 +137,83 @@ namespace ZLR.VM
                 }
 
                 if (cmdRdr == null)
-                    result = io.ReadKey(time,
-                        () => HandleInputTimer(routine),
-                        c => FilterInput(CharToZSCII(c)));
+                {
+                    result = await (time != 0
+                        ? TimedReadKeyAsync(time, routine, c => FilterInput(CharToZSCII(c)))
+                        : io.ReadKeyAsync(c => FilterInput(CharToZSCII(c))));
+                }
                 else
-                    result = cmdRdr.ReadKey();
+                {
+                    result = await cmdRdr.ReadKeyAsync();
+                }
 
                 cmdWtr?.WriteKey((byte)result);
-
-                return result;
             }
             finally
             {
                 EndExternalWait();
             }
+
+            if (resultStorage >= 0)
+            {
+                StoreResult((byte)resultStorage, result);
+            }
+
+            pc = nextPC;
         }
 #pragma warning restore 0169
 
-        private bool HandleInputTimer(ushort routine)
+        [NotNull]
+        private Task<short> TimedReadKeyAsync(ushort time, ushort routine, [NotNull] CharTranslator translator,
+            CancellationToken cancellationToken = default)
+        {
+            return TimedReadAsync(time, routine, ct => io.ReadKeyAsync(translator, ct), cancellationToken);
+        }
+
+        [ItemNotNull]
+        private async Task<T> TimedReadAsync<T>(ushort time, ushort routine,
+            [NotNull] [InstantHandle] Func<CancellationToken, Task<T>> interruptibleReader,
+            CancellationToken cancellationToken)
+        {
+            System.Diagnostics.Debug.Assert(time != 0);
+            System.Diagnostics.Debug.Assert(routine != 0);
+
+            // canceled when the timer goes off or the read completes
+            var cts = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
+
+            var readTask = interruptibleReader(cts.Token);
+            var delayTask = Task.Delay(time * 100, cts.Token);
+
+            while (true)
+            {
+                cancellationToken.ThrowIfCancellationRequested();
+
+                var completed = await Task.WhenAny(readTask, delayTask);
+
+                if (completed == readTask)
+                {
+                    cts.Cancel();
+                    return await readTask;
+                }
+
+                // must be the timer
+                System.Diagnostics.Debug.Assert(completed == delayTask);
+
+                // fault or cancel if necessary, then start a new timer before calling the routine
+                await completed;
+                delayTask = Task.Delay(time * 100, cts.Token);
+                await HandleInputTimerAsync(routine);
+            }
+        }
+
+        private async Task<bool> HandleInputTimerAsync(ushort routine)
         {
             EnterFunctionImpl((short)routine, null, 0, pc);
 
-            JitLoop();
+            await JitLoopAsync();
 
             var result = stack.Pop();
-            return (result != 0);
+            return result != 0;
         }
 
         private short FilterInput(short ch)
@@ -172,7 +241,7 @@ namespace ZLR.VM
 
         private bool IsTokenSpace(byte ch)
         {
-            return (ch == 9) || (ch == 32);
+            return ch == 9 || ch == 32;
         }
 
         [NotNull]
@@ -435,7 +504,7 @@ namespace ZLR.VM
             return result;
         }
 
-        internal void SetInputStream(short num)
+        internal async Task SetInputStreamAsync(short num)
         {
             switch (num)
             {
@@ -448,7 +517,7 @@ namespace ZLR.VM
                     break;
 
                 case 1:
-                    var cmdStream = io.OpenCommandFile(false);
+                    var cmdStream = await io.OpenCommandFileAsync(false);
                     if (cmdStream != null)
                     {
                         cmdRdr?.Dispose();
@@ -475,7 +544,7 @@ namespace ZLR.VM
         /// </summary>
         /// <remarks>
         /// <para>This property enables or disables output stream 4.</para>
-        /// <para>When this property is set to true, <see cref="IZMachineIO.OpenCommandFile"/>
+        /// <para>When this property is set to true, <see cref="IAsyncZMachineIO.OpenCommandFileAsync"/>
         /// will be called to get a stream for the command file. The property will be
         /// reset to false after the game finishes running.</para>
         /// </remarks>
@@ -483,13 +552,7 @@ namespace ZLR.VM
         public bool WritingCommandsToFile
         {
             get => cmdWtr != null;
-            set
-            {
-                if (value)
-                    SetOutputStream(4, 0);
-                else
-                    SetOutputStream(-4, 0);
-            }
+            set => SetOutputStreamAsync((short) (value ? 4 : -4), 0).GetAwaiter().GetResult();
         }
 
         /// <summary>
@@ -499,7 +562,7 @@ namespace ZLR.VM
         /// <remarks>
         /// <para>This property switches between input stream 1 (true) and input stream 0
         /// (false).</para>
-        /// <para>When this property is set to true, <see cref="IZMachineIO.OpenCommandFile"/>
+        /// <para>When this property is set to true, <see cref="IAsyncZMachineIO.OpenCommandFileAsync"/>
         /// will be called to get a stream for the command file. The property will be
         /// reset to false after the game finishes running.</para>
         /// </remarks>
@@ -507,7 +570,7 @@ namespace ZLR.VM
         public bool ReadingCommandsFromFile
         {
             get => cmdRdr != null;
-            set => SetInputStream((short) (value ? 1 : 0));
+            set => SetInputStreamAsync((short) (value ? 1 : 0)).GetAwaiter().GetResult();
         }
 
         private class CommandFileReader : IDisposable
@@ -530,11 +593,11 @@ namespace ZLR.VM
 
             public bool EOF => rdr.EndOfStream;
 
-            [CanBeNull]
-            public string ReadLine(out byte terminator)
+            [NotNull]
+            public async Task<(string line, byte terminator)> ReadLineAsync()
             {
-                terminator = 13;
-                var line = rdr.ReadLine();
+                byte terminator = 13;
+                var line = await rdr.ReadLineAsync();
 
                 if (line != null && line.EndsWith("]"))
                 {
@@ -547,19 +610,16 @@ namespace ZLR.VM
                             line = line.Substring(0, idx);
                             terminator = (byte)keyCode;
                         }
-                        else
-                        {
-                            terminator = 13;
-                        }
                     }
                 }
 
-                return line;
+                return (line, terminator);
             }
 
-            public byte ReadKey()
+            [NotNull]
+            public async Task<byte> ReadKeyAsync()
             {
-                var line = rdr.ReadLine();
+                var line = await rdr.ReadLineAsync();
 
                 if (string.IsNullOrEmpty(line))
                     return 13;
@@ -570,7 +630,7 @@ namespace ZLR.VM
                     if (idx >= 0)
                     {
                         var key = line.Substring(1, idx - 1);
-                        if (int.TryParse(key, out int keyCode))
+                        if (int.TryParse(key, out var keyCode))
                             return (byte)keyCode;
                     }
                 }
@@ -597,12 +657,12 @@ namespace ZLR.VM
                 }
             }
 
-            public void WriteLine(string text, byte terminator)
+            public async Task WriteLineAsync(string text, byte terminator)
             {
-                if (terminator == 13 && !text.EndsWith("]"))
-                    wtr.WriteLine(text);
-                else
-                    wtr.WriteLine("{0}[{1}]", text, terminator);
+                await wtr.WriteLineAsync(
+                    terminator != 13 || text.EndsWith("]")
+                        ? $"{text}[{terminator}]"
+                        : text);
             }
 
             public void WriteKey(byte key)

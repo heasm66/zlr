@@ -7,7 +7,7 @@ namespace ZLR.VM.IOFilters
     {
         private readonly IZMachineIO side;
 
-        public TeeFilter([NotNull] IZMachineIO next, [NotNull] IZMachineIO side)
+        public TeeFilter([NotNull] IAsyncZMachineIO next, [NotNull] IZMachineIO side)
             : base(next)
         {
             this.side = side ?? throw new ArgumentNullException(nameof(side));

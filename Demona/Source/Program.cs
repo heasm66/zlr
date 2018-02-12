@@ -1,6 +1,7 @@
 using System;
 using System.Diagnostics;
 using System.IO;
+using System.Threading.Tasks;
 using System.Windows.Forms;
 using JetBrains.Annotations;
 using ZLR.VM;
@@ -13,7 +14,8 @@ namespace ZLR.Interfaces.Demona
         /// The main entry point for the application.
         /// </summary>
         [STAThread]
-        static void Main([ItemNotNull] [NotNull] string[] args)
+        // ReSharper disable once InconsistentNaming
+        static async Task Main([ItemNotNull] [NotNull] string[] args)
         {
             Application.EnableVisualStyles();
             Application.SetCompatibleTextRenderingDefault(false);
@@ -74,7 +76,7 @@ namespace ZLR.Interfaces.Demona
                     try
                     {
                         ZMachine engine = new ZMachine(gameFile, io);
-                        engine.Run();
+                        await engine.RunAsync();
                     }
                     finally
                     {

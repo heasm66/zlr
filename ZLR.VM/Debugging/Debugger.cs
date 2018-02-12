@@ -1,6 +1,7 @@
 using System;
 using System.Collections.Generic;
 using System.Linq;
+using System.Threading.Tasks;
 using JetBrains.Annotations;
 
 namespace ZLR.VM.Debugging
@@ -56,11 +57,11 @@ namespace ZLR.VM.Debugging
 
         void Restart();
 
-        void StepInto();
-        void StepOver();
-        void StepUp();
+        Task StepIntoAsync();
+        Task StepOverAsync();
+        Task StepUpAsync();
 
-        void Run();
+        Task RunAsync();
         void SetBreakpoint(int address, bool enabled);
         int[] GetBreakpoints();
 
@@ -71,7 +72,7 @@ namespace ZLR.VM.Debugging
         /// <param name="args">The arguments to pass to the routine.</param>
         /// <returns>The value returned by the routine, or <see langword="null"/> if the
         /// call was interrupted by a debugger break.</returns>
-        short? Call(short packedAddress, [NotNull] short[] args);
+        Task<short?> CallAsync(short packedAddress, [NotNull] short[] args);
 
         byte ReadByte(int address);
         short ReadWord(int address);
@@ -179,7 +180,7 @@ namespace ZLR.VM
                 zm.debugState = DebuggerState.Paused;
             }
 
-            private void OneStep()
+            private async Task OneStepAsync()
             {
                 int thisPC = zm.pc;
                 if (thisPC < zm.romStart || zm.cache.TryGetValue(thisPC, out var entry) == false)
@@ -191,7 +192,9 @@ namespace ZLR.VM
                 zm.pc = entry.NextPC;
                 try
                 {
-                    entry.Code();
+                    var task = entry.Code();
+                    if (task != null)
+                        await task;
                 }
                 catch (DebuggerBreakException ex)
                 {
@@ -200,45 +203,45 @@ namespace ZLR.VM
                 }
             }
 
-            public void StepInto()
+            public async Task StepIntoAsync()
             {
                 zm.stepping = 1;
                 zm.running = true;
 
-                OneStep();
+                await OneStepAsync();
 
                 zm.stepping = -1;
                 zm.debugState = zm.running ? DebuggerState.Paused : DebuggerState.Stopped;
             }
 
-            public void StepOver()
+            public async Task StepOverAsync()
             {
                 int callDepth = zm.callStack.Count;
-                StepInto();
+                await StepIntoAsync();
 
                 while (zm.callStack.Count > callDepth)
-                    StepInto();
+                    await StepIntoAsync();
             }
 
-            public void StepUp()
+            public async Task StepUpAsync()
             {
                 int callDepth = zm.callStack.Count;
-                StepInto();
+                await StepIntoAsync();
 
                 while (zm.callStack.Count >= callDepth)
-                    StepInto();
+                    await StepIntoAsync();
             }
 
-            public void Run()
+            public async Task RunAsync()
             {
                 // step ahead if the current line has a breakpoint on it
                 if (zm.breakpoints.ContainsKey(zm.pc))
-                    StepInto();
+                    await StepIntoAsync();
 
                 zm.running = true;
                 zm.debugState = DebuggerState.Running;
                 while (zm.running && zm.debugState == DebuggerState.Running)
-                    OneStep();
+                    await OneStepAsync();
 
                 zm.debugState = zm.running ? DebuggerState.Paused : DebuggerState.Stopped;
             }
@@ -254,13 +257,13 @@ namespace ZLR.VM
             [NotNull]
             public int[] GetBreakpoints() => zm.breakpoints.Keys.ToArray();
 
-            public short? Call(short packedAddress, short[] args)
+            public async Task<short?> CallAsync(short packedAddress, short[] args)
             {
                 zm.running = true;
                 zm.EnterFunctionImpl(packedAddress, args, 0, zm.pc);
                 try
                 {
-                    zm.JitLoop();
+                    await zm.JitLoopAsync();
                     return zm.stack.Pop();
                 }
                 catch (DebuggerBreakException ex)

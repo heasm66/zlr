@@ -7,14 +7,14 @@ namespace ZLR.VM
     partial class Opcode
     {
 #pragma warning disable 0169
-        [Opcode(OpCount.One, 128, false, true)]
+        [Opcode(OpCount.One, 128, Branch = true)]
         private void op_jz([NotNull] ILGenerator il)
         {
             LoadOperand(il, 0);
             Branch(il, OpCodes.Brfalse, OpCodes.Brtrue);
         }
 
-        [Opcode(OpCount.One, 129, true, true)]
+        [Opcode(OpCount.One, 129, Store = true, Branch = true)]
         private void op_get_sibling([NotNull] ILGenerator il)
         {
             MethodInfo getSiblingMI = ZMachine.GetMethodInfo(nameof(ZMachine.GetObjectSibling));
@@ -28,7 +28,7 @@ namespace ZLR.VM
             Branch(il, OpCodes.Brtrue, OpCodes.Brfalse);
         }
 
-        [Opcode(OpCount.One, 130, true, true)]
+        [Opcode(OpCount.One, 130, Store = true, Branch = true)]
         private void op_get_child([NotNull] ILGenerator il)
         {
             MethodInfo getChildMI = ZMachine.GetMethodInfo(nameof(ZMachine.GetObjectChild));
@@ -42,7 +42,7 @@ namespace ZLR.VM
             Branch(il, OpCodes.Brtrue, OpCodes.Brfalse);
         }
 
-        [Opcode(OpCount.One, 131, true)]
+        [Opcode(OpCount.One, 131, Store = true)]
         private void op_get_parent([NotNull] ILGenerator il)
         {
             MethodInfo getParentMI = ZMachine.GetMethodInfo(nameof(ZMachine.GetObjectParent));
@@ -53,7 +53,7 @@ namespace ZLR.VM
             StoreResult(il);
         }
 
-        [Opcode(OpCount.One, 132, true)]
+        [Opcode(OpCount.One, 132, Store = true)]
         private void op_get_prop_len([NotNull] ILGenerator il)
         {
             MethodInfo impl = ZMachine.GetMethodInfo(nameof(ZMachine.GetPropLength));
@@ -102,7 +102,7 @@ namespace ZLR.VM
             il.Emit(OpCodes.Call, printStringMI);
         }
 
-        [Opcode(OpCount.One, 136, true, Terminates = true, MinVersion = 4)]
+        [Opcode(OpCount.One, 136, Store = true, Terminates = true, MinVersion = 4)]
         private void op_call_1s([NotNull] ILGenerator il)
         {
             EnterFunction(il, true);
@@ -169,7 +169,7 @@ namespace ZLR.VM
             il.Emit(OpCodes.Call, printStringMI);
         }
 
-        [Opcode(OpCount.One, 142, true, IndirectVar = true)]
+        [Opcode(OpCount.One, 142, Store = true, IndirectVar = true)]
         private void op_load([NotNull] ILGenerator il)
         {
             MethodInfo impl = ZMachine.GetMethodInfo(nameof(ZMachine.LoadVariableImpl));

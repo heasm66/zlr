@@ -3,6 +3,8 @@ using System.Collections.Generic;
 using System.IO;
 using ZLR.VM;
 using System.Reflection;
+using System.Threading;
+using System.Threading.Tasks;
 using JetBrains.Annotations;
 using ZLR.Interfaces.SystemConsole.Debugger;
 
@@ -12,8 +14,10 @@ namespace ZLR.Interfaces.SystemConsole
     {
         enum DisplayType { FullScreen, Dumb, DumbBottomWinOnly }
 
-        static int Main([ItemNotNull] [NotNull] string[] args)
+        // ReSharper disable once InconsistentNaming
+        static async Task<int> Main([ItemNotNull] [NotNull] string[] args)
         {
+            System.Diagnostics.Debugger.Launch();
             try
             {
                 Console.Title = "ConsoleZLR";
@@ -126,12 +130,12 @@ namespace ZLR.Interfaces.SystemConsole
                     sourcePath.Add(gameDir);
                     sourcePath.Add(Directory.GetCurrentDirectory());
 
-                    DebuggerLoop(zm, sourcePath.ToArray());
+                    await DebuggerLoopAsync(zm, sourcePath.ToArray());
                 }
                 else
                 {
 #if DEBUG
-                    zm.Run();
+                    await zm.RunAsync();
 #else
                 try
                 {
@@ -172,19 +176,17 @@ namespace ZLR.Interfaces.SystemConsole
 
         private static readonly byte[] DummyTerminatingKeys = { };
 
-        private static void DebuggerLoop([NotNull] ZMachine zm, string[] sourcePath)
+        private static async Task DebuggerLoopAsync([NotNull] ZMachine zm, string[] sourcePath)
         {
             var console = new DebuggingConsole(zm, zm.IO, sourcePath);
 
             console.Activate();
 
-            bool DummyTimedInputCallback() => false;
-            
             while (console.Active)
             {
-                var result = zm.IO.ReadLine(string.Empty, 0, DummyTimedInputCallback, DummyTerminatingKeys, false);
+                var result = await zm.IO.ReadLineAsync(string.Empty, DummyTerminatingKeys, false, CancellationToken.None);
                 System.Diagnostics.Debug.Assert(result.Outcome == ReadOutcome.KeyPressed);
-                console.HandleCommand(result.Text);
+                await console.HandleCommandAsync(result.Text);
             }
         }
     }

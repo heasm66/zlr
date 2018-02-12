@@ -534,7 +534,7 @@ namespace ZLR.Interfaces.SystemConsole.Debugger
             {
                 var func = Resolve(Visit(context.left));
                 var args = context.arguments()._values.Select(v => (short)Resolve(Visit(v)).Content).ToArray();
-                var result = dbg.Call((short) func.Content, args);
+                var result = dbg.CallAsync((short) func.Content, args).Result;  // TODO: asyncify?
                 return result != null ? new Value(ValueType.Number, (int)result) : new Value(ValueType.Invalid, 0);
             }
 

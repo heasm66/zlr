@@ -2,15 +2,14 @@ using System;
 using System.Reflection;
 using System.Reflection.Emit;
 using JetBrains.Annotations;
-using ZLR.VM.Debugging;
 
 namespace ZLR.VM
 {
     partial class Opcode
     {
 #pragma warning disable 0169
-        [Opcode(OpCount.Var, 224, true, Terminates = true, MaxVersion = 3, Alias = "call")]
-        [Opcode(OpCount.Var, 224, true, Terminates = true, MinVersion = 4)]
+        [Opcode(OpCount.Var, 224, Store = true, Terminates = true, MaxVersion = 3, Alias = "call")]
+        [Opcode(OpCount.Var, 224, Store = true, Terminates = true, MinVersion = 4)]
         private void op_call_vs([NotNull] ILGenerator il)
         {
             EnterFunction(il, true);
@@ -92,13 +91,13 @@ namespace ZLR.VM
             il.Emit(OpCodes.Call, setPropMI);
         }
 
-        [Opcode(OpCount.Var, 228, MaxVersion = 4)]
+        [Opcode(OpCount.Var, 228, MaxVersion = 4, Async = true)]
         private void op_sread([NotNull] ILGenerator il)
         {
             CompileReadOp(il);
         }
 
-        [Opcode(OpCount.Var, 228, true, MinVersion = 5)]
+        [Opcode(OpCount.Var, 228, Store = true, MinVersion = 5, Async = true)]
         private void op_aread([NotNull] ILGenerator il)
         {
             CompileReadOp(il);
@@ -106,12 +105,7 @@ namespace ZLR.VM
 
         private void CompileReadOp([NotNull] ILGenerator il)
         {
-            var impl = ZMachine.GetMethodInfo(nameof(ZMachine.ReadImpl));
-
-            if (zm.debugging)
-            {
-                il.BeginExceptionBlock();
-            }
+            var impl = ZMachine.GetMethodInfo(nameof(ZMachine.ReadImplAsync));
 
             il.Emit(OpCodes.Ldarg_0);
             LoadOperand(il, 0);
@@ -119,54 +113,12 @@ namespace ZLR.VM
             LoadOperand(il, 2);
             LoadOperand(il, 3);
             il.Emit(OpCodes.Ldc_I4, PC);
+            il.Emit(OpCodes.Ldc_I4, PC + ZCodeLength);
+            il.Emit(OpCodes.Ldc_I4, resultStorage);
             il.Emit(OpCodes.Call, impl);
+            il.Emit(OpCodes.Ret);
 
-            if (zm.ZVersion < 5)
-            {
-                // sread - no store
-                il.Emit(OpCodes.Pop);
-            }
-            else
-            {
-                // aread - store
-                StoreResult(il);
-            }
-
-            if (zm.debugging)
-            {
-                var pcFI = typeof(ZMachine).GetField("pc", BindingFlags.NonPublic | BindingFlags.Instance);
-                var debugStateFI = typeof(ZMachine).GetField("debugState", BindingFlags.NonPublic | BindingFlags.Instance);
-                // ReSharper disable once InconsistentNaming
-                var exceptionPCPI = typeof(DebuggerBreakException).GetProperty(nameof(DebuggerBreakException.ResumePC));
-
-                il.BeginCatchBlock(typeof(DebuggerBreakException));
-
-                var exnLocal = il.DeclareLocal(typeof(DebuggerBreakException));
-                il.Emit(OpCodes.Stloc, exnLocal);
-
-                il.Emit(OpCodes.Ldarg_0);
-                il.Emit(OpCodes.Ldloc, exnLocal);
-                il.Emit(OpCodes.Call, exceptionPCPI.GetMethod);
-                il.Emit(OpCodes.Stfld, pcFI);
-
-                il.Emit(OpCodes.Ldarg_0);
-                il.Emit(OpCodes.Ldc_I4, (int)DebuggerState.Paused);
-                il.Emit(OpCodes.Stfld, debugStateFI);
-
-                // can't use OpCodes.Ret inside an exception block...
-                var retLabel = il.DefineLabel();
-                
-                il.Emit(OpCodes.Leave_S, retLabel);
-
-                il.EndExceptionBlock();
-                var afterRetLabel = il.DefineLabel();
-                il.Emit(OpCodes.Br_S, afterRetLabel);
-
-                il.MarkLabel(retLabel);
-                il.Emit(OpCodes.Ret);
-
-                il.MarkLabel(afterRetLabel);
-            }
+            compiling = false;
         }
 
         [Opcode(OpCount.Var, 229)]
@@ -191,7 +143,7 @@ namespace ZLR.VM
             il.Emit(OpCodes.Call, printStringMI);
         }
 
-        [Opcode(OpCount.Var, 231, true)]
+        [Opcode(OpCount.Var, 231, Store = true)]
         private void op_random([NotNull] ILGenerator il)
         {
             MethodInfo impl = ZMachine.GetMethodInfo(nameof(ZMachine.RandomImpl));
@@ -210,7 +162,7 @@ namespace ZLR.VM
         }
 
         [Opcode(OpCount.Var, 233, IndirectVar = true, MaxVersion = 5)]
-        [Opcode(OpCount.Var, 233, true, MinVersion = 6, MaxVersion = 6)]
+        [Opcode(OpCount.Var, 233, Store = true, MinVersion = 6, MaxVersion = 6)]
         private void op_pull([NotNull] ILGenerator il)
         {
             if (zm.ZVersion == 6)
@@ -283,7 +235,7 @@ namespace ZLR.VM
             il.Emit(OpCodes.Call, impl);
         }
 
-        [Opcode(OpCount.Var, 236, true, Terminates = true, MinVersion = 4)]
+        [Opcode(OpCount.Var, 236, Store = true, Terminates = true, MinVersion = 4)]
         private void op_call_vs2([NotNull] ILGenerator il)
         {
             EnterFunction(il, true);
@@ -388,25 +340,31 @@ namespace ZLR.VM
             il.Emit(OpCodes.Call, impl);
         }
 
-        [Opcode(OpCount.Var, 243, MinVersion = 3)]
+        [Opcode(OpCount.Var, 243, MinVersion = 3, Async = true)]
         private void op_output_stream([NotNull] ILGenerator il)
         {
-            MethodInfo impl = ZMachine.GetMethodInfo(nameof(ZMachine.SetOutputStream));
+            MethodInfo impl = ZMachine.GetMethodInfo(nameof(ZMachine.SetOutputStreamAsync));
 
             il.Emit(OpCodes.Ldarg_0);
             LoadOperand(il, 0);
             LoadOperand(il, 1);
             il.Emit(OpCodes.Call, impl);
+            il.Emit(OpCodes.Ret);
+
+            compiling = false;
         }
 
-        [Opcode(OpCount.Var, 244, MinVersion = 3)]
+        [Opcode(OpCount.Var, 244, MinVersion = 3, Async = true)]
         private void op_input_stream([NotNull] ILGenerator il)
         {
-            MethodInfo impl = ZMachine.GetMethodInfo(nameof(ZMachine.SetInputStream));
+            MethodInfo impl = ZMachine.GetMethodInfo(nameof(ZMachine.SetInputStreamAsync));
 
             il.Emit(OpCodes.Ldarg_0);
             LoadOperand(il, 0);
             il.Emit(OpCodes.Call, impl);
+            il.Emit(OpCodes.Ret);
+
+            compiling = false;
         }
 
         [Opcode(OpCount.Var, 245, MinVersion = 3)]
@@ -422,10 +380,10 @@ namespace ZLR.VM
             il.Emit(OpCodes.Call, impl);
         }
 
-        [Opcode(OpCount.Var, 246, true, MinVersion = 4)]
+        [Opcode(OpCount.Var, 246, Store = true, MinVersion = 4)]
         private void op_read_char([NotNull] ILGenerator il)
         {
-            MethodInfo impl = ZMachine.GetMethodInfo(nameof(ZMachine.ReadCharImpl));
+            MethodInfo impl = ZMachine.GetMethodInfo(nameof(ZMachine.ReadCharImplAsync));
 
             if (operandTypes.Length > 0)
             {
@@ -440,11 +398,16 @@ namespace ZLR.VM
             il.Emit(OpCodes.Ldarg_0);
             LoadOperand(il, 1);
             LoadOperand(il, 2);
+            il.Emit(OpCodes.Ldc_I4, PC);
+            il.Emit(OpCodes.Ldc_I4, PC + ZCodeLength);
+            il.Emit(OpCodes.Ldc_I4, resultStorage);
             il.Emit(OpCodes.Call, impl);
-            StoreResult(il);
+            il.Emit(OpCodes.Ret);
+            
+            compiling = false;
         }
 
-        [Opcode(OpCount.Var, 247, true, true, MinVersion = 4)]
+        [Opcode(OpCount.Var, 247, Store = true, Branch = true, MinVersion = 4)]
         private void op_scan_table([NotNull] ILGenerator il)
         {
             MethodInfo impl = ZMachine.GetMethodInfo(nameof(ZMachine.ScanTableImpl));
@@ -461,8 +424,8 @@ namespace ZLR.VM
             Branch(il, OpCodes.Brtrue, OpCodes.Brfalse);
         }
 
-        [Opcode(OpCount.One, 143, true, MaxVersion = 4)]
-        [Opcode(OpCount.Var, 248, true, MinVersion = 5)]
+        [Opcode(OpCount.One, 143, Store = true, MaxVersion = 4)]
+        [Opcode(OpCount.Var, 248, Store = true, MinVersion = 5)]
         private void op_not([NotNull] ILGenerator il)
         {
             LoadOperand(il, 0);
@@ -545,7 +508,7 @@ namespace ZLR.VM
             il.Emit(OpCodes.Call, impl);
         }
 
-        [Opcode(OpCount.Var, 255, false, true, MinVersion = 5)]
+        [Opcode(OpCount.Var, 255, Branch = true, MinVersion = 5)]
         private void op_check_arg_count([NotNull] ILGenerator il)
         {
             MethodInfo getTopFrameMI = ZMachine.GetMethodInfo("get_" + nameof(ZMachine.TopFrame));

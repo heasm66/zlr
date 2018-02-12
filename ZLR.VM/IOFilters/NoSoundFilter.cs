@@ -4,7 +4,7 @@ namespace ZLR.VM.IOFilters
 {
     public sealed class NoSoundFilter : FilterBase
     {
-        public NoSoundFilter([NotNull] IZMachineIO next)
+        public NoSoundFilter([NotNull] IAsyncZMachineIO next)
             : base(next)
         {
         }

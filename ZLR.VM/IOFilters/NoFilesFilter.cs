@@ -1,32 +1,35 @@
-﻿using JetBrains.Annotations;
+﻿using System.IO;
+using System.Threading;
+using System.Threading.Tasks;
+using JetBrains.Annotations;
 
 namespace ZLR.VM.IOFilters
 {
     public sealed class NoFilesFilter : FilterBase
     {
-        public NoFilesFilter([NotNull] IZMachineIO next)
+        public NoFilesFilter([NotNull] IAsyncZMachineIO next)
             : base(next)
         {
         }
 
-        public override System.IO.Stream OpenAuxiliaryFile(string name, int size, bool writing)
+        public override Task<Stream> OpenAuxiliaryFileAsync(string name, int size, bool writing, CancellationToken cancellationToken = default)
         {
-            return null;
+            return Task.FromResult<Stream>(null);
         }
 
-        public override System.IO.Stream OpenCommandFile(bool writing)
+        public override Task<Stream> OpenCommandFileAsync(bool writing, CancellationToken cancellationToken = default)
         {
-            return null;
+            return Task.FromResult<Stream>(null);
         }
 
-        public override System.IO.Stream OpenRestoreFile()
+        public override Task<Stream> OpenRestoreFileAsync(CancellationToken cancellationToken = default)
         {
-            return null;
+            return Task.FromResult<Stream>(null);
         }
 
-        public override System.IO.Stream OpenSaveFile(int size)
+        public override Task<Stream> OpenSaveFileAsync(int size, CancellationToken cancellationToken = default)
         {
-            return null;
+            return Task.FromResult<Stream>(null);
         }
     }
 }

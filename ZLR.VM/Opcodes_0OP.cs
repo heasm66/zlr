@@ -20,7 +20,7 @@ namespace ZLR.VM
             LeaveFunctionConst(il, 0);
         }
 
-        [Opcode(OpCount.Zero, 178, false, false, true)]
+        [Opcode(OpCount.Zero, 178, Text = true)]
         private void op_print([NotNull] ILGenerator il)
         {
             MethodInfo printStringMI = ZMachine.GetMethodInfo(nameof(ZMachine.PrintString));
@@ -30,7 +30,7 @@ namespace ZLR.VM
             il.Emit(OpCodes.Call, printStringMI);
         }
 
-        [Opcode(OpCount.Zero, 179, false, false, true, Terminates = true)]
+        [Opcode(OpCount.Zero, 179, Text = true, Terminates = true)]
         private void op_print_ret([NotNull] ILGenerator il)
         {
             op_print(il);
@@ -70,7 +70,7 @@ namespace ZLR.VM
             il.Emit(OpCodes.Pop);
         }
 
-        [Opcode(OpCount.Zero, 185, true, MinVersion = 5)]
+        [Opcode(OpCount.Zero, 185, Store = true, MinVersion = 5)]
         private void op_catch([NotNull] ILGenerator il)
         {
             var callStackFI = ZMachine.GetFieldInfo(nameof(ZMachine.callStack));
@@ -119,7 +119,7 @@ namespace ZLR.VM
             }
         }
 
-        [Opcode(OpCount.Zero, 189, false, true, MinVersion = 3)]
+        [Opcode(OpCount.Zero, 189, Branch = true, MinVersion = 3)]
         private void op_verify([NotNull] ILGenerator il)
         {
             MethodInfo impl = ZMachine.GetMethodInfo(nameof(ZMachine.VerifyGameFile));
@@ -129,7 +129,7 @@ namespace ZLR.VM
             Branch(il, OpCodes.Brtrue, OpCodes.Brfalse);
         }
 
-        [Opcode(OpCount.Zero, 191, false, true, MinVersion = 5)]
+        [Opcode(OpCount.Zero, 191, Branch = true, MinVersion = 5)]
         private void op_piracy(ILGenerator il)
         {
             // assume it's genuine

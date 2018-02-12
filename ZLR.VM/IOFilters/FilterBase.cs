@@ -1,24 +1,27 @@
 ﻿using System;
+using System.IO;
+using System.Threading;
+using System.Threading.Tasks;
 using JetBrains.Annotations;
 
 namespace ZLR.VM.IOFilters
 {
-    public abstract class FilterBase : IZMachineIO
+    public abstract class FilterBase : IAsyncZMachineIO
     {
-        protected readonly IZMachineIO next;
+        protected readonly IAsyncZMachineIO next;
 
-        protected FilterBase([NotNull] IZMachineIO next)
+        protected FilterBase([NotNull] IAsyncZMachineIO next)
         {
             this.next = next ?? throw new ArgumentNullException(nameof(next));
         }
 
-        #region IZMachineIO Members
+        #region IAsyncZMachineIO Members
 
-        public virtual ReadLineResult ReadLine(string initial, int time, TimedInputCallback callback, byte[] terminatingKeys,
-            bool allowDebuggerBreak) => next.ReadLine(initial, time, callback, terminatingKeys, allowDebuggerBreak);
+        public ReadLineResult ReadLine(string initial, int time, TimedInputCallback callback,
+            byte[] terminatingKeys, bool allowDebuggerBreak) => throw new NotSupportedException();
 
-        public virtual short ReadKey(int time, TimedInputCallback callback, CharTranslator translator) =>
-            next.ReadKey(time, callback, translator);
+        public short ReadKey(int time, TimedInputCallback callback, CharTranslator translator) =>
+            throw new NotSupportedException();
 
         public virtual void PutCommand(string command) => next.PutCommand(command);
 
@@ -44,14 +47,14 @@ namespace ZLR.VM.IOFilters
 
         public virtual void PutTranscriptString(string str) => next.PutTranscriptString(str);
 
-        public virtual System.IO.Stream OpenSaveFile(int size) => next.OpenSaveFile(size);
+        public Stream OpenSaveFile(int size) => throw new NotSupportedException();
 
-        public virtual System.IO.Stream OpenRestoreFile() => next.OpenRestoreFile();
+        public Stream OpenRestoreFile() => throw new NotSupportedException();
 
-        public virtual System.IO.Stream OpenAuxiliaryFile(string name, int size, bool writing) =>
-            next.OpenAuxiliaryFile(name, size, writing);
+        public Stream OpenAuxiliaryFile(string name, int size, bool writing) =>
+            throw new NotSupportedException();
 
-        public virtual System.IO.Stream OpenCommandFile(bool writing) => next.OpenCommandFile(writing);
+        public Stream OpenCommandFile(bool writing) => throw new NotSupportedException();
 
         public virtual void SetTextStyle(TextStyle style) => next.SetTextStyle(style);
 
@@ -103,7 +106,7 @@ namespace ZLR.VM.IOFilters
 
         public virtual bool GraphicsFontAvailable => next.GraphicsFontAvailable;
 
-        public virtual bool TimedInputAvailable => next.TimedInputAvailable;
+        public bool TimedInputAvailable => throw new NotSupportedException();
 
         public virtual bool SoundSamplesAvailable => next.SoundSamplesAvailable;
 
@@ -132,6 +135,27 @@ namespace ZLR.VM.IOFilters
         public virtual byte DefaultBackground => next.DefaultBackground;
 
         public virtual UnicodeCaps CheckUnicode(char ch) => next.CheckUnicode(ch);
+
+        public virtual Task<ReadLineResult> ReadLineAsync(string initial, byte[] terminatingKeys,
+            bool allowDebuggerBreak, CancellationToken cancellationToken = default) =>
+            next.ReadLineAsync(initial, terminatingKeys, allowDebuggerBreak, cancellationToken);
+
+        public virtual Task<short> ReadKeyAsync(CharTranslator translator,
+            CancellationToken cancellationToken = default) =>
+            next.ReadKeyAsync(translator, cancellationToken);
+
+        public virtual Task<Stream> OpenSaveFileAsync(int size, CancellationToken cancellationToken = default) =>
+            next.OpenSaveFileAsync(size, cancellationToken);
+
+        public virtual Task<Stream> OpenRestoreFileAsync(CancellationToken cancellationToken = default) =>
+            next.OpenRestoreFileAsync(cancellationToken);
+
+        public virtual Task<Stream> OpenAuxiliaryFileAsync(string name, int size, bool writing,
+            CancellationToken cancellationToken = default) =>
+            next.OpenAuxiliaryFileAsync(name, size, writing, cancellationToken);
+
+        public virtual Task<Stream> OpenCommandFileAsync(bool writing, CancellationToken cancellationToken = default) =>
+            next.OpenCommandFileAsync(writing, cancellationToken);
 
         #endregion
     }

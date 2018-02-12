@@ -7,9 +7,9 @@ namespace ZLR.VM
     partial class Opcode
     {
 #pragma warning disable 0169
-        [Opcode(OpCount.Zero, 181, false, true, MaxVersion = 3)]
-        [Opcode(OpCount.Zero, 181, true, MinVersion = 4, MaxVersion = 4)]
-        [Opcode(OpCount.Ext, 0, true, MinVersion = 5)]
+        [Opcode(OpCount.Zero, 181, Branch = true, MaxVersion = 3)]
+        [Opcode(OpCount.Zero, 181, Store = true, MinVersion = 4, MaxVersion = 4)]
+        [Opcode(OpCount.Ext, 0, Store = true, MinVersion = 5)]
         private void op_save([NotNull] ILGenerator il)
         {
             MethodInfo impl;
@@ -57,9 +57,9 @@ namespace ZLR.VM
             }
         }
 
-        [Opcode(OpCount.Zero, 182, false, true, Terminates = true, MaxVersion = 3)]
-        [Opcode(OpCount.Zero, 182, true, Terminates = true, MinVersion = 4, MaxVersion = 4)]
-        [Opcode(OpCount.Ext, 1, true, Terminates = true, MinVersion = 5)]
+        [Opcode(OpCount.Zero, 182, Branch = true, Terminates = true, MaxVersion = 3)]
+        [Opcode(OpCount.Zero, 182, Store = true, Terminates = true, MinVersion = 4, MaxVersion = 4)]
+        [Opcode(OpCount.Ext, 1, Store = true, Terminates = true, MinVersion = 5)]
         private void op_restore([NotNull] ILGenerator il)
         {
             MethodInfo impl;
@@ -112,7 +112,7 @@ namespace ZLR.VM
             }
         }
 
-        [Opcode(OpCount.Ext, 2, true, MinVersion = 5)]
+        [Opcode(OpCount.Ext, 2, Store = true, MinVersion = 5)]
         private void op_log_shift([NotNull] ILGenerator il)
         {
             if (operandTypes[1] == OperandType.Variable)
@@ -143,7 +143,7 @@ namespace ZLR.VM
             StoreResult(il);
         }
 
-        [Opcode(OpCount.Ext, 3, true)]
+        [Opcode(OpCount.Ext, 3, Store = true)]
         private void op_art_shift([NotNull] ILGenerator il)
         {
             if (operandTypes[1] == OperandType.Variable)
@@ -174,7 +174,7 @@ namespace ZLR.VM
             StoreResult(il);
         }
 
-        [Opcode(OpCount.Ext, 4, true, MinVersion = 5)]
+        [Opcode(OpCount.Ext, 4, Store = true, MinVersion = 5)]
         private void op_set_font([NotNull] ILGenerator il)
         {
             var ioFI = ZMachine.GetFieldInfo(nameof(ZMachine.io));
@@ -190,7 +190,7 @@ namespace ZLR.VM
 
         // EXT:5 to EXT:8 are only in V6
 
-        [Opcode(OpCount.Ext, 9, true, MinVersion = 5)]
+        [Opcode(OpCount.Ext, 9, Store = true, MinVersion = 5)]
         private void op_save_undo([NotNull] ILGenerator il)
         {
             var impl = ZMachine.GetMethodInfo(nameof(ZMachine.SaveUndo));
@@ -201,7 +201,7 @@ namespace ZLR.VM
             il.Emit(OpCodes.Call, impl);
         }
 
-        [Opcode(OpCount.Ext, 10, true, Terminates = true, MinVersion = 5)]
+        [Opcode(OpCount.Ext, 10, Store = true, Terminates = true, MinVersion = 5)]
         private void op_restore_undo([NotNull] ILGenerator il)
         {
             MethodInfo impl = ZMachine.GetMethodInfo(nameof(ZMachine.RestoreUndo));
@@ -224,7 +224,7 @@ namespace ZLR.VM
             il.Emit(OpCodes.Call, impl);
         }
 
-        [Opcode(OpCount.Ext, 12, true, MinVersion = 5)]
+        [Opcode(OpCount.Ext, 12, Store = true, MinVersion = 5)]
         private void op_check_unicode([NotNull] ILGenerator il)
         {
             var ioFI = ZMachine.GetFieldInfo(nameof(ZMachine.io));
@@ -260,7 +260,7 @@ namespace ZLR.VM
             }
         }
 
-        [Opcode(OpCount.Ext, 24, false, true, MinVersion = 6, MaxVersion = 6)]
+        [Opcode(OpCount.Ext, 24, Branch = true, MinVersion = 6, MaxVersion = 6)]
         private void op_push_stack([NotNull] ILGenerator il)
         {
             MethodInfo impl = ZMachine.GetMethodInfo(nameof(ZMachine.PushOntoUserStack));

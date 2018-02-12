@@ -3,6 +3,7 @@ using System.Collections.Generic;
 using System.IO;
 using System.Reflection;
 using System.Text.RegularExpressions;
+using System.Threading.Tasks;
 using JetBrains.Annotations;
 using ZLR.VM;
 
@@ -15,7 +16,8 @@ namespace TestSuite
 
         private const string TESTCASES_DIR_NAME = "Test Cases";
 
-        static void Main()
+        // ReSharper disable once InconsistentNaming
+        static async Task Main()
         {
             Console.WriteLine("ZLR Test Suite {0}", ZMachine.ZLR_VERSION);
             Console.WriteLine();
@@ -55,15 +57,15 @@ namespace TestSuite
                         break;
 
                     case '2':
-                        RunAllTests();
+                        await RunAllTestsAsync();
                         break;
 
                     case '3':
-                        RunOneTest();
+                        await RunOneTestAsync();
                         break;
 
                     case '4':
-                        RecordExpectedOutcome();
+                        await RecordExpectedOutcomeAsync();
                         break;
 
                     case '0':
@@ -93,7 +95,7 @@ namespace TestSuite
             return null;
         }
 
-        private static void RecordExpectedOutcome()
+        private static async Task RecordExpectedOutcomeAsync()
         {
             var selected = PromptForTestCase();
 
@@ -110,7 +112,7 @@ namespace TestSuite
                             WritingCommandsToFile = true
                         };
 
-                        var output = RunAndCollectOutput(zm, io);
+                        var output = await RunAndCollectOutputAsync(zm, io);
                         File.WriteAllText(selected.OutputFile, output);
                     }
                 }
@@ -122,14 +124,15 @@ namespace TestSuite
         }
 
         [NotNull]
-        private static string RunAndCollectOutput([NotNull] ZMachine zm, [NotNull] TestCaseIO io)
+        [ItemNotNull]
+        private static async Task<string> RunAndCollectOutputAsync([NotNull] ZMachine zm, [NotNull] TestCaseIO io)
         {
             string output = null;
 
             try
             {
                 zm.PredictableRandom = true;
-                zm.Run();
+                await zm.RunAsync();
                 output = io.CollectOutput();
             }
             // ReSharper disable once CatchAllClause
@@ -144,7 +147,7 @@ namespace TestSuite
             return output;
         }
 
-        private static void RunOneTest()
+        private static async Task RunOneTestAsync()
         {
             var selected = PromptForTestCase();
 
@@ -152,7 +155,7 @@ namespace TestSuite
             {
                 try
                 {
-                    RunOneTest(selected);
+                    await RunOneTestAsync(selected);
                 }
                 finally
                 {
@@ -161,7 +164,7 @@ namespace TestSuite
             }
         }
 
-        private static void RunAllTests()
+        private static async Task RunAllTestsAsync()
         {
             var names = new List<string>(testCases.Keys);
             names.Sort();
@@ -174,13 +177,14 @@ namespace TestSuite
 
             var failures = 0;
 
+            // TODO: run test cases in parallel
             foreach (var name in names)
             {
                 var test = testCases[name];
 
                 Console.Write("{0} - ", name);
 
-                if (RunOneTest(test) == false)
+                if (await RunOneTestAsync(test) == false)
                     failures++;
             }
 
@@ -193,7 +197,7 @@ namespace TestSuite
             }
         }
 
-        private static bool? RunOneTest([NotNull] TestCase test)
+        private static async Task<bool?> RunOneTestAsync([NotNull] TestCase test)
         {
             if (!File.Exists(test.InputFile) || !File.Exists(test.OutputFile))
             {
@@ -211,7 +215,7 @@ namespace TestSuite
                         ReadingCommandsFromFile = true
                     };
 
-                    var output = RunAndCollectOutput(zm, io);
+                    var output = await RunAndCollectOutputAsync(zm, io);
                     var expectedOutput = File.ReadAllText(test.OutputFile);
 
                     if (OutputDiffers(expectedOutput, output))

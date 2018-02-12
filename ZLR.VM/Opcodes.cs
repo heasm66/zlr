@@ -216,7 +216,7 @@ namespace ZLR.VM
         /// Usually, this means the opcode changes PC at run time by taking a
         /// calculated branch, entering or leaving a routine, etc.
         /// </remarks>
-        public bool IsTerminator => attribute.Terminates;
+        public bool IsTerminator => attribute.Terminates || attribute.Async;
 
         #region Static - Opcode Dictionary
 
@@ -328,7 +328,7 @@ namespace ZLR.VM
                     }
             }
 
-            result = default(OpcodeInfo);
+            result = default;
             return false;
         }
 
@@ -539,6 +539,7 @@ namespace ZLR.VM
             // EnterFunctionImpl()
             il.Emit(OpCodes.Call, impl);
 
+            il.Emit(OpCodes.Ldnull);
             il.Emit(OpCodes.Ret);
             compiling = false;
         }
@@ -559,6 +560,7 @@ namespace ZLR.VM
             il.Emit(OpCodes.Ldarg_0);
             il.Emit(OpCodes.Ldc_I4, (int)result);
             il.Emit(OpCodes.Call, impl);
+            il.Emit(OpCodes.Ldnull);
             il.Emit(OpCodes.Ret);
             compiling = false;
         }
@@ -582,12 +584,14 @@ namespace ZLR.VM
             if (branchOffset == 0)
             {
                 LeaveFunctionConst(il, 0);
+                il.Emit(OpCodes.Ldnull);
                 il.Emit(OpCodes.Ret);
                 compiling = true;
             }
             else if (branchOffset == 1)
             {
                 LeaveFunctionConst(il, 1);
+                il.Emit(OpCodes.Ldnull);
                 il.Emit(OpCodes.Ret);
                 compiling = true;
             }
@@ -597,6 +601,7 @@ namespace ZLR.VM
                 il.Emit(OpCodes.Ldarg_0);
                 il.Emit(OpCodes.Ldc_I4, zm.PC + branchOffset - 2);
                 il.Emit(OpCodes.Stfld, pcFI);
+                il.Emit(OpCodes.Ldnull);
                 il.Emit(OpCodes.Ret);
                 compiling = false;
             }
@@ -649,23 +654,21 @@ namespace ZLR.VM
     [MeansImplicitUse]
     internal class OpcodeAttribute : Attribute
     {
-        public OpcodeAttribute(OpCount count, byte opnum,
-            bool store = false, bool branch = false, bool text = false)
+        public OpcodeAttribute(OpCount count, byte opnum)
         {
             OpCount = count;
             Number = opnum;
-            Store = store;
-            Branch = branch;
-            Text = text;
         }
 
         public OpCount OpCount { get; }
         public byte Number { get; }
-        public bool Store { get; }
-        public bool Branch { get; }
-        public bool Text { get; }
+
+        public bool Store { get; set; }
+        public bool Branch { get; set; }
+        public bool Text { get; set; }
         public bool Terminates { get; set; }
         public bool IndirectVar { get; set; }
+        public bool Async { get; set; }
         public byte MinVersion { get; set; } = 1;
         public byte MaxVersion { get; set; } = 8;
         public string Alias { get; set; }
