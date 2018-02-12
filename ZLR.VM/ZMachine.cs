@@ -53,7 +53,7 @@ namespace ZLR.VM
 
     partial class ZMachine
     {
-        public static readonly string ZLR_VERSION = "0.07";
+        public static readonly string ZLR_VERSION = "0.07"; //XXX read from assembly
 
         private class CachedCode
         {
@@ -75,10 +75,10 @@ namespace ZLR.VM
 
         // compilation state
         readonly byte zversion;
-        int globalsOffset, objectTable, dictionaryTable, abbrevTable;
+        int objectTable, dictionaryTable, abbrevTable;
         bool compiling;
         ILGenerator il;
-        LocalBuilder tempArrayLocal, tempWordLocal, stackLocal, localsLocal;
+        LocalBuilder tempArrayLocal, tempWordLocal;
         LruCache<int, CachedCode> cache;
         int cacheSize = DEFAULT_CACHE_SIZE;
         int maxUndoDepth = DEFAULT_MAX_UNDO_DEPTH;
@@ -86,7 +86,7 @@ namespace ZLR.VM
         // compilation and runtime state
         internal int pc;
         bool clearable;
-        internal bool debugging;
+        bool debugging;
 
         // runtime state
         readonly Stream gameFile;
@@ -103,7 +103,6 @@ namespace ZLR.VM
         Random rng = new Random();
         bool predictableRng;
         byte[] wordSeparators;
-        int romStart;
         int codeStart, stringStart; // V6-7
 
         [ItemNotNull] [NotNull]
@@ -129,8 +128,6 @@ namespace ZLR.VM
         int creditedTime;
         int cacheHits, cacheMisses;
 #endif
-
-        DebugInfo debugFile;
 
         const int DEFAULT_MAX_UNDO_DEPTH = 3;
         const int DEFAULT_CACHE_SIZE = 35000;
@@ -230,15 +227,16 @@ namespace ZLR.VM
             if (!di.MatchesGameFile(gameFile))
                 throw new ArgumentException("Debug file does not match loaded story file", nameof(fromStream));
 
-            debugFile = di;
+            DebugInfo = di;
         }
 
-        public DebugInfo DebugInfo => debugFile;
+        public DebugInfo DebugInfo { get; private set; }
 
         // ReSharper disable once InconsistentNaming
         [NotNull]
         public IAsyncZMachineIO IO => io;
 
+        // ReSharper disable once MemberCanBePrivate.Global
         internal CallFrame TopFrame { get; private set; }
 
         internal byte GetByte(int address)
@@ -269,15 +267,15 @@ namespace ZLR.VM
 #pragma warning disable 0169
         internal void SetByteChecked(int address, byte value)
         {
-            if (address < romStart && (address >= 64 || ValidHeaderWrite(address, ref value)))
+            if (address < RomStart && (address >= 64 || ValidHeaderWrite(address, ref value)))
                 zmem[address] = value;
 
             if (address == 0x10)
             {
                 // watch for changes to Flags 2's lower byte
                 var b = zmem[0x11];
-                io.Transcripting = ((b & 1) != 0);
-                io.ForceFixedPitch = ((b & 2) != 0);
+                io.Transcripting = (b & 1) != 0;
+                io.ForceFixedPitch = (b & 2) != 0;
             }
         }
 #pragma warning restore 0169
@@ -290,7 +288,7 @@ namespace ZLR.VM
 
         internal void SetWordChecked(int address, short value)
         {
-            if (address + 1 < romStart && (address >= 64 || ValidHeaderWrite(address, ref value)))
+            if (address + 1 < RomStart && (address >= 64 || ValidHeaderWrite(address, ref value)))
             {
                 zmem[address] = (byte)(value >> 8);
                 zmem[address + 1] = (byte)value;
@@ -300,8 +298,8 @@ namespace ZLR.VM
             {
                 // watch for changes to Flags 2's lower byte
                 var b = zmem[0x11];
-                io.Transcripting = ((b & 1) != 0);
-                io.ForceFixedPitch = ((b & 2) != 0);
+                io.Transcripting = (b & 1) != 0;
+                io.ForceFixedPitch = (b & 2) != 0;
             }
         }
 
@@ -556,7 +554,7 @@ namespace ZLR.VM
 
                 var thisPC = pc;
 #if !DISABLE_CACHE
-                if (thisPC < romStart || cache.TryGetValue(thisPC, out var entry) == false)
+                if (thisPC < RomStart || cache.TryGetValue(thisPC, out var entry) == false)
 #endif
                 {
 #if BENCHMARK
@@ -568,7 +566,7 @@ namespace ZLR.VM
                     entry.Cycles = count;   // only used to calculate the amount of cached z-code
 #endif
 #if !DISABLE_CACHE
-                    if (thisPC >= romStart)
+                    if (thisPC >= RomStart)
                         cache.Add(thisPC, entry, count);
 #endif
                 }
@@ -590,17 +588,17 @@ namespace ZLR.VM
         [NotNull]
         internal LocalBuilder TempArrayLocal => tempArrayLocal ?? (tempArrayLocal = il.DeclareLocal(typeof(short[])));
 
-        internal LocalBuilder StackLocal => stackLocal;
+        internal LocalBuilder StackLocal { get; private set; }
 
-        internal LocalBuilder LocalsLocal => localsLocal;
+        internal LocalBuilder LocalsLocal { get; private set; }
 
-        internal int GlobalsOffset => globalsOffset;
+        internal int GlobalsOffset { get; private set; }
 
         internal int PC => pc;
 
-        internal int RomStart => romStart;
+        internal int RomStart { get; private set; }
 
-        internal int CompilationStart { get; private set; }
+        private int CompilationStart { get; set; }
 
         internal int ZVersion => zversion;
 
@@ -629,14 +627,14 @@ namespace ZLR.VM
 
             // initialize local variables for the stack and z-locals
             var stackFI = GetFieldInfo("stack");
-            stackLocal = il.DeclareLocal(typeof(Stack<short>));
+            StackLocal = il.DeclareLocal(typeof(Stack<short>));
             il.Emit(OpCodes.Ldarg_0);
             il.Emit(OpCodes.Ldfld, stackFI);
-            il.Emit(OpCodes.Stloc, stackLocal);
+            il.Emit(OpCodes.Stloc, StackLocal);
 
             var getTopFrameMI = GetMethodInfo("get_TopFrame");
             var localsFI = typeof(CallFrame).GetField(nameof(CallFrame.Locals));
-            localsLocal = il.DeclareLocal(typeof(short[]));
+            LocalsLocal = il.DeclareLocal(typeof(short[]));
             il.Emit(OpCodes.Ldarg_0);
             il.Emit(OpCodes.Call, getTopFrameMI);
             var haveLocals = il.DefineLabel();
@@ -644,12 +642,12 @@ namespace ZLR.VM
             il.Emit(OpCodes.Brtrue, haveLocals);
             il.Emit(OpCodes.Pop);
             il.Emit(OpCodes.Ldnull);
-            il.Emit(OpCodes.Stloc, localsLocal);
+            il.Emit(OpCodes.Stloc, LocalsLocal);
             var doneLocals = il.DefineLabel();
             il.Emit(OpCodes.Br, doneLocals);
             il.MarkLabel(haveLocals);
             il.Emit(OpCodes.Ldfld, localsFI);
-            il.Emit(OpCodes.Stloc, localsLocal);
+            il.Emit(OpCodes.Stloc, LocalsLocal);
             il.MarkLabel(doneLocals);
 
             var todoList = new Queue<int>();
@@ -698,7 +696,7 @@ namespace ZLR.VM
                 }
             }
 
-            Opcode firstNode = opcodes[CompilationStart];
+            var firstNode = opcodes[CompilationStart];
             var todoNodes = new Queue<Opcode>();
 
             // pass 2: tie the chains together, so that every opcode's Target field is correct.
@@ -825,8 +823,8 @@ namespace ZLR.VM
             il = null;
             tempArrayLocal = null;
             tempWordLocal = null;
-            stackLocal = null;
-            localsLocal = null;
+            StackLocal = null;
+            LocalsLocal = null;
 
             return (ZCodeDelegate) dm.CreateDelegate(typeof(ZCodeDelegate), this);
         }
@@ -1083,7 +1081,7 @@ namespace ZLR.VM
         }
 
         [NotNull]
-        internal static string FormatOpcode(OpCount opc, OpForm form, int opnum)
+        private static string FormatOpcode(OpCount opc, OpForm form, int opnum)
         {
             var sb = new StringBuilder(FormatOpCount(opc));
             sb.Append(':');
@@ -1113,7 +1111,7 @@ namespace ZLR.VM
             return sb.ToString();
         }
 
-        private int UnpackOperandTypes(byte b, OperandType[] operandTypes, int start)
+        private static int UnpackOperandTypes(byte b, OperandType[] operandTypes, int start)
         {
             var count = 0;
 
@@ -1137,8 +1135,8 @@ namespace ZLR.VM
 
             dictionaryTable = (ushort)GetWord(0x8);
             objectTable = (ushort)GetWord(0xA);
-            globalsOffset = (ushort)GetWord(0xC);
-            romStart = (ushort)GetWord(0xE);
+            GlobalsOffset = (ushort)GetWord(0xC);
+            RomStart = (ushort)GetWord(0xE);
             abbrevTable = (ushort)GetWord(0x18);
             if (zversion == 6 || zversion == 7)
             {
@@ -1158,7 +1156,7 @@ namespace ZLR.VM
             {
                 // old-style flags1
                 flags1 = GetByte(0x1);
-                flags1 |= (16 | 32);    // status line and screen splitting are always available
+                flags1 |= 16 | 32;    // status line and screen splitting are always available
                 if (io.VariablePitchAvailable)
                     flags1 |= 64;
                 else
@@ -1195,8 +1193,8 @@ namespace ZLR.VM
             SetByte(0x1, flags1);
             SetWord(0x10, (short)flags2);
 
-            io.Transcripting = ((flags2 & 1) != 0);
-            io.ForceFixedPitch = ((flags2 & 2) != 0);
+            io.Transcripting = (flags2 & 1) != 0;
+            io.ForceFixedPitch = (flags2 & 2) != 0;
 
             SetByte(0x1E, 6);                       // interpreter platform
             SetByte(0x1F, (byte)'A');               // interpreter version
@@ -1236,7 +1234,7 @@ namespace ZLR.VM
                 for (var i = 2; i < 26; i++)
                     alphabet2[i] = CharFromZSCII(GetByte(userAlphabets + 52 + i));
 
-                if (userAlphabets < romStart)
+                if (userAlphabets < RomStart)
                     traps.Add(userAlphabets, 26 * 3, LoadAlphabets);
             }
         }
@@ -1255,7 +1253,7 @@ namespace ZLR.VM
                 for (var i = 0; i < n; i++)
                     extraChars[i] = (char)GetWord(userExtraChars + 1 + 2 * i);
 
-                if (userExtraChars < romStart)
+                if (userExtraChars < RomStart)
                 {
                     traps.Remove(userExtraChars);
                     traps.Add(userExtraChars, n * 2 + 1, LoadExtraChars);
@@ -1291,7 +1289,7 @@ namespace ZLR.VM
                 }
                 terminatingChars = temp.ToArray();
 
-                if (terminatingTable < romStart)
+                if (terminatingTable < RomStart)
                 {
                     traps.Remove(terminatingTable);
                     traps.Add(terminatingTable, n, LoadTerminatingChars);
@@ -1308,7 +1306,7 @@ namespace ZLR.VM
                 wordSeparators[i] = GetByte(dictionaryTable + 1 + i);
 
             // the dictionary is almost certainly in ROM, but just in case...
-            if (dictionaryTable < romStart)
+            if (dictionaryTable < RomStart)
             {
                 traps.Remove(dictionaryTable);
                 traps.Add(dictionaryTable, n + 1, LoadWordSeparators);
@@ -1332,10 +1330,7 @@ namespace ZLR.VM
                 return 0;
 
             var len = (ushort)GetWord(headerExt);
-            if (num > len)
-                return 0;
-
-            return GetWord(headerExt + 2 * num);
+            return num > len ? (short) 0 : GetWord(headerExt + 2 * num);
         }
 
         internal int UnpackAddress(short packedAddr, bool forString)

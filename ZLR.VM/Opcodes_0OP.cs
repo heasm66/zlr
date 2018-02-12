@@ -1,4 +1,3 @@
-using System.Reflection;
 using System.Reflection.Emit;
 using System.Collections.Generic;
 using JetBrains.Annotations;
@@ -23,7 +22,7 @@ namespace ZLR.VM
         [Opcode(OpCount.Zero, 178, Text = true)]
         private void op_print([NotNull] ILGenerator il)
         {
-            MethodInfo printStringMI = ZMachine.GetMethodInfo(nameof(ZMachine.PrintString));
+            var printStringMI = ZMachine.GetMethodInfo(nameof(ZMachine.PrintString));
 
             il.Emit(OpCodes.Ldarg_0);
             il.Emit(OpCodes.Ldstr, operandText);
@@ -49,7 +48,7 @@ namespace ZLR.VM
         [Opcode(OpCount.Zero, 183, Terminates = true)]
         private void op_restart([NotNull] ILGenerator il)
         {
-            MethodInfo restartMI = ZMachine.GetMethodInfo(nameof(ZMachine.Restart));
+            var restartMI = ZMachine.GetMethodInfo(nameof(ZMachine.Restart));
 
             il.Emit(OpCodes.Ldarg_0);
             il.Emit(OpCodes.Call, restartMI);
@@ -74,7 +73,7 @@ namespace ZLR.VM
         private void op_catch([NotNull] ILGenerator il)
         {
             var callStackFI = ZMachine.GetFieldInfo(nameof(ZMachine.callStack));
-            MethodInfo getCountMI = typeof(Stack<ZMachine.CallFrame>).GetMethod("get_" + nameof(Stack<ZMachine.CallFrame>.Count));
+            var getCountMI = typeof(Stack<ZMachine.CallFrame>).GetProperty(nameof(Stack<ZMachine.CallFrame>.Count))?.GetGetMethod();
             System.Diagnostics.Debug.Assert(getCountMI != null);
 
             il.Emit(OpCodes.Ldarg_0);
@@ -97,7 +96,7 @@ namespace ZLR.VM
         [Opcode(OpCount.Zero, 187)]
         private void op_new_line([NotNull] ILGenerator il)
         {
-            MethodInfo printZsciiMI = ZMachine.GetMethodInfo(nameof(ZMachine.PrintZSCII));
+            var printZsciiMI = ZMachine.GetMethodInfo(nameof(ZMachine.PrintZSCII));
 
             il.Emit(OpCodes.Ldarg_0);
             il.Emit(OpCodes.Ldc_I4_S, (byte) 13);
@@ -112,7 +111,7 @@ namespace ZLR.VM
 
             if (zm.ZVersion < 4)
             {
-                MethodInfo showStatusMI = ZMachine.GetMethodInfo(nameof(ZMachine.ShowStatusImpl));
+                var showStatusMI = ZMachine.GetMethodInfo(nameof(ZMachine.ShowStatusImpl));
 
                 il.Emit(OpCodes.Ldarg_0);
                 il.Emit(OpCodes.Call, showStatusMI);
@@ -122,7 +121,7 @@ namespace ZLR.VM
         [Opcode(OpCount.Zero, 189, Branch = true, MinVersion = 3)]
         private void op_verify([NotNull] ILGenerator il)
         {
-            MethodInfo impl = ZMachine.GetMethodInfo(nameof(ZMachine.VerifyGameFile));
+            var impl = ZMachine.GetMethodInfo(nameof(ZMachine.VerifyGameFile));
 
             il.Emit(OpCodes.Ldarg_0);
             il.Emit(OpCodes.Call, impl);

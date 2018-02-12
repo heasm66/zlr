@@ -3,8 +3,7 @@ using System.Text;
 using System.Runtime.InteropServices;
 using JetBrains.Annotations;
 
-// ReSharper disable InconsistentNaming
-#pragma warning disable IDE1006 // Naming Styles
+//#pragma warning disable IDE1006 // Naming Styles
 #pragma warning disable 649
 
 namespace ZLR.Interfaces.Demona
@@ -281,7 +280,7 @@ namespace ZLR.Interfaces.Demona
     {
         private const string GLKDLL = "libgarglk.dll";
 
-        public const int LATIN1 = 28591; // code page number
+        public const int CodePageLatin1 = 28591; // code page number
 
         #region Gargoyle Specific
 
@@ -395,7 +394,7 @@ namespace ZLR.Interfaces.Demona
         private static extern void glk_put_string(IntPtr s);
         public static void glk_put_string([NotNull] string s)
         {
-            IntPtr buf = StrToLatin1(s);
+            var buf = StrToLatin1(s);
             try { glk_put_string(buf); }
             finally { Marshal.FreeHGlobal(buf); }
         }
@@ -403,7 +402,7 @@ namespace ZLR.Interfaces.Demona
         private static extern void glk_put_string_uni(IntPtr s);
         public static void glk_put_string_uni([NotNull] string s)
         {
-            IntPtr buf = StrToUTF32(s);
+            var buf = StrToUTF32(s);
             try { glk_put_string_uni(buf); }
             finally { Marshal.FreeHGlobal(buf); }
         }
@@ -411,7 +410,7 @@ namespace ZLR.Interfaces.Demona
         private static extern void glk_put_string_stream(strid_t str, IntPtr s);
         public static void glk_put_string_stream(strid_t str, [NotNull] string s)
         {
-            IntPtr buf = StrToLatin1(s);
+            var buf = StrToLatin1(s);
             try { glk_put_string_stream(str, buf); }
             finally { Marshal.FreeHGlobal(buf); }
         }
@@ -419,7 +418,7 @@ namespace ZLR.Interfaces.Demona
         private static extern void glk_put_string_stream_uni(strid_t str, IntPtr s);
         public static void glk_put_string_stream_uni(strid_t str, [NotNull] string s)
         {
-            IntPtr buf = StrToUTF32(s);
+            var buf = StrToUTF32(s);
             try { glk_put_string_stream_uni(str, buf); }
             finally { Marshal.FreeHGlobal(buf); }
         }
@@ -444,11 +443,11 @@ namespace ZLR.Interfaces.Demona
         private static extern uint glk_get_line_stream(strid_t str, IntPtr buf, uint len);
         public static uint glk_get_line_stream(strid_t str, StringBuilder sb)
         {
-            int len = sb.Capacity;
-            IntPtr buf = Marshal.AllocHGlobal(len);
+            var len = sb.Capacity;
+            var buf = Marshal.AllocHGlobal(len);
             try
             {
-                uint result = glk_get_line_stream(str, buf, (uint)len);
+                var result = glk_get_line_stream(str, buf, (uint)len);
                 StrFromLatin1(buf, sb);
                 return result;
             }
@@ -461,11 +460,11 @@ namespace ZLR.Interfaces.Demona
         private static extern uint glk_get_line_stream_uni(strid_t str, IntPtr buf, uint len);
         public static uint glk_get_line_stream_uni(strid_t str, StringBuilder sb)
         {
-            int len = sb.Capacity;
-            IntPtr buf = Marshal.AllocHGlobal(len * 4);
+            var len = sb.Capacity;
+            var buf = Marshal.AllocHGlobal(len * 4);
             try
             {
-                uint result = glk_get_line_stream_uni(str, buf, (uint)len * 4);
+                var result = glk_get_line_stream_uni(str, buf, (uint)len * 4);
                 StrFromUTF32(buf, sb);
                 return result;
             }
@@ -496,7 +495,7 @@ namespace ZLR.Interfaces.Demona
         private static extern frefid_t glk_fileref_create_by_name(FileUsage usage, IntPtr name, uint rock);
         public static frefid_t glk_fileref_create_by_name(FileUsage usage, string name, uint rock)
         {
-            IntPtr buf = StrToLatin1(name);
+            var buf = StrToLatin1(name);
             try { return glk_fileref_create_by_name(usage, buf, rock); }
             finally { Marshal.FreeHGlobal(buf); }
         }
@@ -574,7 +573,7 @@ namespace ZLR.Interfaces.Demona
         private static extern void garglk_unput_string(IntPtr s);
         public static void garglk_unput_string([NotNull] string s)
         {
-            IntPtr buf = StrToLatin1(s);
+            var buf = StrToLatin1(s);
             try { garglk_unput_string(buf); }
             finally { Marshal.FreeHGlobal(buf); }
         }
@@ -582,7 +581,7 @@ namespace ZLR.Interfaces.Demona
         private static extern void garglk_unput_string_uni(IntPtr s);
         public static void garglk_unput_string_uni([NotNull] string s)
         {
-            IntPtr buf = StrToUTF32(s);
+            var buf = StrToUTF32(s);
             try { garglk_unput_string_uni(buf); }
             finally { Marshal.FreeHGlobal(buf); }
         }
@@ -597,8 +596,8 @@ namespace ZLR.Interfaces.Demona
 
         public static IntPtr StrToLatin1([NotNull] string s)
         {
-            byte[] bytes = Encoding.GetEncoding(LATIN1).GetBytes(s);
-            IntPtr result = Marshal.AllocHGlobal(bytes.Length + 1);
+            var bytes = Encoding.GetEncoding(CodePageLatin1).GetBytes(s);
+            var result = Marshal.AllocHGlobal(bytes.Length + 1);
             if (result == IntPtr.Zero)
                 throw new Exception("Can't allocate unmanaged memory in StrToLatin1");
 
@@ -609,13 +608,13 @@ namespace ZLR.Interfaces.Demona
 
         public static void StrFromLatin1(IntPtr buf, [NotNull] StringBuilder sb)
         {
-            int len = 0;
+            var len = 0;
             while (Marshal.ReadByte(buf, len) != 0)
                 len++;
 
-            byte[] bytes = new byte[len];
+            var bytes = new byte[len];
             Marshal.Copy(buf, bytes, 0, len);
-            string str = Encoding.GetEncoding(LATIN1).GetString(bytes);
+            var str = Encoding.GetEncoding(CodePageLatin1).GetString(bytes);
 
             sb.Length = 0;
             sb.Append(str);
@@ -623,8 +622,8 @@ namespace ZLR.Interfaces.Demona
 
         public static IntPtr StrToUTF32([NotNull] string s)
         {
-            byte[] bytes = Encoding.UTF32.GetBytes(s);
-            IntPtr result = Marshal.AllocHGlobal(bytes.Length + 4);
+            var bytes = Encoding.UTF32.GetBytes(s);
+            var result = Marshal.AllocHGlobal(bytes.Length + 4);
             if (result == IntPtr.Zero)
                 throw new Exception("Can't allocate unmanaged memory in StrToUTF32");
 
@@ -635,13 +634,13 @@ namespace ZLR.Interfaces.Demona
 
         public static void StrFromUTF32(IntPtr buf, [NotNull] StringBuilder sb)
         {
-            int len = 0;
+            var len = 0;
             while (Marshal.ReadInt32(buf, len) != 0)
                 len += 4;
 
-            byte[] bytes = new byte[len];
+            var bytes = new byte[len];
             Marshal.Copy(buf, bytes, 0, len);
-            string str = Encoding.UTF32.GetString(bytes);
+            var str = Encoding.UTF32.GetString(bytes);
 
             sb.Length = 0;
             sb.Append(str);

@@ -11,10 +11,6 @@ namespace ZLR.Interfaces.SystemConsole.Debugger
         {
         }
 
-        public DebuggerException(string message, Exception innerException) : base(message, innerException)
-        {
-        }
-
         protected DebuggerException([NotNull] SerializationInfo info, StreamingContext context) : base(info, context)
         {
         }

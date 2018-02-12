@@ -17,6 +17,7 @@
     <PackageIconUrl>http://zlr.sourceforge.net/zlr-icon-32x32.png</PackageIconUrl>
     <NeutralLanguage>en-US</NeutralLanguage>
     <Description>A Z-Machine interpreter.</Description>
+    <CodeAnalysisRuleSet>..\ZLR.ruleset</CodeAnalysisRuleSet>
   </PropertyGroup>
 
   <ItemGroup>

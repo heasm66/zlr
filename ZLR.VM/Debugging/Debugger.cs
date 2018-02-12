@@ -182,11 +182,11 @@ namespace ZLR.VM
 
             private async Task OneStepAsync()
             {
-                int thisPC = zm.pc;
-                if (thisPC < zm.romStart || zm.cache.TryGetValue(thisPC, out var entry) == false)
+                var thisPC = zm.pc;
+                if (thisPC < zm.RomStart || zm.cache.TryGetValue(thisPC, out var entry) == false)
                 {
                     entry = new CachedCode(zm.pc, zm.CompileZCode(out var count));
-                    if (thisPC >= zm.romStart)
+                    if (thisPC >= zm.RomStart)
                         zm.cache.Add(thisPC, entry, count);
                 }
                 zm.pc = entry.NextPC;
@@ -216,7 +216,7 @@ namespace ZLR.VM
 
             public async Task StepOverAsync()
             {
-                int callDepth = zm.callStack.Count;
+                var callDepth = zm.callStack.Count;
                 await StepIntoAsync();
 
                 while (zm.callStack.Count > callDepth)
@@ -225,7 +225,7 @@ namespace ZLR.VM
 
             public async Task StepUpAsync()
             {
-                int callDepth = zm.callStack.Count;
+                var callDepth = zm.callStack.Count;
                 await StepIntoAsync();
 
                 while (zm.callStack.Count >= callDepth)
@@ -385,16 +385,16 @@ namespace ZLR.VM
 
             public string Disassemble(int address)
             {
-                int opc = zm.pc;
+                var opc = zm.pc;
                 try
                 {
                     zm.pc = address;
-                    OperandType[] types = new OperandType[8];
-                    short[] argv = new short[8];
+                    var types = new OperandType[8];
+                    var argv = new short[8];
 
-                    Opcode opcode = zm.DecodeOneOp(types, argv);
+                    var opcode = zm.DecodeOneOp(types, argv);
 
-                    var rtn = zm.debugFile?.FindRoutine(address);
+                    var rtn = zm.DebugInfo?.FindRoutine(address);
 
                     return opcode.Disassemble(delegate(byte varnum)
                     {
@@ -402,8 +402,8 @@ namespace ZLR.VM
                             return "local_" + varnum + "(" + rtn.Locals[varnum - 1] + ")";
                         if (varnum < 16)
                             return "local_" + varnum;
-                        if (zm.debugFile != null && zm.debugFile.Globals.Contains((byte)(varnum - 16)))
-                            return "global_" + varnum + "(" + zm.debugFile.Globals[(byte)(varnum - 16)] + ")";
+                        if (zm.DebugInfo != null && zm.DebugInfo.Globals.Contains((byte)(varnum - 16)))
+                            return "global_" + varnum + "(" + zm.DebugInfo.Globals[(byte)(varnum - 16)] + ")";
                         return "global_" + varnum;
                     });
 

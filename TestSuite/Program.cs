@@ -248,7 +248,7 @@ namespace TestSuite
             expected = rex.Replace(expected, "");
             actual = rex.Replace(actual, "");
 
-            return (expected != actual);
+            return expected != actual;
         }
 
         private static void ListAllTests()

@@ -25,15 +25,15 @@ namespace ZLR.Interfaces.SystemConsole
                 Stream gameStream, debugStream = null;
                 string gameDir, debugDir = null;
                 string fileName, commandFile = null;
-                DisplayType displayType = DisplayType.FullScreen;
+                var displayType = DisplayType.FullScreen;
                 bool debugger = false, predictable = false;
-                bool wait = true;
+                var wait = true;
 
                 if (args.Length >= 1 && args[0].Length > 0)
                 {
-                    int n = 0;
+                    var n = 0;
 
-                    bool parsing = true;
+                    var parsing = true;
                     do
                     {
                         switch (args[n].ToLower())
@@ -103,7 +103,7 @@ namespace ZLR.Interfaces.SystemConsole
                         break;
 
                     case DisplayType.FullScreen:
-                        ConsoleIO cio = new ConsoleIO(fileName);
+                        var cio = new ConsoleIO(fileName);
                         if (commandFile != null)
                         {
                             cio.SuppliedCommandFile = commandFile;
@@ -116,7 +116,7 @@ namespace ZLR.Interfaces.SystemConsole
                         throw new NotImplementedException();
                 }
 
-                ZMachine zm = new ZMachine(gameStream, io) {PredictableRandom = predictable};
+                var zm = new ZMachine(gameStream, io) {PredictableRandom = predictable};
                 if (commandFile != null)
                     zm.ReadingCommandsFromFile = true;
                 if (debugStream != null)
@@ -124,7 +124,7 @@ namespace ZLR.Interfaces.SystemConsole
 
                 if (debugger)
                 {
-                    List<string> sourcePath = new List<string>(3);
+                    var sourcePath = new List<string>(3);
                     if (debugDir != null)
                         sourcePath.Add(debugDir);
                     sourcePath.Add(gameDir);
@@ -162,7 +162,7 @@ namespace ZLR.Interfaces.SystemConsole
 
         private static int Usage()
         {
-            string exe = Path.GetFileName(Assembly.GetExecutingAssembly().Location);
+            var exe = Path.GetFileName(Assembly.GetExecutingAssembly().Location);
             Console.WriteLine("Usage: {0} [-commands <commandfile.txt>] [-dumb | -dumb2] [-debug] [-predictable] [-nowait] <game_file.z5/z8> [<debug_file.dbg>]", exe);
             return 1;
         }

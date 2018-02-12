@@ -1,4 +1,3 @@
-using System.Reflection;
 using System.Reflection.Emit;
 using JetBrains.Annotations;
 
@@ -17,7 +16,7 @@ namespace ZLR.VM
         [Opcode(OpCount.One, 129, Store = true, Branch = true)]
         private void op_get_sibling([NotNull] ILGenerator il)
         {
-            MethodInfo getSiblingMI = ZMachine.GetMethodInfo(nameof(ZMachine.GetObjectSibling));
+            var getSiblingMI = ZMachine.GetMethodInfo(nameof(ZMachine.GetObjectSibling));
 
             il.Emit(OpCodes.Ldarg_0);
             LoadOperand(il, 0);
@@ -31,7 +30,7 @@ namespace ZLR.VM
         [Opcode(OpCount.One, 130, Store = true, Branch = true)]
         private void op_get_child([NotNull] ILGenerator il)
         {
-            MethodInfo getChildMI = ZMachine.GetMethodInfo(nameof(ZMachine.GetObjectChild));
+            var getChildMI = ZMachine.GetMethodInfo(nameof(ZMachine.GetObjectChild));
 
             il.Emit(OpCodes.Ldarg_0);
             LoadOperand(il, 0);
@@ -45,7 +44,7 @@ namespace ZLR.VM
         [Opcode(OpCount.One, 131, Store = true)]
         private void op_get_parent([NotNull] ILGenerator il)
         {
-            MethodInfo getParentMI = ZMachine.GetMethodInfo(nameof(ZMachine.GetObjectParent));
+            var getParentMI = ZMachine.GetMethodInfo(nameof(ZMachine.GetObjectParent));
 
             il.Emit(OpCodes.Ldarg_0);
             LoadOperand(il, 0);
@@ -56,7 +55,7 @@ namespace ZLR.VM
         [Opcode(OpCount.One, 132, Store = true)]
         private void op_get_prop_len([NotNull] ILGenerator il)
         {
-            MethodInfo impl = ZMachine.GetMethodInfo(nameof(ZMachine.GetPropLength));
+            var impl = ZMachine.GetMethodInfo(nameof(ZMachine.GetPropLength));
 
             il.Emit(OpCodes.Ldarg_0);
             LoadOperand(il, 0);
@@ -67,7 +66,7 @@ namespace ZLR.VM
         [Opcode(OpCount.One, 133, IndirectVar = true)]
         private void op_inc([NotNull] ILGenerator il)
         {
-            MethodInfo impl = ZMachine.GetMethodInfo(nameof(ZMachine.IncImpl));
+            var impl = ZMachine.GetMethodInfo(nameof(ZMachine.IncImpl));
 
             il.Emit(OpCodes.Ldarg_0);
             LoadOperand(il, 0);
@@ -79,7 +78,7 @@ namespace ZLR.VM
         [Opcode(OpCount.One, 134, IndirectVar = true)]
         private void op_dec([NotNull] ILGenerator il)
         {
-            MethodInfo impl = ZMachine.GetMethodInfo(nameof(ZMachine.IncImpl));
+            var impl = ZMachine.GetMethodInfo(nameof(ZMachine.IncImpl));
 
             il.Emit(OpCodes.Ldarg_0);
             LoadOperand(il, 0);
@@ -91,8 +90,8 @@ namespace ZLR.VM
         [Opcode(OpCount.One, 135)]
         private void op_print_addr([NotNull] ILGenerator il)
         {
-            MethodInfo decodeStringMI = ZMachine.GetMethodInfo(nameof(ZMachine.DecodeString));
-            MethodInfo printStringMI = ZMachine.GetMethodInfo(nameof(ZMachine.PrintString));
+            var decodeStringMI = ZMachine.GetMethodInfo(nameof(ZMachine.DecodeString));
+            var printStringMI = ZMachine.GetMethodInfo(nameof(ZMachine.PrintString));
 
             il.Emit(OpCodes.Ldarg_0);
             il.Emit(OpCodes.Dup);
@@ -111,7 +110,7 @@ namespace ZLR.VM
         [Opcode(OpCount.One, 137)]
         private void op_remove_obj([NotNull] ILGenerator il)
         {
-            MethodInfo impl = ZMachine.GetMethodInfo(nameof(ZMachine.InsertObject));
+            var impl = ZMachine.GetMethodInfo(nameof(ZMachine.InsertObject));
 
             il.Emit(OpCodes.Ldarg_0);
             LoadOperand(il, 0);
@@ -122,8 +121,8 @@ namespace ZLR.VM
         [Opcode(OpCount.One, 138)]
         private void op_print_obj([NotNull] ILGenerator il)
         {
-            MethodInfo getNameMI = ZMachine.GetMethodInfo(nameof(ZMachine.GetObjectName));
-            MethodInfo printStringMI = ZMachine.GetMethodInfo(nameof(ZMachine.PrintString));
+            var getNameMI = ZMachine.GetMethodInfo(nameof(ZMachine.GetObjectName));
+            var printStringMI = ZMachine.GetMethodInfo(nameof(ZMachine.PrintString));
 
             il.Emit(OpCodes.Ldarg_0);
             il.Emit(OpCodes.Dup);
@@ -155,9 +154,9 @@ namespace ZLR.VM
         [Opcode(OpCount.One, 141)]
         private void op_print_paddr([NotNull] ILGenerator il)
         {
-            MethodInfo decodeStringMI = ZMachine.GetMethodInfo(nameof(ZMachine.DecodeString));
-            MethodInfo printStringMI = ZMachine.GetMethodInfo(nameof(ZMachine.PrintString));
-            MethodInfo unpackAddrMI = ZMachine.GetMethodInfo(nameof(ZMachine.UnpackAddress));
+            var decodeStringMI = ZMachine.GetMethodInfo(nameof(ZMachine.DecodeString));
+            var printStringMI = ZMachine.GetMethodInfo(nameof(ZMachine.PrintString));
+            var unpackAddrMI = ZMachine.GetMethodInfo(nameof(ZMachine.UnpackAddress));
 
             il.Emit(OpCodes.Ldarg_0);
             il.Emit(OpCodes.Dup);
@@ -172,7 +171,7 @@ namespace ZLR.VM
         [Opcode(OpCount.One, 142, Store = true, IndirectVar = true)]
         private void op_load([NotNull] ILGenerator il)
         {
-            MethodInfo impl = ZMachine.GetMethodInfo(nameof(ZMachine.LoadVariableImpl));
+            var impl = ZMachine.GetMethodInfo(nameof(ZMachine.LoadVariableImpl));
 
             il.Emit(OpCodes.Ldarg_0);
             LoadOperand(il, 0);

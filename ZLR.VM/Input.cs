@@ -216,7 +216,7 @@ namespace ZLR.VM
             return result != 0;
         }
 
-        private short FilterInput(short ch)
+        private static short FilterInput(short ch)
         {
             // only allow characters that are defined for input: section 3.8
             if (ch < 32 && ch != 8 && ch != 13 && ch != 27)
@@ -239,7 +239,7 @@ namespace ZLR.VM
             }
         }
 
-        private bool IsTokenSpace(byte ch)
+        private static bool IsTokenSpace(byte ch)
         {
             return ch == 9 || ch == 32;
         }
@@ -306,7 +306,7 @@ namespace ZLR.VM
                 bufLen = 0;
                 tokenOffset = 1;
 
-                for (var i = buffer + 1; i < romStart; i++)
+                for (var i = buffer + 1; i < RomStart; i++)
                     if (GetByte(i) == 0)
                     {
                         bufLen = (byte)(i - buffer - 1);

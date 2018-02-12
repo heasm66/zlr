@@ -16,7 +16,7 @@ namespace TestSuite
         [NotNull]
         public string CollectOutput()
         {
-            string result = outputBuffer.ToString();
+            var result = outputBuffer.ToString();
             outputBuffer.Length = 0;
             return result;
         }
@@ -40,13 +40,13 @@ namespace TestSuite
 
         public bool Buffering
         {
-            get { return false; }
+            get => false;
             set { /* nada */ }
         }
 
         public bool Transcripting
         {
-            get { return false; }
+            get => false;
             set { /* nada */ }
         }
 
@@ -69,10 +69,7 @@ namespace TestSuite
 
         public Stream OpenRestoreFile()
         {
-            if (saveData != null)
-                return new MemoryStream(saveData.ToArray(), false);
-
-            return null;
+            return saveData != null ? new MemoryStream(saveData.ToArray(), false) : null;
         }
 
         public Stream OpenAuxiliaryFile(string name, int size, bool writing)
@@ -146,7 +143,7 @@ namespace TestSuite
 
         public bool ForceFixedPitch
         {
-            get { return true; }
+            get => true;
             set { /* nada */ }
         }
 
@@ -154,7 +151,7 @@ namespace TestSuite
 
         public bool ScrollFromBottom
         {
-            get { return false; }
+            get => false;
             set { /* nada */ }
         }
 
@@ -235,16 +232,13 @@ namespace TestSuite
 
         public override void PutTextRectangle(string[] lines)
         {
-            foreach (string line in lines)
+            foreach (var line in lines)
                 outputBuffer.AppendLine(line);
         }
 
         public override Stream OpenCommandFile(bool writing)
         {
-            if (writing)
-                return null;
-
-            return new FileStream(inputFile, FileMode.Open, FileAccess.Read);
+            return writing ? null : new FileStream(inputFile, FileMode.Open, FileAccess.Read);
         }
     }
 
@@ -265,7 +259,7 @@ namespace TestSuite
 
         public override short ReadKey(int time, TimedInputCallback callback, CharTranslator translator)
         {
-            ConsoleKeyInfo info = Console.ReadKey(true);
+            var info = Console.ReadKey(true);
             return translator(info.KeyChar);
         }
 
@@ -283,7 +277,7 @@ namespace TestSuite
 
         public override void PutTextRectangle(string[] lines)
         {
-            foreach (string str in lines)
+            foreach (var str in lines)
             {
                 Console.WriteLine(str);
                 outputBuffer.AppendLine(str);
@@ -292,10 +286,7 @@ namespace TestSuite
 
         public override Stream OpenCommandFile(bool writing)
         {
-            if (!writing)
-                return null;
-
-            return new FileStream(inputFile, FileMode.Create, FileAccess.Write);
+            return writing ? new FileStream(inputFile, FileMode.Create, FileAccess.Write) : null;
         }
 
         public override void PlayBeep(bool highPitch)

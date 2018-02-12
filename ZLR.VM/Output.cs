@@ -168,7 +168,6 @@ namespace ZLR.VM
     /// the I/O system.
     /// </summary>
     [PublicAPI]
-    [Obsolete("Use IAsyncZMachineIO instead.")]
     public interface IZMachineIO
     {
         // TODO: let the I/O module know whether we're using a command file, so it can disable the "more" prompts
@@ -1113,7 +1112,7 @@ namespace ZLR.VM
               '\u00fe', '\u00f0', '\u00de', '\u00d0', '\u00a3', '\u0153', '\u0152', '\u00a1', '\u00bf' };         // 215
 
         [NotNull]
-        internal string DecodeString(int address) => DecodeStringWithLen(address, out int dummy);
+        internal string DecodeString(int address) => DecodeStringWithLen(address, out var dummy);
 
         [NotNull]
         private string DecodeStringWithLen(int address, out int len)
@@ -1133,7 +1132,7 @@ namespace ZLR.VM
 
                 DecodeChar((word >> 10) & 0x1F, ref alphabet, ref abbrevMode, sb);
                 DecodeChar((word >> 5) & 0x1F, ref alphabet, ref abbrevMode, sb);
-                DecodeChar((word) & 0x1F, ref alphabet, ref abbrevMode, sb);
+                DecodeChar(word & 0x1F, ref alphabet, ref abbrevMode, sb);
             } while ((word & 0x8000) == 0);
 
             return sb.ToString();
@@ -1243,7 +1242,7 @@ namespace ZLR.VM
                     {
                         if (tableOutputAddrStack.Count == 16)
                             throw new Exception("Output stream 3 nested too deeply");
-                        if (address < 64 || address + 1 >= romStart)
+                        if (address < 64 || address + 1 >= RomStart)
                             throw new Exception("Output stream 3 address is out of range");
 
                         tableOutput = true;
@@ -1255,7 +1254,7 @@ namespace ZLR.VM
                         address = tableOutputAddrStack.Pop();
                         var buffer = tableOutputBufferStack.Pop();
 
-                        var len = Math.Min(buffer.Count, romStart - address - 2);
+                        var len = Math.Min(buffer.Count, RomStart - address - 2);
                         SetWord(address, (short)len);
                         for (var i = 0; i < len; i++)
                             SetByte(address + 2 + i, buffer[i]);

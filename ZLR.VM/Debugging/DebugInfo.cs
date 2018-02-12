@@ -438,7 +438,7 @@ namespace ZLR.VM.Debugging
 
         public void Remove([NotNull] TKey key)
         {
-            if (forward.TryGetValue(key, out TValue value))
+            if (forward.TryGetValue(key, out var value))
             {
                 forward.Remove(key);
                 backward.Remove(value);
@@ -447,7 +447,7 @@ namespace ZLR.VM.Debugging
 
         public void Remove([NotNull] TValue value)
         {
-            if (backward.TryGetValue(value, out TKey key))
+            if (backward.TryGetValue(value, out var key))
             {
                 forward.Remove(key);
                 backward.Remove(value);

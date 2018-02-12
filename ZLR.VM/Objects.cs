@@ -17,12 +17,12 @@ namespace ZLR.VM
                 // skip object name
                 propTable += 2 * GetByte(propTable) + 1;
 
-                int addr = propTable;
-                byte b = GetByte(addr++);
+                var addr = propTable;
+                var b = GetByte(addr++);
                 while (b != 0)
                 {
-                    int num = b & 31;
-                    int len = (b >> 5) + 1;
+                    var num = b & 31;
+                    var len = (b >> 5) + 1;
 
                     if (num == prop)
                         return (ushort)addr;
@@ -40,11 +40,11 @@ namespace ZLR.VM
                 // skip object name
                 propTable += 2 * GetByte(propTable) + 1;
 
-                int addr = propTable;
-                byte b = GetByte(addr++);
+                var addr = propTable;
+                var b = GetByte(addr++);
                 while (b != 0)
                 {
-                    int num = b & 63;
+                    var num = b & 63;
                     int len;
                     if ((b & 128) == 0)
                     {
@@ -85,12 +85,12 @@ namespace ZLR.VM
                 // skip object name
                 propTable += 2 * GetByte(propTable) + 1;
 
-                int addr = propTable;
-                byte b = GetByte(addr++);
+                var addr = propTable;
+                var b = GetByte(addr++);
                 while (b != 0)
                 {
-                    int num = b & 31;
-                    int len = (b >> 5) + 1;
+                    var num = b & 31;
+                    var len = (b >> 5) + 1;
 
                     if (prop == 0 || num < prop)
                         return (short)num;
@@ -107,11 +107,11 @@ namespace ZLR.VM
                 // skip object name
                 propTable += 2 * GetByte(propTable) + 1;
 
-                int addr = propTable;
-                byte b = GetByte(addr++);
+                var addr = propTable;
+                var b = GetByte(addr++);
                 while (b != 0)
                 {
-                    int num = b & 63;
+                    var num = b & 63;
                     int len;
                     if ((b & 128) == 0)
                     {
@@ -166,7 +166,7 @@ namespace ZLR.VM
 
             if (addr != 0)
             {
-                short len = GetPropLength((ushort)addr);
+                var len = GetPropLength((ushort)addr);
                 if (len == 1)
                     SetByte(addr, (byte)value);
                 else
@@ -182,22 +182,18 @@ namespace ZLR.VM
 
             if (zversion <= 3)
             {
-                byte b = GetByte(address - 1);
+                var b = GetByte(address - 1);
                 return (short)((b >> 5) + 1);
             }
             else
             {
-                byte b = GetByte(address - 1);
+                var b = GetByte(address - 1);
                 if ((b & 128) == 0)
                 {
-                    if ((b & 64) == 0)
-                        return 1;
-                    return 2;
+                    return (b & 64) == 0 ? (short) 1 : (short) 2;
                 }
-                short len = (short)(b & 63);
-                if (len == 0)
-                    return 64;
-                return len;
+                var len = (short)(b & 63);
+                return len == 0 ? (short) 64 : len;
             }
         }
 
@@ -234,7 +230,7 @@ namespace ZLR.VM
             return (ushort)GetWord(GetObjectAddress(obj) + 10);
         }
 
-        internal void SetObjectParent(ushort obj, ushort value)
+        void SetObjectParent(ushort obj, ushort value)
         {
             if (obj != 0)
             {
@@ -245,7 +241,7 @@ namespace ZLR.VM
             }
         }
 
-        internal void SetObjectSibling(ushort obj, ushort value)
+        void SetObjectSibling(ushort obj, ushort value)
         {
             if (obj != 0)
             {
@@ -256,7 +252,7 @@ namespace ZLR.VM
             }
         }
 
-        internal void SetObjectChild(ushort obj, ushort value)
+        void SetObjectChild(ushort obj, ushort value)
         {
             if (obj != 0)
             {
@@ -273,18 +269,18 @@ namespace ZLR.VM
             if (obj == 0)
                 return;
 
-            ushort prevParent = GetObjectParent(obj);
+            var prevParent = GetObjectParent(obj);
             if (prevParent != 0)
             {
-                ushort head = GetObjectChild(prevParent);
+                var head = GetObjectChild(prevParent);
                 if (head == obj)
                 {
-                    ushort prevSibling = GetObjectSibling(obj);
+                    var prevSibling = GetObjectSibling(obj);
                     SetObjectChild(prevParent, prevSibling);
                 }
                 else
                 {
-                    ushort next = GetObjectSibling(head);
+                    var next = GetObjectSibling(head);
                     while (next != obj)
                     {
                         head = next;
@@ -294,7 +290,7 @@ namespace ZLR.VM
                 }
             }
 
-            ushort prevChild = GetObjectChild(dest);
+            var prevChild = GetObjectChild(dest);
             SetObjectSibling(obj, prevChild);
             SetObjectParent(obj, dest);
             if (dest != 0)
@@ -329,9 +325,9 @@ namespace ZLR.VM
             if (obj == 0)
                 return false;
 
-            int bit = 128 >> (attr & 7);
-            int offset = attr >> 3;
-            byte flags = GetByte(GetObjectAddress(obj) + offset);
+            var bit = 128 >> (attr & 7);
+            var offset = attr >> 3;
+            var flags = GetByte(GetObjectAddress(obj) + offset);
             return (flags & bit) != 0;
         }
 
@@ -340,9 +336,9 @@ namespace ZLR.VM
             if (obj == 0)
                 return;
 
-            int bit = 128 >> (attr & 7);
-            int address = GetObjectAddress(obj) + (attr >> 3);
-            byte flags = GetByte(address);
+            var bit = 128 >> (attr & 7);
+            var address = GetObjectAddress(obj) + (attr >> 3);
+            var flags = GetByte(address);
             if (value)
                 flags |= (byte)bit;
             else

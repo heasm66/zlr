@@ -24,10 +24,7 @@ namespace ZLR.VM.IOFilters
         [ItemNotNull]
         public override Task<Stream> OpenRestoreFileAsync(CancellationToken cancellationToken = default)
         {
-            if (saveData != null)
-                return Task.FromResult<Stream>(new MemoryStream(saveData.ToArray(), false));
-
-            return Task.FromResult<Stream>(null);
+            return Task.FromResult<Stream>(saveData != null ? new MemoryStream(saveData.ToArray(), false) : null);
         }
     }
 }

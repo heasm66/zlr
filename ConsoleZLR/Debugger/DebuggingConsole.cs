@@ -301,6 +301,8 @@ namespace ZLR.Interfaces.SystemConsole.Debugger
                         io.PutString(valueFormatter.Format(new Value(ValueType.Attribute, i * 8 + j)));
                         io.PutChar('\n');
                     }
+
+                    bit >>= 1;
                 }
             }
 
@@ -631,16 +633,13 @@ namespace ZLR.Interfaces.SystemConsole.Debugger
                         return combined;
                 }
 
-                if (File.Exists(filename))
-                    return Path.GetFullPath(filename);
-
-                return null;
+                return File.Exists(filename) ? Path.GetFullPath(filename) : null;
             }
 
             [CanBeNull]
             public string Load(LineInfo li)
             {
-                if (!cache.TryGetValue(li.File, out string[] lines))
+                if (!cache.TryGetValue(li.File, out var lines))
                 {
                     var file = FindFile(li.File);
                     if (file == null)

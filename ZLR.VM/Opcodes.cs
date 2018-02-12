@@ -7,8 +7,8 @@ using JetBrains.Annotations;
 
 namespace ZLR.VM
 {
-    internal enum OpForm { Long, Short, Ext, Var };
-    internal enum OpCount { Zero, One, Two, Var, Ext };
+    internal enum OpForm { Long, Short, Ext, Var }
+    internal enum OpCount { Zero, One, Two, Var, Ext }
     internal enum OperandType : byte
     {
         LargeConst = 0,
@@ -199,7 +199,7 @@ namespace ZLR.VM
                 if (attribute.OpCount == OpCount.One && attribute.Number == 140)
                 {
                     // op_jump is unconditional unless the operand is a variable
-                    return (operandTypes[0] != OperandType.Variable);
+                    return operandTypes[0] != OperandType.Variable;
                 }
 
                 return false;
@@ -333,7 +333,7 @@ namespace ZLR.VM
         }
 
         [NotNull]
-        internal static string GetOpcodeName([CanBeNull] OpcodeAttribute attribute, OpcodeCompiler handler)
+        static string GetOpcodeName([CanBeNull] OpcodeAttribute attribute, OpcodeCompiler handler)
         {
             if (attribute?.Alias != null)
                 return attribute.Alias;
@@ -581,29 +581,29 @@ namespace ZLR.VM
             var skipBranch = il.DefineLabel();
             il.Emit(branchIfTrue ? ifFalse : ifTrue, skipBranch);
 
-            if (branchOffset == 0)
+            switch (branchOffset)
             {
-                LeaveFunctionConst(il, 0);
-                il.Emit(OpCodes.Ldnull);
-                il.Emit(OpCodes.Ret);
-                compiling = true;
-            }
-            else if (branchOffset == 1)
-            {
-                LeaveFunctionConst(il, 1);
-                il.Emit(OpCodes.Ldnull);
-                il.Emit(OpCodes.Ret);
-                compiling = true;
-            }
-            else
-            {
-                var pcFI = ZMachine.GetFieldInfo(nameof(ZMachine.pc));
-                il.Emit(OpCodes.Ldarg_0);
-                il.Emit(OpCodes.Ldc_I4, zm.PC + branchOffset - 2);
-                il.Emit(OpCodes.Stfld, pcFI);
-                il.Emit(OpCodes.Ldnull);
-                il.Emit(OpCodes.Ret);
-                compiling = false;
+                case 0:
+                    LeaveFunctionConst(il, 0);
+                    il.Emit(OpCodes.Ldnull);
+                    il.Emit(OpCodes.Ret);
+                    compiling = true;
+                    break;
+                case 1:
+                    LeaveFunctionConst(il, 1);
+                    il.Emit(OpCodes.Ldnull);
+                    il.Emit(OpCodes.Ret);
+                    compiling = true;
+                    break;
+                default:
+                    var pcFI = ZMachine.GetFieldInfo(nameof(ZMachine.pc));
+                    il.Emit(OpCodes.Ldarg_0);
+                    il.Emit(OpCodes.Ldc_I4, zm.PC + branchOffset - 2);
+                    il.Emit(OpCodes.Stfld, pcFI);
+                    il.Emit(OpCodes.Ldnull);
+                    il.Emit(OpCodes.Ret);
+                    compiling = false;
+                    break;
             }
 
             il.MarkLabel(skipBranch);
@@ -622,20 +622,18 @@ namespace ZLR.VM
             }
 
             // do it the hard way
-            if (branchOffset == 0)
+            switch (branchOffset)
             {
-                LeaveFunctionConst(il, 0);
-            }
-            else if (branchOffset == 1)
-            {
-                LeaveFunctionConst(il, 1);
-            }
-            else
-            {
-                var pcFI = ZMachine.GetFieldInfo(nameof(ZMachine.pc));
-                il.Emit(OpCodes.Ldarg_0);
-                il.Emit(OpCodes.Ldc_I4, zm.PC + branchOffset - 2);
-                il.Emit(OpCodes.Stfld, pcFI);
+                case 0:
+                case 1:
+                    LeaveFunctionConst(il, (short) branchOffset);
+                    break;
+                default:
+                    var pcFI = ZMachine.GetFieldInfo(nameof(ZMachine.pc));
+                    il.Emit(OpCodes.Ldarg_0);
+                    il.Emit(OpCodes.Ldc_I4, zm.PC + branchOffset - 2);
+                    il.Emit(OpCodes.Stfld, pcFI);
+                    break;
             }
 
             compiling = false;

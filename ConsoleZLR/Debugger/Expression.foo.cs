@@ -199,7 +199,7 @@ namespace ZLR.Interfaces.SystemConsole.Debugger
                 sb.Remove(sb.Length - 1, 1);
 
                 // remove backslashes
-                for (int i = 0; i < sb.Length; i++)
+                for (var i = 0; i < sb.Length; i++)
                 {
                     if (sb[i] == '\\')
                     {
@@ -218,7 +218,7 @@ namespace ZLR.Interfaces.SystemConsole.Debugger
                     var curRtn = zm.DebugInfo.FindRoutine(dbg.CurrentPC);
                     if (curRtn != null)
                     {
-                        for (int i = 0; i < curRtn.Locals.Length; i++)
+                        for (var i = 0; i < curRtn.Locals.Length; i++)
                         {
                             if (curRtn.Locals[i] == name)
                             {
@@ -430,8 +430,8 @@ namespace ZLR.Interfaces.SystemConsole.Debugger
 
                 dbg.ParseObject(objAddr, out var attrs, out _, out _, out _, out _);
 
-                int bit = 128 >> (attr & 7);
-                int offset = attr >> 3;
+                var bit = 128 >> (attr & 7);
+                var offset = attr >> 3;
                 return (attrs[offset] & bit) != 0;
             }
 

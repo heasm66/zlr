@@ -260,7 +260,7 @@ namespace ZLR.IFF
         protected override bool WantBlock(uint type)
         {
             // only load the resource index
-            return (type == RIDX_TYPE_ID);
+            return type == RIDX_TYPE_ID;
         }
 
         protected override int CompareBlocks(uint type1, uint type2, byte[] data1, byte[] data2,

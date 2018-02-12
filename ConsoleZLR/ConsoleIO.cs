@@ -76,9 +76,9 @@ namespace ZLR.Interfaces.SystemConsole
             FlushBuffer();
             lineCount = 0;
 
-            int histIdx = history.Count;
-            string savedEntry = string.Empty;
-            int sleeps = 0;
+            var histIdx = history.Count;
+            var savedEntry = string.Empty;
+            var sleeps = 0;
             byte terminator;
 
             StringBuilder sb;
@@ -108,8 +108,8 @@ namespace ZLR.Interfaces.SystemConsole
                         if (sleeps == time)
                         {
                             sleeps = 0;
-                            int cx = Console.CursorLeft;
-                            int cy = Console.CursorTop;
+                            var cx = Console.CursorLeft;
+                            var cy = Console.CursorTop;
                             if (callback())
                             {
                                 return ReadLineResult.Cancelled;
@@ -119,15 +119,15 @@ namespace ZLR.Interfaces.SystemConsole
                                 Console.CursorTop != cy)
                             {
                                 Console.Write(sb.ToString());
-                                for (int i = cursor; i < sb.Length; i++)
+                                for (var i = cursor; i < sb.Length; i++)
                                     Console.Write('\x08');
                             }
                         }
                     }
                 }
 
-                ConsoleKeyInfo info = Console.ReadKey(true);
-                byte special = ConsoleKeyToZSCII(info.Key);
+                var info = Console.ReadKey(true);
+                var special = ConsoleKeyToZSCII(info.Key);
                 if (IsTerminator(special, terminatingKeys))
                 {
                     terminator = special;
@@ -174,9 +174,9 @@ namespace ZLR.Interfaces.SystemConsole
                             if (histIdx == history.Count)
                                 savedEntry = sb.ToString();
 
-                            for (int i = cursor; i < sb.Length; i++)
+                            for (var i = cursor; i < sb.Length; i++)
                                 Console.Write(' ');
-                            for (int i = 0; i < sb.Length; i++)
+                            for (var i = 0; i < sb.Length; i++)
                                 Console.Write("\x08 \x08");
 
                             histIdx--;
@@ -190,9 +190,9 @@ namespace ZLR.Interfaces.SystemConsole
                     case ConsoleKey.DownArrow:
                         if (histIdx < history.Count && history.Count > 0)
                         {
-                            for (int i = cursor; i < sb.Length; i++)
+                            for (var i = cursor; i < sb.Length; i++)
                                 Console.Write(' ');
-                            for (int i = 0; i < sb.Length; i++)
+                            for (var i = 0; i < sb.Length; i++)
                                 Console.Write("\x08 \x08");
 
                             histIdx++;
@@ -209,10 +209,10 @@ namespace ZLR.Interfaces.SystemConsole
                             cursor--;
                             sb.Remove(cursor, 1);
                             Console.Write('\x08');
-                            for (int i = cursor; i < sb.Length; i++)
+                            for (var i = cursor; i < sb.Length; i++)
                                 Console.Write(sb[i]);
                             Console.Write(' ');
-                            for (int i = cursor; i <= sb.Length; i++)
+                            for (var i = cursor; i <= sb.Length; i++)
                                 Console.Write('\x08');
                         }
                         break;
@@ -221,18 +221,18 @@ namespace ZLR.Interfaces.SystemConsole
                         if (cursor < sb.Length)
                         {
                             sb.Remove(cursor, 1);
-                            for (int i = cursor; i < sb.Length; i++)
+                            for (var i = cursor; i < sb.Length; i++)
                                 Console.Write(sb[i]);
                             Console.Write(' ');
-                            for (int i = cursor; i <= sb.Length; i++)
+                            for (var i = cursor; i <= sb.Length; i++)
                                 Console.Write('\x08');
                         }
                         break;
 
                     case ConsoleKey.Escape:
-                        for (int i = cursor; i < sb.Length; i++)
+                        for (var i = cursor; i < sb.Length; i++)
                             Console.Write(' ');
-                        for (int i = 0; i < sb.Length; i++)
+                        for (var i = 0; i < sb.Length; i++)
                             Console.Write("\x08 \x08");
                         sb.Length = 0;
                         break;
@@ -256,9 +256,9 @@ namespace ZLR.Interfaces.SystemConsole
                             sb.Insert(cursor, info.KeyChar);
                             Console.Write(info.KeyChar);
                             cursor++;
-                            for (int i = cursor; i < sb.Length; i++)
+                            for (var i = cursor; i < sb.Length; i++)
                                 Console.Write(sb[i]);
-                            for (int i = cursor; i < sb.Length; i++)
+                            for (var i = cursor; i < sb.Length; i++)
                                 Console.Write('\x08');
                         }
                         break;
@@ -271,7 +271,7 @@ namespace ZLR.Interfaces.SystemConsole
                 Console.WriteLine();
             }
 
-            string result = sb.ToString();
+            var result = sb.ToString();
 
             history.Add(result);
             if (history.Count > MAX_COMMAND_HISTORY)
@@ -289,7 +289,7 @@ namespace ZLR.Interfaces.SystemConsole
                 return false;
 
             if (terminatingKeys[0] == 255)
-                return ((key >= 129 && key <= 154) || (key >= 252 && key <= 254));
+                return key >= 129 && key <= 154 || key >= 252 && key <= 254;
 
             return Array.IndexOf(terminatingKeys, key) >= 0;
         }
@@ -308,7 +308,7 @@ namespace ZLR.Interfaces.SystemConsole
             {
                 if (time > 0)
                 {
-                    int sleeps = 0;
+                    var sleeps = 0;
                     while (!Console.KeyAvailable)
                     {
                         Thread.Sleep(100);
@@ -325,7 +325,7 @@ namespace ZLR.Interfaces.SystemConsole
                     }
                 }
 
-                ConsoleKeyInfo info = Console.ReadKey(true);
+                var info = Console.ReadKey(true);
                 short zkey = ConsoleKeyToZSCII(info.Key);
                 if (zkey != 0)
                     return zkey;
@@ -391,7 +391,7 @@ namespace ZLR.Interfaces.SystemConsole
         {
             if (upper || !buffering)
             {
-                foreach (char ch in str)
+                foreach (var ch in str)
                 {
                     CheckScroll(ch == '\n');
                     Console.Write(ch);
@@ -400,14 +400,14 @@ namespace ZLR.Interfaces.SystemConsole
             }
             else
             {
-                foreach (char ch in str)
+                foreach (var ch in str)
                     BufferedPutChar(ch);
             }
         }
 
         private void BufferedPutChar(char ch)
         {
-            if ((ch == ' ' || ch == '\n'))
+            if (ch == ' ' || ch == '\n')
             {
                 if (Console.CursorLeft + bufferLength >= Console.WindowWidth)
                 {
@@ -436,10 +436,10 @@ namespace ZLR.Interfaces.SystemConsole
         {
             FlushBuffer();
 
-            int row = Console.CursorTop;
-            int col = Console.CursorLeft;
+            var row = Console.CursorTop;
+            var col = Console.CursorLeft;
 
-            foreach (string line in lines)
+            foreach (var line in lines)
             {
                 if (row < Console.WindowHeight)
                     Console.SetCursorPosition(col, row++);
@@ -466,7 +466,7 @@ namespace ZLR.Interfaces.SystemConsole
 
             if (reverse)
             {
-                ConsoleColor temp = bg;
+                var temp = bg;
                 bg = fg;
                 fg = temp;
             }
@@ -504,7 +504,7 @@ namespace ZLR.Interfaces.SystemConsole
             }
             else
             {
-                GetConsoleColors(out ConsoleColor fg, out ConsoleColor bg);
+                GetConsoleColors(out var fg, out var bg);
                 buffer.Add(STYLE_FLAG | ((uint)bg << 16) | (uint)fg);
             }
         }
@@ -608,7 +608,7 @@ namespace ZLR.Interfaces.SystemConsole
 
         public void EraseWindow(short num)
         {
-            bool oldReverse = reverse;
+            var oldReverse = reverse;
             try
             {
                 reverse = false;
@@ -641,9 +641,9 @@ namespace ZLR.Interfaces.SystemConsole
                 if (num == 0)
                 {
                     // erase lower
-                    int height = Console.WindowHeight;
-                    int width = Console.WindowWidth;
-                    int startat = 0;
+                    var height = Console.WindowHeight;
+                    var width = Console.WindowWidth;
+                    var startat = 0;
 
                     if (split > 0)
                     {
@@ -658,10 +658,10 @@ namespace ZLR.Interfaces.SystemConsole
                     }
 
                     Console.BackgroundColor = bglower;
-                    for (int i = startat; i < height; i++)
+                    for (var i = startat; i < height; i++)
                     {
                         Console.SetCursorPosition(Console.WindowLeft, i + Console.WindowTop);
-                        for (int j = 0; j < width; j++)
+                        for (var j = 0; j < width; j++)
                             Console.Write(' ');
                     }
 
@@ -671,13 +671,13 @@ namespace ZLR.Interfaces.SystemConsole
                 else if (num == 1)
                 {
                     // erase upper
-                    int height = split;
-                    int width = Console.WindowWidth;
+                    var height = split;
+                    var width = Console.WindowWidth;
                     Console.BackgroundColor = bgupper;
-                    for (int i = 0; i < height; i++)
+                    for (var i = 0; i < height; i++)
                     {
                         Console.SetCursorPosition(Console.WindowLeft, i + Console.WindowTop);
-                        for (int j = 0; j < width; j++)
+                        for (var j = 0; j < width; j++)
                             Console.Write(' ');
                     }
 
@@ -697,7 +697,7 @@ namespace ZLR.Interfaces.SystemConsole
 
         public void EraseLine()
         {
-            bool oldReverse = reverse;
+            var oldReverse = reverse;
             try
             {
                 reverse = false;
@@ -705,8 +705,8 @@ namespace ZLR.Interfaces.SystemConsole
 
                 SaveCursorPos();
 
-                int count = Console.WindowWidth - Console.CursorLeft;
-                for (int i = 0; i < count; i++)
+                var count = Console.WindowWidth - Console.CursorLeft;
+                for (var i = 0; i < count; i++)
                     Console.Write(' ');
 
                 RestoreCursorPos();
@@ -742,8 +742,8 @@ namespace ZLR.Interfaces.SystemConsole
             if (!upper)
                 FlushBuffer();
 
-            int cx = Console.CursorLeft - Console.WindowLeft;
-            int cy = Console.CursorTop - Console.WindowTop;
+            var cx = Console.CursorLeft - Console.WindowLeft;
+            var cy = Console.CursorTop - Console.WindowTop;
 
             if (upper)
             {
@@ -759,7 +759,7 @@ namespace ZLR.Interfaces.SystemConsole
 
         public bool ForceFixedPitch
         {
-            get { return true; }
+            get => true;
             set { /* nada */ }
         }
 
@@ -804,7 +804,7 @@ namespace ZLR.Interfaces.SystemConsole
 
         public bool Transcripting
         {
-            get { return false; }
+            get => false;
             set { /* nada */}
         }
 
@@ -898,7 +898,7 @@ namespace ZLR.Interfaces.SystemConsole
 
         public Stream OpenSaveFile(int size)
         {
-            string defaultFile = fileBase + ".sav";
+            var defaultFile = fileBase + ".sav";
 
             FlushBuffer();
             lineCount = 0;
@@ -1025,10 +1025,7 @@ namespace ZLR.Interfaces.SystemConsole
             if (name.Trim().Length == 0)
                 return true;
 
-            if (name.IndexOfAny(BadChars) > 0)
-                return true;
-
-            return false;
+            return name.IndexOfAny(BadChars) > 0;
         }
 
         public short SetFont(short num)
@@ -1093,7 +1090,7 @@ namespace ZLR.Interfaces.SystemConsole
             }
 
             // then flush the buffer
-            foreach (uint item in buffer)
+            foreach (var item in buffer)
             {
                 if ((item & STYLE_FLAG) == 0)
                 {
