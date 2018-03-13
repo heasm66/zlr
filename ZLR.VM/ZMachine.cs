@@ -230,6 +230,7 @@ namespace ZLR.VM
             DebugInfo = di;
         }
 
+        [CanBeNull]
         public DebugInfo DebugInfo { get; private set; }
 
         // ReSharper disable once InconsistentNaming
@@ -600,7 +601,7 @@ namespace ZLR.VM
 
         private int CompilationStart { get; set; }
 
-        internal int ZVersion => zversion;
+        public int ZVersion => zversion;
 
         [CanBeNull]
         private delegate Task ZCodeDelegate();
@@ -1378,7 +1379,7 @@ namespace ZLR.VM
 
             public readonly int ReturnPC;
             public readonly int PrevStackDepth;
-            public readonly short[] Locals;
+            [NotNull] public readonly short[] Locals;
             public readonly int ArgCount;
             public readonly int ResultStorage;
 

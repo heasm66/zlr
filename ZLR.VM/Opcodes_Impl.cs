@@ -81,19 +81,24 @@ namespace ZLR.VM
                 stack.Push(result);
             }
             else if (dest < 16)
+            {
                 TopFrame.Locals[dest - 1] = result;
+            }
             else
+            {
                 SetWord(GlobalsOffset + 2 * (dest - 16), result);
+            }
         }
 
         internal short LoadVariableImpl(byte num)
         {
             if (num == 0)
                 return stack.Peek();
-            else if (num < 16)
-                return TopFrame.Locals[num - 1];
-            else
-                return GetWord(GlobalsOffset + 2 * (num - 16));
+
+            if (num < 16)
+                return this.TopFrame.Locals[num - 1];
+
+            return GetWord(this.GlobalsOffset + 2 * (num - 16));
         }
 
         internal short IncImpl(byte dest, short amount)
@@ -258,18 +263,12 @@ namespace ZLR.VM
 
         internal static short LogShiftImpl(short a, short b)
         {
-            if (b < 0)
-                return (short)((ushort)a >> -b);
-            else
-                return (short)(a << b);
+            return b < 0 ? (short) ((ushort) a >> -b) : (short) (a << b);
         }
 
         internal static short ArtShiftImpl(short a, short b)
         {
-            if (b < 0)
-                return (short)(a >> -b);
-            else
-                return (short)(a << b);
+            return b < 0 ? (short) (a >> -b) : (short) (a << b);
         }
 
         internal void ThrowImpl(short value, ushort catchingFrame)
@@ -375,7 +374,7 @@ namespace ZLR.VM
             if (size < 0)
             {
                 forceForward = true;
-                size = (short)-size;
+                size = (short) -size;
             }
 
             if (first > second || forceForward)

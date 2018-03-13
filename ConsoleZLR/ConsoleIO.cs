@@ -94,6 +94,15 @@ namespace ZLR.Interfaces.SystemConsole
                 cursor = initial.Length;
             }
 
+            void ClearInput()
+            {
+                for (var i = cursor; i < sb.Length; i++)
+                    Console.Write(' ');
+                for (var i = 0; i < sb.Length; i++)
+                    Console.Write("\x08 \x08");
+                sb.Length = 0;
+            }
+            
             while (true)
             {
                 if (time > 0)
@@ -230,11 +239,7 @@ namespace ZLR.Interfaces.SystemConsole
                         break;
 
                     case ConsoleKey.Escape:
-                        for (var i = cursor; i < sb.Length; i++)
-                            Console.Write(' ');
-                        for (var i = 0; i < sb.Length; i++)
-                            Console.Write("\x08 \x08");
-                        sb.Length = 0;
+                        ClearInput();
                         break;
 
                     case ConsoleKey.B:
@@ -242,7 +247,7 @@ namespace ZLR.Interfaces.SystemConsole
                         {
                             // debugger break
                             CheckScroll(true);
-                            Console.WriteLine();
+                            ClearInput();
                             return ReadLineResult.DebuggerBreak;
                         }
                         else

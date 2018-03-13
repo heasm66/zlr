@@ -98,7 +98,6 @@ namespace ZLR.VM
                     addr += len;
                     b = GetByte(addr++);
                 }
-
             }
             else
             {
@@ -298,11 +297,11 @@ namespace ZLR.VM
         }
 #pragma warning restore 0169
 
-        private int GetObjectAddress(ushort obj)
+        private ushort GetObjectAddress(ushort obj)
         {
             if (zversion <= 3)
-                return objectTable + 2 * 31 + 9 * (obj - 1);
-            return objectTable + 2 * 63 + 14 * (obj - 1);
+                return (ushort) (objectTable + 2 * 31 + 9 * (obj - 1));
+            return (ushort) (objectTable + 2 * 63 + 14 * (obj - 1));
         }
 
 #pragma warning disable 0169
@@ -312,11 +311,7 @@ namespace ZLR.VM
             if (obj == 0)
                 return string.Empty;
 
-            int propTable;
-            if (zversion <= 3)
-                propTable = (ushort)GetWord(GetObjectAddress(obj) + 7);
-            else
-                propTable = (ushort)GetWord(GetObjectAddress(obj) + 12);
+            var propTable = (ushort)GetWord(GetObjectAddress(obj) + (zversion <= 3 ? 7 : 12));
             return DecodeString(propTable + 1);
         }
 

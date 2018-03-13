@@ -3,10 +3,12 @@ using System.Collections.Generic;
 using System.IO;
 using ZLR.VM;
 using System.Reflection;
-using System.Threading;
 using System.Threading.Tasks;
 using JetBrains.Annotations;
 using ZLR.Interfaces.SystemConsole.Debugger;
+using System.Net;
+using System.Net.Sockets;
+using System.Text;
 
 namespace ZLR.Interfaces.SystemConsole
 {
@@ -17,18 +19,26 @@ namespace ZLR.Interfaces.SystemConsole
         // ReSharper disable once InconsistentNaming
         static async Task<int> Main([ItemNotNull] [NotNull] string[] args)
         {
-            System.Diagnostics.Debugger.Launch();
+            const bool catchExceptions = true;
+
             try
             {
-                Console.Title = "ConsoleZLR";
+                var redirected = Console.IsOutputRedirected;
+
+                if (!redirected)
+                {
+                    Console.Title = "ConsoleZLR";
+                }
 
                 Stream gameStream, debugStream = null;
                 string gameDir, debugDir = null;
                 string fileName, commandFile = null;
-                var displayType = DisplayType.FullScreen;
+                var displayType = redirected ? DisplayType.DumbBottomWinOnly : DisplayType.FullScreen;
                 bool debugger = false, predictable = false;
                 var wait = true;
+                int? listen = null;
 
+                // TODO: use a command-line parsing library
                 if (args.Length >= 1 && args[0].Length > 0)
                 {
                     var n = 0;
@@ -60,6 +70,17 @@ namespace ZLR.Interfaces.SystemConsole
                             case "-debug":
                                 n++;
                                 debugger = true;
+                                break;
+                            case "-listen":
+                                if (args.Length > n + 1 && int.TryParse(args[n+1], out var num))
+                                {
+                                    listen = num;
+                                    n += 2;
+                                    if (args.Length <= n)
+                                        return Usage();
+                                }
+                                else
+                                    return Usage();
                                 break;
                             case "-predictable":
                                 n++;
@@ -130,7 +151,8 @@ namespace ZLR.Interfaces.SystemConsole
                     sourcePath.Add(gameDir);
                     sourcePath.Add(Directory.GetCurrentDirectory());
 
-                    await DebuggerLoopAsync(zm, sourcePath.ToArray());
+                    var console = await CreateDebuggingConsole(zm, listen, sourcePath);
+                    await console.RunDebuggerAsync();
                 }
                 else
                 {
@@ -154,16 +176,41 @@ namespace ZLR.Interfaces.SystemConsole
                 }
                 return 0;
             }
-            catch (Exception ex)
+            catch (Exception ex) when (catchExceptions)
             {
                 return Error(ex.Message + " (" + ex.GetType().Name + ")");
             }
         }
 
+        [ItemNotNull]
+        private static async Task<DebuggingConsole> CreateDebuggingConsole(
+            [NotNull] ZMachine zm, [CanBeNull] int? listen, [NotNull] IEnumerable<string> sourcePath)
+        {
+            if (listen == null)
+            {
+                return new DebuggingConsole(zm, zm.IO, sourcePath);
+            }
+
+            var listener = new TcpListener(IPAddress.Loopback, (int) listen);
+            listener.Start(1);
+
+            Console.Error.WriteLine("Debugger listening on {0}.", listener.LocalEndpoint);
+
+            var client = await listener.AcceptTcpClientAsync();
+
+            Console.Error.WriteLine("Accepted connection from {0}.", client.Client.RemoteEndPoint);
+            listener.Stop();
+
+            var stream = client.GetStream();
+            var reader = new StreamReader(stream);
+            var writer = new StreamWriter(stream, Encoding.UTF8);
+            return new DebuggingConsole(zm, reader, writer, sourcePath);
+        }
+
         private static int Usage()
         {
             var exe = Path.GetFileName(Assembly.GetExecutingAssembly().Location);
-            Console.WriteLine("Usage: {0} [-commands <commandfile.txt>] [-dumb | -dumb2] [-debug] [-predictable] [-nowait] <game_file.z5/z8> [<debug_file.dbg>]", exe);
+            Console.WriteLine("Usage: {0} [-commands <commandfile.txt>] [-dumb | -dumb2] [-debug [-listen <port>]] [-predictable] [-nowait] <game_file.z5/z8> [<debug_file.dbg>]", exe);
             return 1;
         }
 
@@ -172,22 +219,6 @@ namespace ZLR.Interfaces.SystemConsole
             Console.Error.Write("Error: ");
             Console.Error.WriteLine(msg);
             return 2;
-        }
-
-        private static readonly byte[] DummyTerminatingKeys = { };
-
-        private static async Task DebuggerLoopAsync([NotNull] ZMachine zm, string[] sourcePath)
-        {
-            var console = new DebuggingConsole(zm, zm.IO, sourcePath);
-
-            console.Activate();
-
-            while (console.Active)
-            {
-                var result = await zm.IO.ReadLineAsync(string.Empty, DummyTerminatingKeys, false, CancellationToken.None);
-                System.Diagnostics.Debug.Assert(result.Outcome == ReadOutcome.KeyPressed);
-                await console.HandleCommandAsync(result.Text);
-            }
         }
     }
 }

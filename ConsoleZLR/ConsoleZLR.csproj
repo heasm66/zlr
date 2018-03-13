@@ -29,7 +29,7 @@
     <UpdateRequired>false</UpdateRequired>
     <MapFileExtensions>true</MapFileExtensions>
     <ApplicationRevision>0</ApplicationRevision>
-    <ApplicationVersion>1.0.0.%2a</ApplicationVersion>
+    <ApplicationVersion>1.0.0.0</ApplicationVersion>
     <IsWebBootstrapper>false</IsWebBootstrapper>
     <UseApplicationTrust>false</UseApplicationTrust>
     <BootstrapperEnabled>true</BootstrapperEnabled>
@@ -75,13 +75,23 @@
     <Compile Include="ConsoleIO.cs" />
     <Compile Include="Debugger\DebuggerException.cs" />
     <Compile Include="Debugger\DebuggingConsole.cs" />
-    <Compile Include="DumbIO.cs" />
-    <Compile Include="Debugger\Expression.foo.cs" />
-    <Compile Include="Debugger\Expression.g4.lexer.cs">
-      <DependentUpon>Expression.g4</DependentUpon>
+    <Compile Include="Debugger\ZilExpression.cs" />
+    <Compile Include="Debugger\ZilExpression.g4.lexer.cs">
+      <DependentUpon>ZilExpression.g4</DependentUpon>
     </Compile>
-    <Compile Include="Debugger\Expression.g4.parser.cs">
-      <DependentUpon>Expression.g4</DependentUpon>
+    <Compile Include="Debugger\ZilExpression.g4.parser.cs">
+      <DependentUpon>ZilExpression.g4</DependentUpon>
+    </Compile>
+    <Compile Include="Debugger\InformExpression.cs" />
+    <Compile Include="Debugger\ValueFormatter.cs" />
+    <Compile Include="Debugger\ValueType.cs" />
+    <Compile Include="DumbIO.cs" />
+    <Compile Include="Debugger\Value.cs" />
+    <Compile Include="Debugger\InformExpression.g4.lexer.cs">
+      <DependentUpon>InformExpression.g4</DependentUpon>
+    </Compile>
+    <Compile Include="Debugger\InformExpression.g4.parser.cs">
+      <DependentUpon>InformExpression.g4</DependentUpon>
     </Compile>
     <Compile Include="GlobalSuppressions.cs" />
     <Compile Include="Program.cs" />
@@ -93,7 +103,11 @@
     </Compile>
   </ItemGroup>
   <ItemGroup>
-    <Antlr4 Include="Debugger\Expression.g4">
+    <Antlr4 Include="Debugger\InformExpression.g4">
+      <Generator>MSBuild:Compile</Generator>
+      <CustomToolNamespace>ZLR.Interfaces.SystemConsole.Debugger</CustomToolNamespace>
+    </Antlr4>
+    <Antlr4 Include="Debugger\ZilExpression.g4">
       <Generator>MSBuild:Compile</Generator>
       <CustomToolNamespace>ZLR.Interfaces.SystemConsole.Debugger</CustomToolNamespace>
     </Antlr4>

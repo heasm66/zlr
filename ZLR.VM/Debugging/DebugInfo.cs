@@ -18,7 +18,6 @@ namespace ZLR.VM.Debugging
             public bool IsValid => FileNum != 0 && FileNum != 255;
         }
 
-        private readonly List<ObjectInfo> objects = new List<ObjectInfo>();
         private readonly byte[] matchingHeader;
 
         public DebugInfo([NotNull] Stream fromStream)
@@ -72,7 +71,7 @@ namespace ZLR.VM.Debugging
                         case 3:
                             // OBJECT_DBR
                             var obj = new ObjectInfo();
-                            objects.Add(obj);
+                            Objects.Add(obj);
                             obj.Number = ReadWord(br);
                             obj.Name = ReadString(br);
                             line = ReadLineRef(br);
@@ -262,6 +261,10 @@ namespace ZLR.VM.Debugging
 
         [NotNull]
         [PublicAPI]
+        public List<ObjectInfo> Objects { get; } = new List<ObjectInfo>();
+
+        [NotNull]
+        [PublicAPI]
         public DoubleMap<string, byte> Globals { get; } = new DoubleMap<string, byte>();
 
         [NotNull]
@@ -307,10 +310,10 @@ namespace ZLR.VM.Debugging
         public RoutineInfo FindRoutine([NotNull] string name) => Routines.FirstOrDefault(t => t.Name == name);
 
         [CanBeNull]
-        public ObjectInfo FindObject(int number) => objects.FirstOrDefault(t => t.Number == number);
+        public ObjectInfo FindObject(int number) => Objects.FirstOrDefault(t => t.Number == number);
 
         [CanBeNull]
-        public ObjectInfo FindObject([NotNull] string name) => objects.FirstOrDefault(t => t.Name == name);
+        public ObjectInfo FindObject([NotNull] string name) => Objects.FirstOrDefault(t => t.Name == name);
 
         public LineInfo? FindLine(int pc)
         {
