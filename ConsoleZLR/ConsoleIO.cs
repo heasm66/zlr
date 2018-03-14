@@ -3,12 +3,13 @@ using System.Collections.Generic;
 using System.IO;
 using System.Text;
 using System.Threading;
+using System.Threading.Tasks;
 using JetBrains.Annotations;
 using ZLR.VM;
 
 namespace ZLR.Interfaces.SystemConsole
 {
-    internal class ConsoleIO : IZMachineIO
+    internal class ConsoleIO : IAsyncZMachineIO
     {
         private readonly string fileBase;
         private int split;
@@ -1146,6 +1147,308 @@ namespace ZLR.Interfaces.SystemConsole
                     lineCount = 0;
                 }
             }
+        }
+
+        private async Task CheckMoreAsync()
+        {
+            if (!HideMorePrompts && !upper && Console.CursorLeft == 0)
+            {
+                lineCount++;
+                if (lineCount >= Console.WindowHeight - split - 1)
+                {
+                    Console.Write("-- more --");
+                    await DoConsoleAsync(() => Console.ReadKey(true));
+
+                    // erase the prompt
+                    Console.Write("\b\b\b\b\b\b\b\b\b\b");
+                    Console.Write("          ");
+                    Console.Write("\b\b\b\b\b\b\b\b\b\b");
+
+                    lineCount = 0;
+                }
+            }
+        }
+
+        [NotNull]
+        private static Task<T> DoConsoleAsync<T>([NotNull] Func<T> consoleOperation)
+        {
+            return Task.Factory.StartNew(consoleOperation, CancellationToken.None,
+                TaskCreationOptions.DenyChildAttach | TaskCreationOptions.LongRunning, TaskScheduler.Default);
+        }
+
+        private async Task FlushBufferAsync()
+        {
+            // first, take the opportunity to check for console resize
+            if (Console.WindowWidth != prevWinWidth || Console.WindowHeight != prevWinHeight)
+            {
+                prevWinWidth = Console.WindowWidth;
+                prevWinHeight = Console.WindowHeight;
+                SizeChanged?.Invoke(this, EventArgs.Empty);
+            }
+
+            // then flush the buffer
+            foreach (var item in buffer)
+            {
+                if ((item & STYLE_FLAG) == 0)
+                {
+                    CheckScroll(item == '\n');
+                    Console.Write((char)item);
+                    await CheckMoreAsync();
+                }
+                else
+                {
+                    Console.ForegroundColor = (ConsoleColor)(item & 0xFFFF);
+                    Console.BackgroundColor = (ConsoleColor)((item >> 16) & 0x7FFF);
+                }
+            }
+
+            buffer.RemoveRange(0, buffer.Count);
+            bufferLength = 0;
+        }
+
+        const int POLL_INTERVAL_MS = 100;
+
+        public async Task<ReadLineResult> ReadLineAsync(string initial, byte[] terminatingKeys, bool allowDebuggerBreak,
+            CancellationToken cancellationToken = default)
+        {
+            cancellationToken.ThrowIfCancellationRequested();
+
+            await FlushBufferAsync();
+            lineCount = 0;
+
+            var histIdx = history.Count;
+            var savedEntry = string.Empty;
+            byte terminator;
+
+            StringBuilder sb;
+            int cursor;
+            if (initial.Length == 0)
+            {
+                sb = new StringBuilder(20);
+                cursor = 0;
+            }
+            else
+            {
+                sb = new StringBuilder(initial);
+                cursor = initial.Length;
+            }
+
+            void ClearInput()
+            {
+                for (var i = cursor; i < sb.Length; i++)
+                    Console.Write(' ');
+                for (var i = 0; i < sb.Length; i++)
+                    Console.Write("\x08 \x08");
+                sb.Length = 0;
+            }
+
+            while (true)
+            {
+                while (!Console.KeyAvailable && !cancellationToken.IsCancellationRequested)
+                    await Task.Delay(POLL_INTERVAL_MS, cancellationToken);
+
+                cancellationToken.ThrowIfCancellationRequested();
+
+                var info = Console.ReadKey(true);
+                var special = ConsoleKeyToZSCII(info.Key);
+                if (IsTerminator(special, terminatingKeys))
+                {
+                    terminator = special;
+                    break;
+                }
+
+                switch (info.Key)
+                {
+                    case ConsoleKey.LeftArrow:
+                        if (cursor > 0)
+                        {
+                            cursor--;
+                            Console.Write('\x08');
+                        }
+
+                        break;
+
+                    case ConsoleKey.RightArrow:
+                        if (cursor < sb.Length)
+                        {
+                            Console.Write(sb[cursor]);
+                            cursor++;
+                        }
+
+                        break;
+
+                    case ConsoleKey.Home:
+                        while (cursor > 0)
+                        {
+                            cursor--;
+                            Console.Write('\x08');
+                        }
+
+                        break;
+
+                    case ConsoleKey.End:
+                        while (cursor < sb.Length)
+                        {
+                            Console.Write(sb[cursor]);
+                            cursor++;
+                        }
+
+                        break;
+
+                    case ConsoleKey.UpArrow:
+                        if (histIdx > 0 && history.Count > 0)
+                        {
+                            if (histIdx == history.Count)
+                                savedEntry = sb.ToString();
+
+                            for (var i = cursor; i < sb.Length; i++)
+                                Console.Write(' ');
+                            for (var i = 0; i < sb.Length; i++)
+                                Console.Write("\x08 \x08");
+
+                            histIdx--;
+                            sb.Length = 0;
+                            sb.Append(history[histIdx]);
+                            Console.Write(sb.ToString());
+                            cursor = sb.Length;
+                        }
+
+                        break;
+
+                    case ConsoleKey.DownArrow:
+                        if (histIdx < history.Count && history.Count > 0)
+                        {
+                            for (var i = cursor; i < sb.Length; i++)
+                                Console.Write(' ');
+                            for (var i = 0; i < sb.Length; i++)
+                                Console.Write("\x08 \x08");
+
+                            histIdx++;
+                            sb.Length = 0;
+                            sb.Append(histIdx == history.Count ? savedEntry : history[histIdx]);
+                            Console.Write(sb.ToString());
+                            cursor = sb.Length;
+                        }
+
+                        break;
+
+                    case ConsoleKey.Backspace:
+                        if (cursor > 0)
+                        {
+                            cursor--;
+                            sb.Remove(cursor, 1);
+                            Console.Write('\x08');
+                            for (var i = cursor; i < sb.Length; i++)
+                                Console.Write(sb[i]);
+                            Console.Write(' ');
+                            for (var i = cursor; i <= sb.Length; i++)
+                                Console.Write('\x08');
+                        }
+
+                        break;
+
+                    case ConsoleKey.Delete:
+                        if (cursor < sb.Length)
+                        {
+                            sb.Remove(cursor, 1);
+                            for (var i = cursor; i < sb.Length; i++)
+                                Console.Write(sb[i]);
+                            Console.Write(' ');
+                            for (var i = cursor; i <= sb.Length; i++)
+                                Console.Write('\x08');
+                        }
+
+                        break;
+
+                    case ConsoleKey.Escape:
+                        ClearInput();
+                        break;
+
+                    case ConsoleKey.B:
+                        if (allowDebuggerBreak && info.Modifiers == ConsoleModifiers.Alt)
+                        {
+                            // debugger break
+                            CheckScroll(true);
+                            ClearInput();
+                            return ReadLineResult.DebuggerBreak;
+                        }
+                        else
+                        {
+                            goto default;
+                        }
+
+                    default:
+                        if (info.KeyChar != '\0')
+                        {
+                            sb.Insert(cursor, info.KeyChar);
+                            Console.Write(info.KeyChar);
+                            cursor++;
+                            for (var i = cursor; i < sb.Length; i++)
+                                Console.Write(sb[i]);
+                            for (var i = cursor; i < sb.Length; i++)
+                                Console.Write('\x08');
+                        }
+
+                        break;
+                }
+            }
+
+            if (terminator == 13)
+            {
+                CheckScroll(true);
+                Console.WriteLine();
+            }
+
+            var result = sb.ToString();
+
+            history.Add(result);
+            if (history.Count > MAX_COMMAND_HISTORY)
+                history.RemoveAt(0);
+
+            return ReadLineResult.LineEntered(result, terminator);
+        }
+
+        public async Task<short> ReadKeyAsync(CharTranslator translator, CancellationToken cancellationToken = default)
+        {
+            await FlushBufferAsync();
+            lineCount = 0;
+
+            while (true)
+            {
+                while (!Console.KeyAvailable && !cancellationToken.IsCancellationRequested)
+                    await Task.Delay(POLL_INTERVAL_MS, cancellationToken);
+
+                cancellationToken.ThrowIfCancellationRequested();
+
+                var info = Console.ReadKey(true);
+                short zkey = ConsoleKeyToZSCII(info.Key);
+                if (zkey != 0)
+                    return zkey;
+
+                zkey = translator(info.KeyChar);
+                if (zkey != 0)
+                    return zkey;
+            }
+        }
+
+        public async Task<Stream> OpenSaveFileAsync(int size, CancellationToken cancellationToken = default)
+        {
+            throw new NotImplementedException();
+        }
+
+        public async Task<Stream> OpenRestoreFileAsync(CancellationToken cancellationToken = default)
+        {
+            throw new NotImplementedException();
+        }
+
+        public async Task<Stream> OpenAuxiliaryFileAsync(string name, int size, bool writing, CancellationToken cancellationToken = default)
+        {
+            throw new NotImplementedException();
+        }
+
+        public async Task<Stream> OpenCommandFileAsync(bool writing, CancellationToken cancellationToken = default)
+        {
+            throw new NotImplementedException();
         }
     }
 }

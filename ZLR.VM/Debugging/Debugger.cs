@@ -1,16 +1,49 @@
 using System;
 using System.Collections.Generic;
 using System.Linq;
+using System.Threading;
 using System.Threading.Tasks;
 using JetBrains.Annotations;
+using Nito.AsyncEx;
 
 namespace ZLR.VM.Debugging
 {
     public enum DebuggerState
     {
-        Stopped,
-        Paused,
+        PausedOnEntry,
         Running,
+        Terminated,
+
+        PausedByBreakpoint,
+        PausedByError,
+        PausedByStep,
+        PausedByUser,
+    }
+
+    [PublicAPI]
+    public static class DebuggerStateExtensions
+    {
+        public static bool IsRunning(this DebuggerState state) => state == DebuggerState.Running;
+        
+        public static bool IsTerminated(this DebuggerState state) => state == DebuggerState.Terminated;
+
+        public static bool IsPaused(this DebuggerState state)
+        {
+            switch (state)
+            {
+                case DebuggerState.PausedByBreakpoint:
+                case DebuggerState.PausedByError:
+                case DebuggerState.PausedByStep:
+                case DebuggerState.PausedByUser:
+                case DebuggerState.PausedOnEntry:
+                    return true;
+
+                case DebuggerState.Running:
+                case DebuggerState.Terminated:
+                default:
+                    return false;
+            }
+        }
     }
 
     [PublicAPI]
@@ -52,13 +85,10 @@ namespace ZLR.VM.Debugging
         event EventHandler<DebuggerStateEventArgs> DebuggerStateChanged;
     }
 
-    public class DebuggerBreakException : ApplicationException
+    public sealed class DebuggerBreakException : Exception
     {
-        public int ResumePC { get; }
-
-        public DebuggerBreakException(int resumePC) : base("The debuggee was paused.")
+        public DebuggerBreakException() : base("The debuggee was paused.")
         {
-            ResumePC = resumePC;
         }
     }
 
@@ -74,6 +104,9 @@ namespace ZLR.VM.Debugging
         Task StepUpAsync();
 
         Task RunAsync();
+        Task PauseAsync();
+        CancellationToken PauseCancellationToken { get; }
+
         void SetBreakpoint(int address, bool enabled);
         int[] GetBreakpoints();
 
@@ -250,7 +283,13 @@ namespace ZLR.VM
             else if (breakpoints.Contains(pcToCheck))
             {
                 pc = pcToCheck;
-                this.DebuggerState = DebuggerState.Paused;
+                this.DebuggerState = DebuggerState.PausedByBreakpoint;
+                return true;
+            }
+            else if (interruptToken.IsCancellationRequested)
+            {
+                pc = pcToCheck;
+                this.DebuggerState = DebuggerState.PausedByUser;
                 return true;
             }
 
@@ -262,6 +301,7 @@ namespace ZLR.VM
         private class Debugger : IDebugger
         {
             private readonly ZMachine zm;
+            private readonly AsyncManualResetEvent whenStopped = new AsyncManualResetEvent(true);
 
             public Debugger(ZMachine zm)
             {
@@ -272,12 +312,17 @@ namespace ZLR.VM
 
             public DebuggerState State => zm.DebuggerState;
 
+            public CancellationToken PauseCancellationToken => zm.interruptToken;
+
             public void Restart()
             {
+                zmachineInterruptSource.Cancel();
+                whenStopped.Set();
+
                 zm.Restart();
                 if (zm.cache == null)
                     zm.cache = new LruCache<int, CachedCode>(zm.cacheSize);
-                zm.DebuggerState = DebuggerState.Paused;
+                zm.DebuggerState = DebuggerState.PausedOnEntry;
             }
 
             private async Task OneStepAsync()
@@ -297,23 +342,40 @@ namespace ZLR.VM
                     if (task != null)
                         await task;
                 }
-                catch (DebuggerBreakException ex)
+                catch (DebuggerBreakException)
                 {
-                    zm.pc = ex.ResumePC;
-                    zm.DebuggerState = DebuggerState.Paused;
+                    // OK
                 }
             }
 
             private async Task Step([NotNull] Func<Task> operation)
             {
-                zm.stepping = 1;
-                zm.running = true;
-                zm.DebuggerState = DebuggerState.Running;
+                try
+                {
+                    whenStopped.Reset();
+                    zmachineInterruptSource = new CancellationTokenSource();
+                    zm.interruptToken = zmachineInterruptSource.Token;
 
-                await operation();
+                    zm.stepping = 1;
+                    zm.running = true;
+                    zm.DebuggerState = DebuggerState.Running;
 
-                zm.stepping = -1;
-                zm.DebuggerState = zm.running ? DebuggerState.Paused : DebuggerState.Stopped;
+                    await operation();
+
+                    zm.stepping = -1;
+                    if (!zm.running)
+                    {
+                        zm.DebuggerState = DebuggerState.Terminated;
+                    }
+                    else if (zm.DebuggerState.IsRunning())
+                    {
+                        zm.DebuggerState = DebuggerState.PausedByStep;
+                    }
+                }
+                finally
+                {
+                    whenStopped.Set();
+                }
             }
 
             [NotNull]
@@ -330,7 +392,7 @@ namespace ZLR.VM
                     var callDepth = zm.callStack.Count;
                     await OneStepAsync();
 
-                    while (zm.callStack.Count > callDepth && zm.running && zm.DebuggerState == DebuggerState.Running)
+                    while (zm.callStack.Count > callDepth && zm.running && zm.DebuggerState.IsRunning())
                         await OneStepAsync();
                 });
             }
@@ -343,23 +405,46 @@ namespace ZLR.VM
                     var callDepth = zm.callStack.Count;
                     await OneStepAsync();
 
-                    while (zm.callStack.Count >= callDepth && zm.running && zm.DebuggerState == DebuggerState.Running)
+                    while (zm.callStack.Count >= callDepth && zm.running && zm.DebuggerState.IsRunning())
                         await OneStepAsync();
                 });
             }
 
+            [NotNull]
+            private CancellationTokenSource zmachineInterruptSource = new CancellationTokenSource();
+
             public async Task RunAsync()
             {
-                // step ahead if the current line has a breakpoint on it
-                if (zm.breakpoints.Contains(zm.pc))
-                    await StepIntoAsync();
+                // TODO: merge with Step()
+                try
+                {
+                    whenStopped.Reset();
+                    zmachineInterruptSource = new CancellationTokenSource();
+                    zm.interruptToken = zmachineInterruptSource.Token;
 
-                zm.running = true;
-                zm.DebuggerState = DebuggerState.Running;
-                while (zm.running && zm.DebuggerState == DebuggerState.Running)
-                    await OneStepAsync();
+                    // step past a breakpoint on the current line, if we're continuing
+                    if (zm.breakpoints.Contains(zm.pc) && zm.DebuggerState != DebuggerState.PausedOnEntry)
+                        await StepIntoAsync();
 
-                zm.DebuggerState = zm.running ? DebuggerState.Paused : DebuggerState.Stopped;
+                    zm.running = true;
+                    zm.DebuggerState = DebuggerState.Running;
+                    while (zm.running && zm.DebuggerState.IsRunning())
+                        await OneStepAsync();
+
+                    if (!zm.running)
+                        zm.DebuggerState = DebuggerState.Terminated;
+                }
+                finally
+                {
+                    whenStopped.Set();
+                }
+            }
+
+            public async Task PauseAsync()
+            {
+                zmachineInterruptSource.Cancel();
+                // ReSharper disable once MethodSupportsCancellation
+                await whenStopped.WaitAsync();
             }
 
             public void SetBreakpoint(int address, bool enabled)
@@ -382,10 +467,8 @@ namespace ZLR.VM
                     await zm.JitLoopAsync();
                     return zm.stack.Pop();
                 }
-                catch (DebuggerBreakException ex)
+                catch (DebuggerBreakException)
                 {
-                    zm.pc = ex.ResumePC;
-                    zm.DebuggerState = DebuggerState.Paused;
                     return null;
                 }
             }

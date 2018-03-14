@@ -57,9 +57,20 @@ namespace ZLR.VM
                         initial = sb.ToString();
                     }
 
-                    var result = await (time != 0
-                        ? TimedReadLineAsync(initial, time, routine, terminatingChars, debugging)
-                        : io.ReadLineAsync(initial, terminatingChars, debugging, CancellationToken.None));
+                    ReadLineResult result;
+
+                    try
+                    {
+                        result = await (time != 0
+                            ? TimedReadLineAsync(initial, time, routine, terminatingChars, debugging, interruptToken)
+                            : io.ReadLineAsync(initial, terminatingChars, debugging, interruptToken));
+                    }
+                    catch (TaskCanceledException ex) when (ex.CancellationToken == interruptToken)
+                    {
+                        pc = retryPC;
+                        debugState = DebuggerState.PausedByUser;
+                        throw new DebuggerBreakException();
+                    }
 
                     switch (result.Outcome)
                     {
@@ -69,7 +80,9 @@ namespace ZLR.VM
                             break;
 
                         default:
-                            throw new DebuggerBreakException(retryPC);
+                            pc = retryPC;
+                            debugState = DebuggerState.PausedByUser;
+                            throw new DebuggerBreakException();
                     }
                 }
                 else
@@ -139,8 +152,8 @@ namespace ZLR.VM
                 if (cmdRdr == null)
                 {
                     result = await (time != 0
-                        ? TimedReadKeyAsync(time, routine, c => FilterInput(CharToZSCII(c)))
-                        : io.ReadKeyAsync(c => FilterInput(CharToZSCII(c))));
+                        ? TimedReadKeyAsync(time, routine, c => FilterInput(CharToZSCII(c)), interruptToken)
+                        : io.ReadKeyAsync(c => FilterInput(CharToZSCII(c)), interruptToken));
                 }
                 else
                 {
@@ -517,7 +530,7 @@ namespace ZLR.VM
                     break;
 
                 case 1:
-                    var cmdStream = await io.OpenCommandFileAsync(false);
+                    var cmdStream = await io.OpenCommandFileAsync(false, interruptToken);
                     if (cmdStream != null)
                     {
                         cmdRdr?.Dispose();

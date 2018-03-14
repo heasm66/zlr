@@ -17,6 +17,7 @@ using System.IO;
 using System.Reflection;
 using System.Reflection.Emit;
 using System.Text;
+using System.Threading;
 using System.Threading.Tasks;
 using JetBrains.Annotations;
 using ZLR.IFF;
@@ -87,6 +88,7 @@ namespace ZLR.VM
         internal int pc;
         bool clearable;
         bool debugging;
+        CancellationToken interruptToken;
 
         // runtime state
         readonly Stream gameFile;
@@ -356,7 +358,7 @@ namespace ZLR.VM
         [PublicAPI]
         public void Run()
         {
-            RunAsync().Wait();
+            RunAsync().Wait(interruptToken);
         }
 
         public async Task RunAsync()

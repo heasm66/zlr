@@ -317,7 +317,7 @@ namespace ZLR.VM
             var data = new byte[bytes];
 
             // TODO: asyncify RestoreAuxiliary
-            using (var stream = io.OpenAuxiliaryFileAsync(name, bytes, false).GetAwaiter().GetResult())
+            using (var stream = io.OpenAuxiliaryFileAsync(name, bytes, false, interruptToken).GetAwaiter().GetResult())
             {
                 if (stream == null)
                     return 0;

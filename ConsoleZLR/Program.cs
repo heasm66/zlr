@@ -8,7 +8,6 @@ using JetBrains.Annotations;
 using ZLR.Interfaces.SystemConsole.Debugger;
 using System.Net;
 using System.Net.Sockets;
-using System.Text;
 
 namespace ZLR.Interfaces.SystemConsole
 {
@@ -57,7 +56,9 @@ namespace ZLR.Interfaces.SystemConsole
                                         return Usage();
                                 }
                                 else
+                                {
                                     return Usage();
+                                }
                                 break;
                             case "-dumb":
                                 n++;
@@ -80,7 +81,9 @@ namespace ZLR.Interfaces.SystemConsole
                                         return Usage();
                                 }
                                 else
+                                {
                                     return Usage();
+                                }
                                 break;
                             case "-predictable":
                                 n++;
@@ -151,8 +154,10 @@ namespace ZLR.Interfaces.SystemConsole
                     sourcePath.Add(gameDir);
                     sourcePath.Add(Directory.GetCurrentDirectory());
 
-                    var console = await CreateDebuggingConsole(zm, listen, sourcePath);
-                    await console.RunDebuggerAsync();
+                    using (var console = await CreateDebuggingConsole(zm, listen, sourcePath))
+                    {
+                        await console.RunDebuggerAsync();
+                    }
                 }
                 else
                 {
@@ -201,10 +206,7 @@ namespace ZLR.Interfaces.SystemConsole
             Console.Error.WriteLine("Accepted connection from {0}.", client.Client.RemoteEndPoint);
             listener.Stop();
 
-            var stream = client.GetStream();
-            var reader = new StreamReader(stream);
-            var writer = new StreamWriter(stream, Encoding.UTF8);
-            return new DebuggingConsole(zm, reader, writer, sourcePath);
+            return new DebuggingConsole(zm, client.GetStream(), sourcePath);
         }
 
         private static int Usage()

@@ -6,6 +6,7 @@ using System.Text;
 using System.Threading;
 using System.Threading.Tasks;
 using JetBrains.Annotations;
+using Nito.AsyncEx;
 
 namespace ZLR.VM
 {
@@ -137,6 +138,13 @@ namespace ZLR.VM
             Outcome = outcome;
             this.text = text;
             this.terminator = terminator;
+        }
+
+        public override string ToString()
+        {
+            return this.Outcome == ReadOutcome.KeyPressed
+                ? $"Outcome={this.Outcome}, Terminator={terminator}, Text=\"{text}\""
+                : $"Outcome={this.Outcome}";
         }
 
         /// <summary>
@@ -937,15 +945,68 @@ namespace ZLR.VM
         #region Async Adapters
 #pragma warning disable 618
 
-        public Task<ReadLineResult> ReadLineAsync(string initial, byte[] terminatingKeys, bool allowDebuggerBreak, CancellationToken cancellationToken)
+        public async Task<ReadLineResult> ReadLineAsync(string initial, byte[] terminatingKeys, bool allowDebuggerBreak, CancellationToken cancellationToken)
         {
-            bool Callback()
+            /**
+             * This method needs to be cancelable via the token, even if
+             * <see cref="IZMachineIO.ReadLine(string, int, TimedInputCallback, byte[], bool)"/> isn't cooperative.
+             */
+
+            const int TIMED_INPUT_TIMEOUT_TENTHS = 1; // check token this often if timed input is available
+            const int GRACE_PERIOD_MS = 500;          // give the callback this long to cancel the task
+
+            cancellationToken.ThrowIfCancellationRequested();
+
+            /**
+             * If <see cref="next"/> doesn't implement timed input, we just stop waiting. The read will likely
+             * continue in the background, but we can't help that; our top priority is canceling this task.
+             */
+
+            if (!cancellationToken.CanBeCanceled || !next.TimedInputAvailable)
+            {
+                var untimedReadTask = Task.Factory.StartNew(
+                    () =>
+                    {
+                        var line = next.ReadLine(initial, 0, () => false, terminatingKeys, allowDebuggerBreak);
+                        Debug.WriteLine("[async][untimed] Line read: {0}", line);
+                        return line;
+                    },
+                    cancellationToken,
+                    TaskCreationOptions.DenyChildAttach | TaskCreationOptions.LongRunning,
+                    TaskScheduler.Default);
+                return await untimedReadTask.WaitAsync(cancellationToken).ConfigureAwait(false);
+            }
+
+            /**
+             * If <see cref="next"/> does implement timed input, we pass a timeout and callback to check
+             * the token and cancel gracefully. We might still give up and let it continue in the background
+             * if that doesn't work, but we give it some time first.
+             */
+
+            bool CheckToken()
             {
                 cancellationToken.ThrowIfCancellationRequested();
                 return false;
             }
 
-            return Task.Run(() => next.ReadLine(initial, 0, Callback, terminatingKeys, allowDebuggerBreak), cancellationToken);
+            var timedReadTask = Task.Run(
+                () =>
+                {
+                    var line = next.ReadLine(initial, TIMED_INPUT_TIMEOUT_TENTHS, CheckToken, terminatingKeys, allowDebuggerBreak);
+                    Debug.WriteLine("[async][timed] Line read: {0}", line);
+                    return line;
+                },
+                cancellationToken);
+
+            try
+            {
+                return await timedReadTask.WaitAsync(cancellationToken).ConfigureAwait(false);
+            }
+            catch (TaskCanceledException ex) when (ex.CancellationToken == cancellationToken && timedReadTask.Status == TaskStatus.Running)
+            {
+                var graceCts = new CancellationTokenSource(GRACE_PERIOD_MS);
+                return await timedReadTask.WaitAsync(graceCts.Token).ConfigureAwait(false);
+            }
         }
 
         public Task<short> ReadKeyAsync(CharTranslator translator, CancellationToken cancellationToken)
@@ -1212,7 +1273,7 @@ namespace ZLR.VM
         private void HandleSoundFinished(ushort routine)
         {
             EnterFunctionImpl((short)routine, null, 0, pc);
-            JitLoopAsync().Wait();  //XXX asyncify
+            JitLoopAsync().Wait(interruptToken);  //XXX asyncify
         }
 
         internal async Task SetOutputStreamAsync(short num, ushort address)
@@ -1268,7 +1329,7 @@ namespace ZLR.VM
                     // player's commands
                     if (enabled)
                     {
-                        var cmdStream = await io.OpenCommandFileAsync(true);
+                        var cmdStream = await io.OpenCommandFileAsync(true, interruptToken).ConfigureAwait(false);
                         if (cmdStream != null)
                         {
                             cmdWtr?.Dispose();

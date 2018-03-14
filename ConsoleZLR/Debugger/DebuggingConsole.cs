@@ -1,28 +1,31 @@
-﻿using System;
+﻿//#define DEBUG_DEBUGGER
+//#define TRACE_DEBUGGER
+
+using System;
 using System.Collections.Generic;
+using System.Collections.Immutable;
 using System.IO;
 using System.Linq;
 using System.Text;
 using System.Threading.Tasks;
 using JetBrains.Annotations;
+using Nito.AsyncEx;
 using ZLR.VM;
 using ZLR.VM.Debugging;
 
 namespace ZLR.Interfaces.SystemConsole.Debugger
 {
-    public sealed class DebuggingConsole
+    public sealed class DebuggingConsole : IDisposable
     {
-        [NotNull]
-        private readonly ZMachine zm;
+        [NotNull] private readonly ZMachine zm;
 
-        [NotNull]
-        private readonly TextReader reader;
+        [CanBeNull] private readonly IDisposable[] disposables;
 
-        [NotNull]
-        private readonly TextWriter writer;
+        [NotNull] private readonly TextReader reader;
 
-        [NotNull, ItemNotNull]
-        private readonly string[] sourcePath;
+        [NotNull] private readonly TextWriter writer;
+
+        [NotNull, ItemNotNull] private readonly string[] sourcePath;
 
         private readonly bool sharingIO;
 
@@ -43,14 +46,38 @@ namespace ZLR.Interfaces.SystemConsole.Debugger
 
         private static readonly char[] COMMAND_DELIM = { ' ' };
 
-        public DebuggingConsole([NotNull] ZMachine zm, [NotNull] IAsyncZMachineIO io,
+        public DebuggingConsole(
+            [NotNull] ZMachine zm,
+            [NotNull] IAsyncZMachineIO io,
             [ItemNotNull, NotNull] IEnumerable<string> sourcePath)
             : this(zm, new ZIOReader(io), new ZIOWriter(io), sourcePath)
         {
             sharingIO = true;
+
+            // ReSharper disable once SuspiciousTypeConversion.Global
+            if (io is IDisposable dio)
+                disposables = new[] { dio };
         }
 
-        public DebuggingConsole([NotNull] ZMachine zm, [NotNull] TextReader reader, [NotNull] TextWriter writer,
+        public DebuggingConsole(
+            [NotNull] ZMachine zm,
+            [NotNull] Stream stream,
+            [ItemNotNull, NotNull] IEnumerable<string> sourcePath)
+            : this(zm, stream, Encoding.UTF8, sourcePath)
+        {
+        }
+
+        public DebuggingConsole(
+            [NotNull] ZMachine zm,
+            [NotNull] Stream stream,
+            [NotNull] Encoding encoding,
+            [ItemNotNull, NotNull] IEnumerable<string> sourcePath)
+            : this(zm, new StreamReader(stream, encoding), new StreamWriter(stream, encoding), sourcePath)
+        {
+            disposables = new IDisposable[] { stream };
+        }
+
+        private DebuggingConsole([NotNull] ZMachine zm, [NotNull] TextReader reader, [NotNull] TextWriter writer,
             [NotNull, ItemNotNull] IEnumerable<string> sourcePath)
         {
             this.zm = zm;
@@ -65,103 +92,128 @@ namespace ZLR.Interfaces.SystemConsole.Debugger
             System.Diagnostics.Debugger.Launch();
         }
 
-        [System.Diagnostics.Conditional("DEBUG_DEBUGGER"), StringFormatMethod("format")]
+        [System.Diagnostics.Conditional("TRACE_DEBUGGER"), StringFormatMethod("format")]
         private static void DebugWriteLine([NotNull] string format, [NotNull] params object[] args)
         {
+            System.Diagnostics.Debug.Write(
+                $"[{TaskScheduler.Current.Id} @ {System.Threading.Thread.CurrentThread.ManagedThreadId}] ");
             System.Diagnostics.Debug.WriteLine(format, args);
         }
 
         public async Task RunDebuggerAsync()
         {
-            Activate();
-            await writer.FlushAsync();
-
-            var pendingTasks = new Queue<Task>();
-
             AttachDebugger();
 
-            async Task WaitForCommand(Task prevTask)
+            Activate();
+            try
             {
-                try
-                {
-                    // wait for the command to finish
-                    DebugWriteLine("[{0}] Awaiting prev task {1}", Task.CurrentId, prevTask.Id);
-                    await prevTask;
-                    DebugWriteLine("[{0}] Done awaiting task {1}", Task.CurrentId, prevTask.Id);
-                }
-                catch (Exception ex)
-                {
-                    DebugWriteLine("[{0}] Caught exception while awaiting task {1}: {2}: {3}",
-                        Task.CurrentId, prevTask.Id, ex.GetType().Name, ex.Message);
-                    writer.WriteLine(ex);
-                }
-
-                if (Active)
-                    ShowStatus();
-
-                DebugWriteLine("[{0}] Flushing", Task.CurrentId);
-                await writer.FlushAsync();
-                DebugWriteLine("[{0}] Flushed", Task.CurrentId);
-            }
-
-            while (Active)
-            {
-                DebugWriteLine("[{0}] Reading line", Task.CurrentId);
-                var result =
-                    await reader.ReadLineAsync(); //XXX need to abort the read if a pending task sets Active = false
-                if (result == null)
-                {
-                    DebugWriteLine("[{0}] Read null, exiting loop", Task.CurrentId);
-                    break;
-                }
-
-                DebugWriteLine("[{0}] Handling command: {1}", Task.CurrentId, result);
-                var task = HandleCommandAsync(result);
-
                 if (sharingIO)
                 {
-                    DebugWriteLine("[{0}] Blocking on task {1}", Task.CurrentId, task.Id);
-                    await WaitForCommand(task);
-                    DebugWriteLine("[{0}] Done blocking on task {1}", Task.CurrentId, task.Id);
+                    // simple case, no interrupts
+                    await SimpleDebuggerLoopAsync();
                 }
                 else
                 {
-                    // let the user enter another command while this one is running
-                    //XXX if there's a previous pending task, this one should wait for it to finish before printing any output, otherwise the writer may throw
-                    DebugWriteLine("[{0}] Queueing pending task", Task.CurrentId);
-                    pendingTasks.Enqueue(WaitForCommand(task));
-
-                    // ...but only one more
-                    DebugWriteLine("[{0}] {1} task(s) in queue", Task.CurrentId, pendingTasks.Count);
-                    while (pendingTasks.Count >= 2)
-                    {
-                        var pend = pendingTasks.Dequeue();
-                        DebugWriteLine("[{0}] Waiting for pending task {1}", Task.CurrentId, pend.Id);
-                        try
-                        {
-                            await pend;
-                            DebugWriteLine("[{0}] Done waiting for pending task {1}", Task.CurrentId, pend.Id);
-                        }
-                        catch (TaskCanceledException)
-                        {
-                            // nada
-                            DebugWriteLine("[{0}] Pending task {1} was canceled", Task.CurrentId, pend.Id);
-                        }
-                    }
+                    // complex case, allow interrupts
+                    await InterruptibleDebuggerLoopAsync();
                 }
             }
-
-            DebugWriteLine("[{0}] Exiting debugger loop, {1} pending task(s) remaining",
-                Task.CurrentId, pendingTasks.Count);
-
-            if (pendingTasks.Count > 0)
+            finally
             {
-                await Task.WhenAll(pendingTasks);
+                Deactivate();
             }
 
-            DebugWriteLine("[{0}] No more pending tasks, exiting for real", Task.CurrentId);
+            DebugWriteLine("Goodbye.");
+        }
 
-            //XXX find out why we're hanging after the program ends in listen mode
+        private async Task SimpleDebuggerLoopAsync()
+        {
+            DebugWriteLine("Hi, I'm the mayor of Simpleton");
+
+            while (this.Active)
+            {
+                ShowStatus();
+                await writer.FlushAsync().ConfigureAwait(false);
+
+                var command = await reader.ReadLineAsync().ConfigureAwait(false);
+                DebugWriteLine("Read command: {0}", command);
+
+                await HandleCommandAsync(command).ConfigureAwait(false);
+            }
+        }
+
+        private async Task InterruptibleDebuggerLoopAsync()
+        {
+            DebugWriteLine("Help, I'm steppin' into the twilight zone");
+
+            ShowStatus();
+            await writer.FlushAsync().ConfigureAwait(false);
+
+            // interrupts are handled by the producer when read
+            // non-interrupts are queued for the consumer to handle in order
+            var queue = new AsyncProducerConsumerQueue<string>();
+
+            var producerTask = Task.Run(ProduceAsync);
+            var consumerTask = Task.Run(ConsumeAsync);
+
+            async Task ProduceAsync()
+            {
+                while (this.Active)
+                {
+                    var command = await reader.ReadLineAsync().ConfigureAwait(false);
+                    DebugWriteLine("Read command: {0}", command);
+
+                    try
+                    {
+                        if (await TryHandleInterruptAsync(command).ConfigureAwait(false))
+                        {
+                            await writer.FlushAsync().ConfigureAwait(false);
+                            continue;
+                        }
+                    }
+                    catch (Exception ex) //when (!(ex is TaskCanceledException))
+                    {
+                        DebugWriteLine("Producer exception while handling interrupt \"{0}\": {1}", command, ex);
+                        writer.WriteLine("*** ERROR ({0}): {1}", ex.GetType().Name, ex.Message);
+                    }
+
+                    DebugWriteLine("Queuing: {0}", command);
+                    await queue.EnqueueAsync(command).ConfigureAwait(false);
+                }
+
+                DebugWriteLine("Producer finished");
+
+                queue.CompleteAdding();
+            }
+
+            async Task ConsumeAsync()
+            {
+                while (await queue.OutputAvailableAsync().ConfigureAwait(false))
+                {
+                    var command = await queue.DequeueAsync().ConfigureAwait(false);
+                    DebugWriteLine("Dequeued: {0}", command);
+
+                    try
+                    {
+                        await HandleCommandAsync(command).ConfigureAwait(false);
+                        await writer.FlushAsync().ConfigureAwait(false);
+                    }
+                    catch (Exception ex)
+                    {
+                        DebugWriteLine("Consumer exception while handling non-interrupt \"{0}\": {1}", command, ex);
+                        writer.WriteLine("*** ERROR ({0}): {1}", ex.GetType().Name, ex.Message);
+                    }
+
+                    if (Active)
+                        ShowStatus();
+
+                    await writer.FlushAsync().ConfigureAwait(false);
+                }
+
+                DebugWriteLine("Consumer finished");
+            }
+
+            await Task.WhenAll(producerTask, consumerTask).ConfigureAwait(false);
         }
 
         public bool Active => active == ActiveState.Active;
@@ -174,12 +226,22 @@ namespace ZLR.Interfaces.SystemConsole.Debugger
             active = ActiveState.Active;
 
             dbg = zm.Debug();
+            dbg.Events.DebuggerStateChanged += DebuggerStateChangedEventHandler;
+
             src = new SourceCache(sourcePath);
             valueFormatter = new ValueFormatter(zm, dbg);
 
             writer.WriteLine("ZLR Debugger {0}", typeof(DebuggingConsole).Assembly.GetName().Version);
             dbg.Restart();
-            ShowStatus();
+        }
+
+        private void Deactivate()
+        {
+            dbg.Events.DebuggerStateChanged -= DebuggerStateChangedEventHandler;
+
+            dbg = null;
+            src = null;
+            valueFormatter = null;
         }
 
         private void TraceCallsEventHandler(object sender, [NotNull] EnterFunctionEventArgs e)
@@ -215,16 +277,44 @@ namespace ZLR.Interfaces.SystemConsole.Debugger
             writer.WriteLine(") ]");
         }
 
+        private DebuggerState? lastState = DebuggerState.PausedOnEntry;
+
+        private void DebuggerStateChangedEventHandler(object sender, [NotNull] DebuggerStateEventArgs e)
+        {
+            // re-report the pause reason the next time we pause after running or stepping
+            if (e.State == DebuggerState.Running)
+                lastState = null;
+        }
+
+        private static readonly ImmutableDictionary<DebuggerState, string> DebuggerStateExplanations =
+            ImmutableDictionary<DebuggerState, string>.Empty
+                .Add(DebuggerState.PausedByBreakpoint, "Game is paused (breakpoint).")
+                .Add(DebuggerState.PausedByError, "Game is paused (error).")
+                .Add(DebuggerState.PausedByUser, "Game is paused (user request).")
+                .Add(DebuggerState.PausedOnEntry, "Game is paused (entry point).")
+                .Add(DebuggerState.Terminated, "Game has ended.");
+
         private void ShowStatus()
         {
-            if (dbg.State == DebuggerState.Paused)
+            bool pcShown;
+
+            if (dbg.State.IsPaused())
             {
                 ShowCurrentPC();
+                pcShown = true;
             }
-            else if (dbg.State == DebuggerState.Stopped)
+            else
             {
-                writer.WriteLine("Debugger is stopped.");
+                pcShown = false;
             }
+
+            if ((!pcShown || dbg.State != lastState) &&
+                DebuggerStateExplanations.TryGetValue(dbg.State, out var explanation))
+            {
+                writer.WriteLine(explanation);
+            }
+
+            lastState = dbg.State;
 
             // prompt
             writer.Write("D> ");
@@ -249,6 +339,18 @@ namespace ZLR.Interfaces.SystemConsole.Debugger
             {
                 writer.WriteLine($"${dbg.CurrentPC:x5}   {dbg.Disassemble(dbg.CurrentPC)}");
             }
+        }
+
+        private async Task<bool> TryHandleInterruptAsync([NotNull] string cmd)
+        {
+            switch (cmd.ToLower())
+            {
+                case "!pause":
+                    await dbg.PauseAsync();
+                    return true;
+            }
+
+            return false;
         }
 
         private async Task HandleCommandAsync([NotNull] string cmd)
@@ -279,18 +381,18 @@ namespace ZLR.Interfaces.SystemConsole.Debugger
 
                     case "s":
                     case "step":
-                        if (dbg.State == DebuggerState.Paused)
+                        if (dbg.State.IsPaused())
                             await dbg.StepIntoAsync();
                         break;
 
                     case "o":
                     case "over":
-                        if (dbg.State == DebuggerState.Paused)
+                        if (dbg.State.IsPaused())
                             await dbg.StepOverAsync();
                         break;
 
                     case "up":
-                        if (dbg.State == DebuggerState.Paused)
+                        if (dbg.State.IsPaused())
                             await dbg.StepUpAsync();
                         break;
 
@@ -306,7 +408,7 @@ namespace ZLR.Interfaces.SystemConsole.Debugger
 
                     case "r":
                     case "run":
-                        if (dbg.State == DebuggerState.Stopped)
+                        if (dbg.State.IsTerminated())
                             dbg.Restart();
                         await dbg.RunAsync();
                         break;
@@ -375,6 +477,8 @@ namespace ZLR.Interfaces.SystemConsole.Debugger
                         writer.WriteLine("backtrace (bt), (l)ocals, (g)lobals");
                         writer.WriteLine("(p)rint, showobj (so), tree");
                         writer.WriteLine("(q)uit");
+
+                        // TODO: mention interrupts? or ask IO to explain debugger break key?
                         break;
 
                     default:
@@ -392,6 +496,7 @@ namespace ZLR.Interfaces.SystemConsole.Debugger
 
         private Value Evaluate([NotNull] string exprText, bool wantLvalue = false)
         {
+            // TODO: option to switch between Inform and ZIL expression syntax
             //return InformExpression.Evaluate(zm, dbg, exprText, wantLvalue);
             return ZilExpression.Evaluate(zm, dbg, exprText, wantLvalue);
         }
@@ -761,7 +866,7 @@ namespace ZLR.Interfaces.SystemConsole.Debugger
 
         private async Task DoOverLineAsync()
         {
-            if (dbg.State == DebuggerState.Paused)
+            if (dbg.State.IsPaused())
             {
                 if (zm.DebugInfo == null)
                 {
@@ -774,7 +879,7 @@ namespace ZLR.Interfaces.SystemConsole.Debugger
                     do
                     {
                         await dbg.StepOverAsync();
-                        if (dbg.State != DebuggerState.Paused)
+                        if (!dbg.State.IsPaused())
                             break;
 
                         newLI = zm.DebugInfo.FindLine(dbg.CurrentPC);
@@ -785,7 +890,7 @@ namespace ZLR.Interfaces.SystemConsole.Debugger
 
         private async Task DoStepLineAsync()
         {
-            if (dbg.State == DebuggerState.Paused)
+            if (dbg.State.IsPaused())
             {
                 if (zm.DebugInfo == null)
                 {
@@ -798,7 +903,7 @@ namespace ZLR.Interfaces.SystemConsole.Debugger
                     do
                     {
                         await dbg.StepIntoAsync();
-                        if (dbg.State != DebuggerState.Paused)
+                        if (!dbg.State.IsPaused())
                             break;
 
                         newLI = zm.DebugInfo.FindLine(dbg.CurrentPC);
@@ -1067,5 +1172,17 @@ namespace ZLR.Interfaces.SystemConsole.Debugger
         }
 
         #endregion
+
+        public void Dispose()
+        {
+            if (disposables == null)
+                return;
+
+            for (var i = 0; i < disposables.Length; i++)
+            {
+                disposables[i].Dispose();
+                disposables[i] = null;
+            }
+        }
     }
 }
