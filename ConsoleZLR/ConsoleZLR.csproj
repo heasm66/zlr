@@ -1,23 +1,24 @@
 ﻿<?xml version="1.0" encoding="utf-8"?>
-<Project DefaultTargets="Build" xmlns="http://schemas.microsoft.com/developer/msbuild/2003" ToolsVersion="4.0">
-  <Import Project="..\packages\Antlr4.CodeGenerator.4.6.4\build\Antlr4.CodeGenerator.props" Condition="Exists('..\packages\Antlr4.CodeGenerator.4.6.4\build\Antlr4.CodeGenerator.props')" />
+<Project Sdk="Microsoft.NET.Sdk">
   <PropertyGroup>
-    <Configuration Condition=" '$(Configuration)' == '' ">Debug</Configuration>
-    <Platform Condition=" '$(Platform)' == '' ">AnyCPU</Platform>
-    <ProductVersion>8.0.50727</ProductVersion>
-    <SchemaVersion>2.0</SchemaVersion>
-    <ProjectGuid>{0FF5AD11-1849-4BDF-A2DE-D97586EE95B0}</ProjectGuid>
+    <Description>Console interface for ZLR.</Description>
+    <Authors>Jesse McGrew</Authors>
+    <Copyright>Copyright © 2007-2018 Jesse McGrew</Copyright>
+    <RepositoryUrl>https://bitbucket.org/jmcgrew/zlr</RepositoryUrl>
+    <PackageProjectUrl>https://bitbucket.org/jmcgrew/zlr/overview</PackageProjectUrl>
+    <PackageIconUrl>https://bytebucket.org/jmcgrew/zlr/raw/tip/zlr-logo.png</PackageIconUrl>
+    <RepositoryType>mercurial</RepositoryType>
+    <AssemblyVersion>0.9.0.0</AssemblyVersion>
+    
+    <TargetFramework>net471</TargetFramework>
+    <Prefer32Bit>false</Prefer32Bit>
     <OutputType>Exe</OutputType>
-    <AppDesignerFolder>Properties</AppDesignerFolder>
+
     <RootNamespace>ZLR.Interfaces.SystemConsole</RootNamespace>
-    <AssemblyName>ConsoleZLR</AssemblyName>
-    <StartupObject>
-    </StartupObject>
-    <TargetFrameworkVersion>v4.7.1</TargetFrameworkVersion>
-    <FileUpgradeFlags>
-    </FileUpgradeFlags>
-    <OldToolsVersion>2.0</OldToolsVersion>
-    <UpgradeBackupLocation />
+    <LangVersion>7.2</LangVersion>
+
+    <CodeAnalysisRuleSet>..\ZLR.ruleset</CodeAnalysisRuleSet>
+
     <PublishUrl>publish\</PublishUrl>
     <Install>true</Install>
     <InstallFrom>Disk</InstallFrom>
@@ -29,159 +30,60 @@
     <UpdateRequired>false</UpdateRequired>
     <MapFileExtensions>true</MapFileExtensions>
     <ApplicationRevision>0</ApplicationRevision>
-    <ApplicationVersion>1.0.0.0</ApplicationVersion>
     <IsWebBootstrapper>false</IsWebBootstrapper>
     <UseApplicationTrust>false</UseApplicationTrust>
     <BootstrapperEnabled>true</BootstrapperEnabled>
-    <TargetFrameworkProfile />
-    <NuGetPackageImportStamp>
-    </NuGetPackageImportStamp>
+    <NuGetPackageImportStamp></NuGetPackageImportStamp>
   </PropertyGroup>
-  <PropertyGroup Condition=" '$(Configuration)|$(Platform)' == 'Debug|AnyCPU' ">
-    <DebugSymbols>true</DebugSymbols>
-    <DebugType>full</DebugType>
-    <Optimize>false</Optimize>
-    <OutputPath>bin\Debug\</OutputPath>
-    <DefineConstants>DEBUG;TRACE</DefineConstants>
-    <ErrorReport>prompt</ErrorReport>
-    <WarningLevel>4</WarningLevel>
-    <CodeAnalysisRuleSet>..\ZLR.ruleset</CodeAnalysisRuleSet>
-    <Prefer32Bit>false</Prefer32Bit>
-    <LangVersion>7.1</LangVersion>
-  </PropertyGroup>
-  <PropertyGroup Condition=" '$(Configuration)|$(Platform)' == 'Release|AnyCPU' ">
-    <DebugType>pdbonly</DebugType>
-    <Optimize>true</Optimize>
-    <OutputPath>bin\Release\</OutputPath>
-    <DefineConstants>TRACE</DefineConstants>
-    <ErrorReport>prompt</ErrorReport>
-    <WarningLevel>4</WarningLevel>
-    <CodeAnalysisRuleSet>
-    </CodeAnalysisRuleSet>
-    <Prefer32Bit>false</Prefer32Bit>
-  </PropertyGroup>
+
   <ItemGroup>
-    <Reference Include="Antlr4.Runtime, Version=4.6.0.0, Culture=neutral, PublicKeyToken=09abb75b9ed49849, processorArchitecture=MSIL">
-      <HintPath>..\packages\Antlr4.Runtime.4.6.4\lib\net45\Antlr4.Runtime.dll</HintPath>
-    </Reference>
-    <Reference Include="JetBrains.Annotations, Version=11.1.0.0, Culture=neutral, PublicKeyToken=1010a0d8d6380325, processorArchitecture=MSIL">
-      <HintPath>..\packages\JetBrains.Annotations.11.1.0\lib\net20\JetBrains.Annotations.dll</HintPath>
-    </Reference>
-    <Reference Include="Nito.AsyncEx.Coordination, Version=5.0.0.0, Culture=neutral, processorArchitecture=MSIL">
-      <HintPath>..\packages\Nito.AsyncEx.Coordination.5.0.0-pre-05\lib\netstandard2.0\Nito.AsyncEx.Coordination.dll</HintPath>
-    </Reference>
-    <Reference Include="Nito.AsyncEx.Tasks, Version=5.0.0.0, Culture=neutral, processorArchitecture=MSIL">
-      <HintPath>..\packages\Nito.AsyncEx.Tasks.5.0.0-pre-05\lib\netstandard2.0\Nito.AsyncEx.Tasks.dll</HintPath>
-    </Reference>
-    <Reference Include="Nito.Collections.Deque, Version=1.0.4.0, Culture=neutral, processorArchitecture=MSIL">
-      <HintPath>..\packages\Nito.Collections.Deque.1.0.4\lib\netstandard2.0\Nito.Collections.Deque.dll</HintPath>
-    </Reference>
-    <Reference Include="Nito.Disposables, Version=1.2.3.0, Culture=neutral, processorArchitecture=MSIL">
-      <HintPath>..\packages\Nito.Disposables.1.2.3\lib\netstandard2.0\Nito.Disposables.dll</HintPath>
-    </Reference>
-    <Reference Include="System" />
-    <Reference Include="System.Collections.Immutable, Version=1.2.2.0, Culture=neutral, PublicKeyToken=b03f5f7f11d50a3a, processorArchitecture=MSIL">
-      <HintPath>..\packages\System.Collections.Immutable.1.4.0\lib\netstandard2.0\System.Collections.Immutable.dll</HintPath>
-    </Reference>
-    <Reference Include="System.Data" />
-    <Reference Include="System.Xml" />
+    <ProjectReference Include="..\ZLR.VM\ZLR.VM.csproj" />
   </ItemGroup>
+
   <ItemGroup>
-    <Compile Include="ConsoleIO.cs" />
-    <Compile Include="Debugger\DebuggerException.cs" />
-    <Compile Include="Debugger\DebuggingConsole.cs" />
-    <Compile Include="Debugger\ZilExpression.cs" />
-    <Compile Include="Debugger\ZilExpression.g4.lexer.cs">
-      <DependentUpon>ZilExpression.g4</DependentUpon>
-    </Compile>
-    <Compile Include="Debugger\ZilExpression.g4.parser.cs">
-      <DependentUpon>ZilExpression.g4</DependentUpon>
-    </Compile>
-    <Compile Include="Debugger\InformExpression.cs" />
-    <Compile Include="Debugger\ValueFormatter.cs" />
-    <Compile Include="Debugger\ValueType.cs" />
-    <Compile Include="DumbIO.cs" />
-    <Compile Include="Debugger\Value.cs" />
-    <Compile Include="Debugger\InformExpression.g4.lexer.cs">
-      <DependentUpon>InformExpression.g4</DependentUpon>
-    </Compile>
-    <Compile Include="Debugger\InformExpression.g4.parser.cs">
-      <DependentUpon>InformExpression.g4</DependentUpon>
-    </Compile>
-    <Compile Include="GlobalSuppressions.cs" />
-    <Compile Include="Program.cs" />
-    <Compile Include="Properties\AssemblyInfo.cs" />
-    <Compile Include="Properties\Resources.Designer.cs">
-      <AutoGen>True</AutoGen>
-      <DesignTime>True</DesignTime>
-      <DependentUpon>Resources.resx</DependentUpon>
-    </Compile>
+    <PackageReference Include="JetBrains.Annotations" Version="11.1.0">
+      <PrivateAssets>All</PrivateAssets>
+    </PackageReference>
+    <PackageReference Include="Nito.AsyncEx" Version="5.0.0-pre-05" />
+    <PackageReference Include="System.Collections.Immutable" Version="1.4.0" />
   </ItemGroup>
+
+  <ItemGroup>
+    <PackageReference Include="Antlr4.Runtime" Version="4.6.4" />
+    <PackageReference Include="Antlr4.CodeGenerator" Version="4.6.5-beta001">
+      <PrivateAssets>All</PrivateAssets>
+    </PackageReference>
+  </ItemGroup>
+
+  <ItemDefinitionGroup>
+    <Antlr4>
+      <Generator>MSBuild:Compile</Generator>
+      <CustomToolNamespace>ZLR.Interfaces.SystemConsole.Debugger</CustomToolNamespace>
+      <Listener>false</Listener>
+      <Visitor>true</Visitor>
+    </Antlr4>
+  </ItemDefinitionGroup>
+
   <ItemGroup>
     <Antlr4 Include="Debugger\InformExpression.g4">
-      <Generator>MSBuild:Compile</Generator>
-      <CustomToolNamespace>ZLR.Interfaces.SystemConsole.Debugger</CustomToolNamespace>
     </Antlr4>
+
+    <Compile Update="Debugger\InformExpression.g4.lexer.cs">
+      <DependentUpon>InformExpression.g4</DependentUpon>
+    </Compile>
+    <Compile Update="Debugger\InformExpression.g4.parser.cs">
+      <DependentUpon>InformExpression.g4</DependentUpon>
+    </Compile>
+
     <Antlr4 Include="Debugger\ZilExpression.g4">
-      <Generator>MSBuild:Compile</Generator>
+      <!--<Generator>MSBuild:Compile</Generator>
       <CustomToolNamespace>ZLR.Interfaces.SystemConsole.Debugger</CustomToolNamespace>
+      <Listener>false</Listener>
+      <Visitor>true</Visitor>-->
     </Antlr4>
   </ItemGroup>
+
   <ItemGroup>
-    <EmbeddedResource Include="Properties\Resources.resx">
-      <SubType>Designer</SubType>
-      <Generator>ResXFileCodeGenerator</Generator>
-      <LastGenOutput>Resources.Designer.cs</LastGenOutput>
-    </EmbeddedResource>
   </ItemGroup>
-  <ItemGroup>
-    <ProjectReference Include="..\ZLR.VM\ZLR.VM.csproj">
-      <Project>{fc857dd8-ab2d-4e4c-a2d7-943547694249}</Project>
-      <Name>ZLR.VM</Name>
-    </ProjectReference>
-  </ItemGroup>
-  <ItemGroup>
-    <Folder Include="Resources\" />
-  </ItemGroup>
-  <ItemGroup>
-    <BootstrapperPackage Include="Microsoft.Net.Client.3.5">
-      <Visible>False</Visible>
-      <ProductName>.NET Framework 3.5 SP1 Client Profile</ProductName>
-      <Install>false</Install>
-    </BootstrapperPackage>
-    <BootstrapperPackage Include="Microsoft.Net.Framework.3.5.SP1">
-      <Visible>False</Visible>
-      <ProductName>.NET Framework 3.5 SP1</ProductName>
-      <Install>true</Install>
-    </BootstrapperPackage>
-    <BootstrapperPackage Include="Microsoft.Windows.Installer.3.1">
-      <Visible>False</Visible>
-      <ProductName>Windows Installer 3.1</ProductName>
-      <Install>true</Install>
-    </BootstrapperPackage>
-  </ItemGroup>
-  <ItemGroup>
-    <None Include="app.config" />
-    <None Include="packages.config" />
-  </ItemGroup>
-  <Import Project="$(MSBuildBinPath)\Microsoft.CSharp.targets" />
-  <!-- To modify your build process, add your task inside one of the targets below and uncomment it. 
-       Other similar extension points exist, see Microsoft.Common.targets.
-  <Target Name="BeforeBuild">
-  </Target>
-  <Target Name="AfterBuild">
-  </Target>
-  -->
-  <PropertyGroup>
-    <PreBuildEvent>
-    </PreBuildEvent>
-  </PropertyGroup>
-  <Target Name="EnsureNuGetPackageBuildImports" BeforeTargets="PrepareForBuild">
-    <PropertyGroup>
-      <ErrorText>This project references NuGet package(s) that are missing on this computer. Use NuGet Package Restore to download them.  For more information, see http://go.microsoft.com/fwlink/?LinkID=322105. The missing file is {0}.</ErrorText>
-    </PropertyGroup>
-    <Error Condition="!Exists('..\packages\Antlr4.CodeGenerator.4.6.4\build\Antlr4.CodeGenerator.props')" Text="$([System.String]::Format('$(ErrorText)', '..\packages\Antlr4.CodeGenerator.4.6.4\build\Antlr4.CodeGenerator.props'))" />
-    <Error Condition="!Exists('..\packages\Antlr4.CodeGenerator.4.6.4\build\Antlr4.CodeGenerator.targets')" Text="$([System.String]::Format('$(ErrorText)', '..\packages\Antlr4.CodeGenerator.4.6.4\build\Antlr4.CodeGenerator.targets'))" />
-  </Target>
-  <Import Project="..\packages\Antlr4.CodeGenerator.4.6.4\build\Antlr4.CodeGenerator.targets" Condition="Exists('..\packages\Antlr4.CodeGenerator.4.6.4\build\Antlr4.CodeGenerator.targets')" />
+
 </Project>

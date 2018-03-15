@@ -1,3 +1,5 @@
+#define CATCH_EXCEPTIONS
+
 using System;
 using System.Collections.Generic;
 using System.IO;
@@ -18,9 +20,9 @@ namespace ZLR.Interfaces.SystemConsole
         // ReSharper disable once InconsistentNaming
         static async Task<int> Main([ItemNotNull] [NotNull] string[] args)
         {
-            const bool catchExceptions = true;
-
+#if CATCH_EXCEPTIONS
             try
+#endif
             {
                 var redirected = Console.IsOutputRedirected;
 
@@ -59,6 +61,7 @@ namespace ZLR.Interfaces.SystemConsole
                                 {
                                     return Usage();
                                 }
+
                                 break;
                             case "-dumb":
                                 n++;
@@ -73,7 +76,7 @@ namespace ZLR.Interfaces.SystemConsole
                                 debugger = true;
                                 break;
                             case "-listen":
-                                if (args.Length > n + 1 && int.TryParse(args[n+1], out var num))
+                                if (args.Length > n + 1 && int.TryParse(args[n + 1], out var num))
                                 {
                                     listen = num;
                                     n += 2;
@@ -84,6 +87,7 @@ namespace ZLR.Interfaces.SystemConsole
                                 {
                                     return Usage();
                                 }
+
                                 break;
                             case "-predictable":
                                 n++;
@@ -133,6 +137,7 @@ namespace ZLR.Interfaces.SystemConsole
                             cio.SuppliedCommandFile = commandFile;
                             cio.HideMorePrompts = true;
                         }
+
                         io = cio;
                         break;
 
@@ -140,7 +145,7 @@ namespace ZLR.Interfaces.SystemConsole
                         throw new NotImplementedException();
                 }
 
-                var zm = new ZMachine(gameStream, io) {PredictableRandom = predictable};
+                var zm = new ZMachine(gameStream, io) { PredictableRandom = predictable };
                 if (commandFile != null)
                     zm.ReadingCommandsFromFile = true;
                 if (debugStream != null)
@@ -179,12 +184,15 @@ namespace ZLR.Interfaces.SystemConsole
                         Console.ReadKey(true);
                     }
                 }
+
                 return 0;
             }
-            catch (Exception ex) when (catchExceptions)
+#if CATCH_EXCEPTIONS
+            catch (Exception ex)
             {
                 return Error(ex.Message + " (" + ex.GetType().Name + ")");
             }
+#endif
         }
 
         [ItemNotNull]
