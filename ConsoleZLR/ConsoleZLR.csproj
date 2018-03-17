@@ -55,17 +55,12 @@
     </PackageReference>
   </ItemGroup>
 
-  <ItemDefinitionGroup>
-    <Antlr4>
+  <ItemGroup>
+    <Antlr4 Include="Debugger\InformExpression.g4">
       <Generator>MSBuild:Compile</Generator>
       <CustomToolNamespace>ZLR.Interfaces.SystemConsole.Debugger</CustomToolNamespace>
       <Listener>false</Listener>
       <Visitor>true</Visitor>
-    </Antlr4>
-  </ItemDefinitionGroup>
-
-  <ItemGroup>
-    <Antlr4 Include="Debugger\InformExpression.g4">
     </Antlr4>
 
     <Compile Update="Debugger\InformExpression.g4.lexer.cs">
@@ -74,13 +69,22 @@
     <Compile Update="Debugger\InformExpression.g4.parser.cs">
       <DependentUpon>InformExpression.g4</DependentUpon>
     </Compile>
+  </ItemGroup>
 
+  <ItemGroup>
     <Antlr4 Include="Debugger\ZilExpression.g4">
-      <!--<Generator>MSBuild:Compile</Generator>
+      <Generator>MSBuild:Compile</Generator>
       <CustomToolNamespace>ZLR.Interfaces.SystemConsole.Debugger</CustomToolNamespace>
       <Listener>false</Listener>
-      <Visitor>true</Visitor>-->
+      <Visitor>true</Visitor>
     </Antlr4>
+    
+    <Compile Update="Debugger\ZilExpression.g4.lexer.cs">
+      <DependentUpon>ZilExpression.g4</DependentUpon>
+    </Compile>
+    <Compile Update="Debugger\ZilExpression.g4.parser.cs">
+      <DependentUpon>ZilExpression.g4</DependentUpon>
+    </Compile>
   </ItemGroup>
 
   <ItemGroup>
