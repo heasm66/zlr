@@ -1,4 +1,6 @@
+#if !DEBUG
 #define CATCH_EXCEPTIONS
+#endif
 
 using System;
 using System.Collections.Generic;
