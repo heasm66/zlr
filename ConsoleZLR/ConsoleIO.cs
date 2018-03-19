@@ -1240,6 +1240,7 @@ namespace ZLR.Interfaces.SystemConsole
                 for (var i = 0; i < sb.Length; i++)
                     Console.Write("\x08 \x08");
                 sb.Length = 0;
+                cursor = 0;
             }
 
             while (true)
