@@ -7,6 +7,7 @@ using System.Collections.Immutable;
 using System.IO;
 using System.Linq;
 using System.Text;
+using System.Threading;
 using System.Threading.Tasks;
 using JetBrains.Annotations;
 using Nito.AsyncEx;
@@ -142,7 +143,7 @@ namespace ZLR.Interfaces.SystemConsole.Debugger
             }
         }
 
-        private async Task InterruptibleDebuggerLoopAsync()
+        private async Task InterruptibleDebuggerLoopAsync(CancellationToken loopCancellationToken = default)
         {
             DebugWriteLine("Help, I'm steppin' into the twilight zone");
 
@@ -153,67 +154,89 @@ namespace ZLR.Interfaces.SystemConsole.Debugger
             // non-interrupts are queued for the consumer to handle in order
             var queue = new AsyncProducerConsumerQueue<string>();
 
-            var producerTask = Task.Run(ProduceAsync);
-            var consumerTask = Task.Run(ConsumeAsync);
+            var producerCanceller = new CancellationTokenSource();
+            var producerTask = Task.Run(ProduceAsync, producerCanceller.Token);
+            var consumerTask = Task.Run(ConsumeAsync, loopCancellationToken);
 
             async Task ProduceAsync()
             {
-                while (this.Active)
+                var ct = producerCanceller.Token;
+
+                try
                 {
-                    var command = await reader.ReadLineAsync().ConfigureAwait(false);
-                    DebugWriteLine("Read command: {0}", command);
-
-                    try
+                    while (this.Active)
                     {
-                        if (await TryHandleInterruptAsync(command).ConfigureAwait(false))
+                        var command = await reader.ReadLineAsync().WaitAsync(ct).ConfigureAwait(false);
+                        DebugWriteLine("Read command: {0}", command);
+
+                        try
                         {
-                            await writer.FlushAsync().ConfigureAwait(false);
-                            continue;
+                            if (await TryHandleInterruptAsync(command).ConfigureAwait(false))
+                            {
+                                // don't do any I/O here, since the stream may be locked by the consumer
+                                continue;
+                            }
                         }
-                    }
-                    catch (Exception ex) //when (!(ex is TaskCanceledException))
-                    {
-                        DebugWriteLine("Producer exception while handling interrupt \"{0}\": {1}", command, ex);
-                        writer.WriteLine("*** ERROR ({0}): {1}", ex.GetType().Name, ex.Message);
-                    }
+                        catch (Exception ex)
+                        {
+                            DebugWriteLine("Producer exception while handling interrupt \"{0}\": {1}", command, ex);
+                            writer.WriteLine("*** ERROR ({0}): {1}", ex.GetType().Name, ex.Message);
+                        }
 
-                    DebugWriteLine("Queuing: {0}", command);
-                    await queue.EnqueueAsync(command).ConfigureAwait(false);
+                        DebugWriteLine("Queuing: {0}", command);
+                        await queue.EnqueueAsync(command, ct).ConfigureAwait(false);
+                    }
                 }
-
-                DebugWriteLine("Producer finished");
-
-                queue.CompleteAdding();
+                finally
+                {
+                    DebugWriteLine("Producer finished");
+                    queue.CompleteAdding();
+                }
             }
 
             async Task ConsumeAsync()
             {
-                while (await queue.OutputAvailableAsync().ConfigureAwait(false))
-                {
-                    var command = await queue.DequeueAsync().ConfigureAwait(false);
-                    DebugWriteLine("Dequeued: {0}", command);
+                var ct = loopCancellationToken;
 
-                    try
+                try
+                {
+                    while (Active && await queue.OutputAvailableAsync(ct).ConfigureAwait(false))
                     {
-                        await HandleCommandAsync(command).ConfigureAwait(false);
+                        var command = await queue.DequeueAsync(ct).ConfigureAwait(false);
+                        DebugWriteLine("Dequeued: {0}", command);
+
+                        try
+                        {
+                            await HandleCommandAsync(command).ConfigureAwait(false);
+                            await writer.FlushAsync().ConfigureAwait(false);
+                        }
+                        catch (Exception ex)
+                        {
+                            DebugWriteLine("Consumer exception while handling non-interrupt \"{0}\": {1}", command, ex);
+                            writer.WriteLine("*** ERROR ({0}): {1}", ex.GetType().Name, ex.Message);
+                        }
+
+                        if (Active)
+                            ShowStatus();
+
                         await writer.FlushAsync().ConfigureAwait(false);
                     }
-                    catch (Exception ex)
-                    {
-                        DebugWriteLine("Consumer exception while handling non-interrupt \"{0}\": {1}", command, ex);
-                        writer.WriteLine("*** ERROR ({0}): {1}", ex.GetType().Name, ex.Message);
-                    }
-
-                    if (Active)
-                        ShowStatus();
-
-                    await writer.FlushAsync().ConfigureAwait(false);
                 }
-
-                DebugWriteLine("Consumer finished");
+                finally
+                {
+                    DebugWriteLine("Consumer finished");
+                    producerCanceller.Cancel();
+                }
             }
 
-            await Task.WhenAll(producerTask, consumerTask).ConfigureAwait(false);
+            try
+            {
+                await Task.WhenAll(producerTask, consumerTask).ConfigureAwait(false);
+            }
+            catch (TaskCanceledException ex) when (ex.CancellationToken == producerCanceller.Token && !loopCancellationToken.IsCancellationRequested)
+            {
+                // loop terminated normally
+            }
         }
 
         public bool Active => active == ActiveState.Active;
