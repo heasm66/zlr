@@ -1216,7 +1216,7 @@ namespace ZLR.VM
             JitLoopAsync().Wait();  //XXX asyncify
         }
 
-        internal async Task SetOutputStreamAsync(short num, ushort address)
+        internal async Task SetOutputStreamAsync(short num, ushort address, int nextPC)
         {
             var enabled = true;
             if (num < 0)
@@ -1297,6 +1297,8 @@ namespace ZLR.VM
                 default:
                     throw new Exception("Invalid output stream #" + num);
             }
+
+            pc = nextPC;
         }
 
 #pragma warning disable 0169

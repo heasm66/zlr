@@ -504,7 +504,7 @@ namespace ZLR.VM
             return result;
         }
 
-        internal async Task SetInputStreamAsync(short num)
+        internal async Task SetInputStreamAsync(short num, int nextPC)
         {
             switch (num)
             {
@@ -536,6 +536,8 @@ namespace ZLR.VM
                 default:
                     throw new Exception("Invalid input stream #" + num);
             }
+
+            pc = nextPC;
         }
 
         /// <summary>
@@ -552,7 +554,7 @@ namespace ZLR.VM
         public bool WritingCommandsToFile
         {
             get => cmdWtr != null;
-            set => SetOutputStreamAsync((short) (value ? 4 : -4), 0).GetAwaiter().GetResult();
+            set => SetOutputStreamAsync((short) (value ? 4 : -4), 0, PC).GetAwaiter().GetResult();  // XXX asyncify
         }
 
         /// <summary>
@@ -570,7 +572,7 @@ namespace ZLR.VM
         public bool ReadingCommandsFromFile
         {
             get => cmdRdr != null;
-            set => SetInputStreamAsync((short) (value ? 1 : 0)).GetAwaiter().GetResult();
+            set => SetInputStreamAsync((short) (value ? 1 : 0), PC).GetAwaiter().GetResult();       // XXX asyncify
         }
 
         private class CommandFileReader : IDisposable

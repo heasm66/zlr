@@ -348,6 +348,7 @@ namespace ZLR.VM
             il.Emit(OpCodes.Ldarg_0);
             LoadOperand(il, 0);
             LoadOperand(il, 1);
+            il.Emit(OpCodes.Ldc_I4, PC + ZCodeLength);
             il.Emit(OpCodes.Call, impl);
             il.Emit(OpCodes.Ret);
 
@@ -361,6 +362,7 @@ namespace ZLR.VM
 
             il.Emit(OpCodes.Ldarg_0);
             LoadOperand(il, 0);
+            il.Emit(OpCodes.Ldc_I4, PC + ZCodeLength);
             il.Emit(OpCodes.Call, impl);
             il.Emit(OpCodes.Ret);
 
@@ -380,7 +382,7 @@ namespace ZLR.VM
             il.Emit(OpCodes.Call, impl);
         }
 
-        [Opcode(OpCount.Var, 246, Store = true, MinVersion = 4)]
+        [Opcode(OpCount.Var, 246, Store = true, MinVersion = 4, Async = true)]
         private void op_read_char([NotNull] ILGenerator il)
         {
             MethodInfo impl = ZMachine.GetMethodInfo(nameof(ZMachine.ReadCharImplAsync));
