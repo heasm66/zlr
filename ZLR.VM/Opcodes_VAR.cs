@@ -510,11 +510,12 @@ namespace ZLR.VM
         [Opcode(OpCount.Var, 255, Branch = true, MinVersion = 5)]
         private void op_check_arg_count([NotNull] ILGenerator il)
         {
-            // ReSharper disable once PossibleNullReferenceException
             var getTopFrameMI = typeof(ZMachine)
                 .GetProperty(nameof(ZMachine.TopFrame), System.Reflection.BindingFlags.Instance | System.Reflection.BindingFlags.NonPublic)
-                .GetGetMethod();
+                ?.GetGetMethod(true);
             var argCountMI = typeof(ZMachine.CallFrame).GetField(nameof(ZMachine.CallFrame.ArgCount));
+
+            System.Diagnostics.Debug.Assert(getTopFrameMI != null);
 
             il.Emit(OpCodes.Ldarg_0);
             il.Emit(OpCodes.Call, getTopFrameMI);
