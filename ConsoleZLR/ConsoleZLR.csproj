@@ -20,20 +20,6 @@
     <CodeAnalysisRuleSet>..\ZLR.ruleset</CodeAnalysisRuleSet>
 
     <PublishUrl>publish\</PublishUrl>
-    <Install>true</Install>
-    <InstallFrom>Disk</InstallFrom>
-    <UpdateEnabled>false</UpdateEnabled>
-    <UpdateMode>Foreground</UpdateMode>
-    <UpdateInterval>7</UpdateInterval>
-    <UpdateIntervalUnits>Days</UpdateIntervalUnits>
-    <UpdatePeriodically>false</UpdatePeriodically>
-    <UpdateRequired>false</UpdateRequired>
-    <MapFileExtensions>true</MapFileExtensions>
-    <ApplicationRevision>0</ApplicationRevision>
-    <IsWebBootstrapper>false</IsWebBootstrapper>
-    <UseApplicationTrust>false</UseApplicationTrust>
-    <BootstrapperEnabled>true</BootstrapperEnabled>
-    <NuGetPackageImportStamp></NuGetPackageImportStamp>
   </PropertyGroup>
 
   <ItemGroup>
@@ -86,8 +72,4 @@
       <DependentUpon>ZilExpression.g4</DependentUpon>
     </Compile>
   </ItemGroup>
-
-  <ItemGroup>
-  </ItemGroup>
-
 </Project>
