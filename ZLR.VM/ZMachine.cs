@@ -556,8 +556,9 @@ namespace ZLR.VM
 #endif
 
                 var thisPC = pc;
+                CachedCode entry;
 #if !DISABLE_CACHE
-                if (thisPC < RomStart || cache.TryGetValue(thisPC, out var entry) == false)
+                if (thisPC < RomStart || cache.TryGetValue(thisPC, out entry) == false)
 #endif
                 {
 #if BENCHMARK
