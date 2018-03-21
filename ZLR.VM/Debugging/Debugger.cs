@@ -330,7 +330,8 @@ namespace ZLR.VM
                 var thisPC = zm.pc;
                 if (thisPC < zm.RomStart || zm.cache.TryGetValue(thisPC, out var entry) == false)
                 {
-                    entry = new CachedCode(zm.pc, zm.CompileZCode(out var count));
+                    var (code, nextPC, count) = zm.CompileZCode();
+                    entry = new CachedCode(nextPC, code);
                     if (thisPC >= zm.RomStart)
                         zm.cache.Add(thisPC, entry, count);
                 }

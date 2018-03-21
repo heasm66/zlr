@@ -563,8 +563,8 @@ namespace ZLR.VM
 #if BENCHMARK
                     cacheMisses++;
 #endif
-                    var code = CompileZCode(out var count);
-                    entry = new CachedCode(pc, code);
+                    var (code, nextPC, count) = CompileZCode();
+                    entry = new CachedCode(nextPC, code);
 #if BENCHMARK
                     entry.Cycles = count;   // only used to calculate the amount of cached z-code
 #endif
@@ -585,6 +585,7 @@ namespace ZLR.VM
         }
 
         // compilation state exposed internally for the Opcode class
+        // TODO: clean up compilation state. the runtime PC shouldn't be used for compilation, especially.
         [NotNull]
         internal LocalBuilder TempWordLocal => tempWordLocal ?? (tempWordLocal = il.DeclareLocal(typeof(short)));
 
@@ -611,8 +612,38 @@ namespace ZLR.VM
         private static readonly Type ZcodeReturnType = typeof(Task);
         private static readonly Type[] ZcodeParamTypes = { typeof(ZMachine) };
 
-        [NotNull]
-        private ZCodeDelegate CompileZCode(out int instructionCount)
+        private readonly struct CompileResult
+        {
+            public readonly ZCodeDelegate Code;
+            public readonly int NextPC;
+            public readonly int InstructionCount;
+
+            public CompileResult(ZCodeDelegate code, int nextPC, int instructionCount)
+            {
+                InstructionCount = instructionCount;
+                NextPC = nextPC;
+                Code = code;
+            }
+
+            public void Deconstruct(out ZCodeDelegate code, out int nextPC)
+            {
+                code = this.Code;
+                nextPC = this.NextPC;
+            }
+
+            public void Deconstruct(out ZCodeDelegate code, out int nextPC, out int instructionCount)
+            {
+                code = this.Code;
+                nextPC = this.NextPC;
+                instructionCount = this.InstructionCount;
+            }
+        }
+
+        /// <summary>
+        /// Compiles code at the current <see cref="pc"/> into a <see cref="ZCodeDelegate"/>.
+        /// </summary>
+        /// <returns>The compilation result.</returns>
+        private CompileResult CompileZCode()
         {
             var operandTypes = new OperandType[8];
             var argv = new short[8];
@@ -626,7 +657,7 @@ namespace ZLR.VM
 
             compiling = true;
             CompilationStart = pc;
-            instructionCount = 0;
+            var instructionCount = 0;
 
             // initialize local variables for the stack and z-locals
             var stackFI = GetFieldInfo("stack");
@@ -829,7 +860,7 @@ namespace ZLR.VM
             StackLocal = null;
             LocalsLocal = null;
 
-            return (ZCodeDelegate) dm.CreateDelegate(typeof(ZCodeDelegate), this);
+            return new CompileResult((ZCodeDelegate) dm.CreateDelegate(typeof(ZCodeDelegate), this), pc, instructionCount);
         }
 
         [NotNull]
