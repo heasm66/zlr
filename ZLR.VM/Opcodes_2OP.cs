@@ -10,64 +10,64 @@ namespace ZLR.VM
         [Opcode(OpCount.Two, 1, Branch = true)]
         private void op_je([NotNull] ILGenerator il)
         {
-            if (argc == 1)
-                throw new Exception("je with only one operand is illegal");
-
-            if (argc == 2)
+            switch (argc)
             {
-                // simple version
-                LoadOperand(il, 0);
-                LoadOperand(il, 1);
-                Branch(il, OpCodes.Beq, OpCodes.Bne_Un);
-            }
-            else
-            {
-                // complicated version
+                case 1:
+                    throw new Exception("je with only one operand is illegal");
+                case 2:
+                    // simple version
+                    LoadOperand(il, 0);
+                    LoadOperand(il, 1);
+                    Branch(il, OpCodes.Beq, OpCodes.Bne_Un);
+                    break;
+                default:
+                    // complicated version
 
-                /* je can compare against up to 3 values, but we have to make sure the stack
-                 * ends up the same no matter which one matches. after each comparison, we
-                 * branch to a place that depends on the number of values remaining on the
-                 * stack, so we can pop off the operands that aren't tested. */
+                    /* je can compare against up to 3 values, but we have to make sure the stack
+                     * ends up the same no matter which one matches. after each comparison, we
+                     * branch to a place that depends on the number of values remaining on the
+                     * stack, so we can pop off the operands that aren't tested. */
 
-                var stackValues = 0;
-                for (var i = argc - 1; i > 0; i--)
-                    if (operandTypes[i] == OperandType.Variable && operandValues[i] == 0)
-                        stackValues++;
+                    var stackValues = 0;
+                    for (var i = argc - 1; i > 0; i--)
+                        if (operandTypes[i] == OperandType.Variable && operandValues[i] == 0)
+                            stackValues++;
 
-                var decide = il.DefineLabel();
-                var matched = new Label[3]; // we never leave all 3 values on the stack
-                matched[0] = il.DefineLabel();
-                matched[1] = il.DefineLabel();
-                matched[2] = il.DefineLabel();
+                    var decide = il.DefineLabel();
+                    var matched = new Label[3]; // we never leave all 3 values on the stack
+                    matched[0] = il.DefineLabel();
+                    matched[1] = il.DefineLabel();
+                    matched[2] = il.DefineLabel();
 
-                LoadOperand(il, 0);
-                il.Emit(OpCodes.Stloc, zm.TempWordLocal);
+                    LoadOperand(il, 0);
+                    il.Emit(OpCodes.Stloc, zm.TempWordLocal);
 
-                var remainingStackValues = stackValues;
+                    var remainingStackValues = stackValues;
 
-                for (var i = 1; i < argc; i++)
-                {
-                    il.Emit(OpCodes.Ldloc, zm.TempWordLocal);
-                    LoadOperand(il, i);
-                    if (operandTypes[i] == OperandType.Variable && operandValues[i] == 0)
-                        remainingStackValues--;
-                    il.Emit(OpCodes.Beq, matched[remainingStackValues]);
-                }
+                    for (var i = 1; i < argc; i++)
+                    {
+                        il.Emit(OpCodes.Ldloc, zm.TempWordLocal);
+                        LoadOperand(il, i);
+                        if (operandTypes[i] == OperandType.Variable && operandValues[i] == 0)
+                            remainingStackValues--;
+                        il.Emit(OpCodes.Beq, matched[remainingStackValues]);
+                    }
 
-                il.Emit(OpCodes.Ldc_I4_0);
-                il.Emit(OpCodes.Br, decide);
+                    il.Emit(OpCodes.Ldc_I4_0);
+                    il.Emit(OpCodes.Br, decide);
 
-                for (var i = Math.Min(stackValues, 2); i > 0; i--)
-                {
-                    il.MarkLabel(matched[i]);
-                    PopFromStack(il);
-                    il.Emit(OpCodes.Pop);
-                }
-                il.MarkLabel(matched[0]);
-                il.Emit(OpCodes.Ldc_I4_1);
+                    for (var i = Math.Min(stackValues, 2); i > 0; i--)
+                    {
+                        il.MarkLabel(matched[i]);
+                        PopFromStack(il);
+                        il.Emit(OpCodes.Pop);
+                    }
+                    il.MarkLabel(matched[0]);
+                    il.Emit(OpCodes.Ldc_I4_1);
 
-                il.MarkLabel(decide);
-                Branch(il, OpCodes.Brtrue, OpCodes.Brfalse);
+                    il.MarkLabel(decide);
+                    Branch(il, OpCodes.Brtrue, OpCodes.Brfalse);
+                    break;
             }
         }
 

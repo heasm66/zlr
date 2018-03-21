@@ -140,7 +140,7 @@ namespace ZLR.Interfaces.Demona
         {
             const int BUFSIZE = 256;
             var buf = Marshal.AllocHGlobal(unicode ? BUFSIZE * 4 : BUFSIZE);
-            var encoding = unicode ? Encoding.UTF32 : Encoding.GetEncoding(Glk.LATIN1);
+            var encoding = unicode ? Encoding.UTF32 : Encoding.GetEncoding(Glk.CodePageLatin1);
 
             try
             {
@@ -269,14 +269,14 @@ namespace ZLR.Interfaces.Demona
             short result = 0;
             do
             {
-                Glk.glk_select(out event_t ev);
+                Glk.glk_select(out var ev);
 
                 switch (ev.type)
                 {
                     case EvType.CharInput:
                         if (ev.win == currentWin)
                         {
-                            if (ev.val1 <= 255 || (unicode && ev.val1 <= 0x10000))
+                            if (ev.val1 <= 255 || unicode && ev.val1 <= 0x10000)
                                 result = translator((char)ev.val1);
                             else
                                 result = GlkKeyToZSCII((KeyCode)ev.val1);
@@ -409,7 +409,7 @@ namespace ZLR.Interfaces.Demona
             {
                 byte b;
                 encodingChar[0] = ch;
-                var result = Encoding.GetEncoding(Glk.LATIN1).GetBytes(encodingChar, 0, 1, encodedBytes, 0);
+                var result = Encoding.GetEncoding(Glk.CodePageLatin1).GetBytes(encodingChar, 0, 1, encodedBytes, 0);
                 if (result != 1)
                     b = (byte)'?';
                 else
@@ -505,7 +505,7 @@ namespace ZLR.Interfaces.Demona
 
         bool IZMachineIO.Buffering
         {
-            get { return true; }
+            get => true;
             set { /* can't really change this */ }
         }
 
@@ -585,10 +585,7 @@ namespace ZLR.Interfaces.Demona
                 return null;
 
             var gstr = Glk.glk_stream_open_file(fileref, mode, 0);
-            if (gstr.IsNull)
-                return null;
-
-            return new GlkStream(gstr);
+            return gstr.IsNull ? null : new GlkStream(gstr);
         }
 
         void IZMachineIO.SetTextStyle(TextStyle style)
@@ -749,7 +746,7 @@ namespace ZLR.Interfaces.Demona
             {
                 if (!upperWin.IsNull)
                 {
-                    Glk.glk_window_close(upperWin, out stream_result_t dummy);
+                    Glk.glk_window_close(upperWin, out var dummy);
                     upperWin = winid_t.Null;
                     currentWin = lowerWin;
                 }
@@ -795,7 +792,7 @@ namespace ZLR.Interfaces.Demona
                     // erase both and unsplit
                     if (!upperWin.IsNull)
                     {
-                        Glk.glk_window_close(upperWin, out stream_result_t dummy);
+                        Glk.glk_window_close(upperWin, out var dummy);
                         upperWin = winid_t.Null;
                     }
                     goto case -2;
@@ -943,7 +940,7 @@ namespace ZLR.Interfaces.Demona
         // XXX
         bool IZMachineIO.ScrollFromBottom
         {
-            get { return false; }
+            get => false;
             set { /* nada */ }
         }
 
@@ -994,7 +991,7 @@ namespace ZLR.Interfaces.Demona
         public GlkStream(strid_t gstr)
         {
             if (gstr.IsNull)
-                throw new ArgumentNullException("gstr");
+                throw new ArgumentNullException(nameof(gstr));
 
             this.gstr = gstr;
         }
@@ -1014,7 +1011,7 @@ namespace ZLR.Interfaces.Demona
         {
             if (!gstr.IsNull)
             {
-                Glk.glk_stream_close(gstr, out stream_result_t dummy);
+                Glk.glk_stream_close(gstr, out var dummy);
                 gstr = strid_t.Null;
             }
         }

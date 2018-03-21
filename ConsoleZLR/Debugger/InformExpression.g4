@@ -1,4 +1,4 @@
-grammar Expression;
+grammar InformExpression;
 
 /*
  * Parser Rules
@@ -74,7 +74,7 @@ additiveExpr
 relationalExpr
 	:	additiveExpr										# ToAdditiveExpr
 	|	left=relationalExpr '==' right=orSequence			# Equality
-	|	left=relationalExpr '!=' right=orSequence			# Inequality
+	|	left=relationalExpr ('~=' | '!=') right=orSequence	# Inequality
 	|	left=relationalExpr '>' right=additiveExpr			# Greater
 	|	left=relationalExpr '>=' right=additiveExpr			# GreaterEqual
 	|	left=relationalExpr '<' right=additiveExpr			# Less
@@ -92,7 +92,7 @@ orSequence
 
 booleanExpr
 	:	relationalExpr									# ToRelationalExpr
-	|	'~~' right=booleanExpr							# LogicalNot
+	|	('~~' | '!') right=booleanExpr					# LogicalNot
 	|	left=booleanExpr '&&' right=relationalExpr		# LogicalAnd
 	|	left=booleanExpr '||' right=relationalExpr		# LogicalOr
 	;
@@ -112,7 +112,7 @@ expression
  */
 
 WS
-	:	' ' -> channel(HIDDEN)
+	:	(' ' | '\t' | '\r' | '\n') -> channel(HIDDEN)
 	;
 
 Decimal_literal
@@ -161,5 +161,5 @@ Quoted_identifier
 	;
 fragment Quoted_identifier_char
 	:	~(']' | '\\')
-	|	'\\' .
+	|	Escaped_char
 	;

@@ -29,8 +29,6 @@ namespace ZLR.VM
 
         [NotNull] private readonly Dictionary<TKey, LinkedListNode<Entry>> dict;
         [NotNull] private readonly LinkedList<Entry> llist;
-        private readonly int maxSize;
-        private int currentSize, peakSize;
 
         /// <summary>
         /// Initializes a new instance.
@@ -39,7 +37,7 @@ namespace ZLR.VM
         /// reach before it starts discarding items.</param>
         public LruCache(int cacheSize)
         {
-            maxSize = cacheSize;
+            MaxSize = cacheSize;
 
             dict = new Dictionary<TKey, LinkedListNode<Entry>>();
             llist = new LinkedList<Entry>();
@@ -47,11 +45,11 @@ namespace ZLR.VM
 
         public int Count => dict.Count;
 
-        public int CurrentSize => currentSize;
+        public int CurrentSize { get; private set; }
 
-        public int MaxSize => maxSize;
+        public int MaxSize { get; }
 
-        public int PeakSize => peakSize;
+        public int PeakSize { get; private set; }
 
         [NotNull]
         public IEnumerable<TKey> Keys => dict.Keys;
@@ -72,20 +70,20 @@ namespace ZLR.VM
 
             var node = new LinkedListNode<Entry>(new Entry(key, value, size));
 
-            while (currentSize + size > maxSize && dict.Count > 0)
+            while (CurrentSize + size > MaxSize && dict.Count > 0)
             {
                 var lastEntry = llist.Last.Value;
                 llist.RemoveLast();
                 dict.Remove(lastEntry.Key);
-                currentSize -= lastEntry.Size;
+                CurrentSize -= lastEntry.Size;
             }
 
             dict.Add(key, node);
             llist.AddFirst(node);
-            currentSize += size;
+            CurrentSize += size;
 
-            if (currentSize > peakSize)
-                peakSize = currentSize;
+            if (CurrentSize > PeakSize)
+                PeakSize = CurrentSize;
         }
 
         /// <summary>
@@ -95,7 +93,7 @@ namespace ZLR.VM
         {
             dict.Clear();
             llist.Clear();
-            currentSize = 0;
+            CurrentSize = 0;
         }
 
         /// <summary>
@@ -106,10 +104,9 @@ namespace ZLR.VM
         /// <returns><b>true</b> if the value was found in the cache.</returns>
         public bool TryGetValue([NotNull] TKey key, out TValue value)
         {
-            LinkedListNode<Entry> node;
-            if (dict.TryGetValue(key, out node) == false)
+            if (dict.TryGetValue(key, out var node) == false)
             {
-                value = default(TValue);
+                value = default;
                 return false;
             }
 

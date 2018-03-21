@@ -44,7 +44,7 @@ namespace ZLR.Interfaces.Demona
             }
             else
             {
-                using (OpenFileDialog dlg = new OpenFileDialog())
+                using (var dlg = new OpenFileDialog())
                 {
                     dlg.Title = "Select Game File";
                     dlg.Filter = "Supported Z-code files (*.z5;*.z8;*.zblorb;*.zlb)|*.z5;*.z8;*.zblorb;*.zlb|All files (*.*)|*.*";
@@ -67,7 +67,7 @@ namespace ZLR.Interfaces.Demona
 
             Debug.Assert(storyName != null, "storyName != null");
 
-            using (GlkIO io = new GlkIO(args, storyName))
+            using (var io = new GlkIO(args, storyName))
             {
 #if !DEBUG
                 try
@@ -75,7 +75,7 @@ namespace ZLR.Interfaces.Demona
 #endif
                     try
                     {
-                        ZMachine engine = new ZMachine(gameFile, io);
+                        var engine = new ZMachine(gameFile, io);
                         await engine.RunAsync();
                     }
                     finally

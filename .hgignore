@@ -15,3 +15,6 @@ Demona/icon.res
 *.exe
 *.nupkg
 packages
+.vs
+_ReSharper.Caches
+launchSettings.json

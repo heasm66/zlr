@@ -1,16 +1,49 @@
 using System;
 using System.Collections.Generic;
 using System.Linq;
+using System.Threading;
 using System.Threading.Tasks;
 using JetBrains.Annotations;
+using Nito.AsyncEx;
 
 namespace ZLR.VM.Debugging
 {
     public enum DebuggerState
     {
-        Stopped,
-        Paused,
+        PausedOnEntry,
         Running,
+        Terminated,
+
+        PausedByBreakpoint,
+        PausedByError,
+        PausedByStep,
+        PausedByUser,
+    }
+
+    [PublicAPI]
+    public static class DebuggerStateExtensions
+    {
+        public static bool IsRunning(this DebuggerState state) => state == DebuggerState.Running;
+        
+        public static bool IsTerminated(this DebuggerState state) => state == DebuggerState.Terminated;
+
+        public static bool IsPaused(this DebuggerState state)
+        {
+            switch (state)
+            {
+                case DebuggerState.PausedByBreakpoint:
+                case DebuggerState.PausedByError:
+                case DebuggerState.PausedByStep:
+                case DebuggerState.PausedByUser:
+                case DebuggerState.PausedOnEntry:
+                    return true;
+
+                case DebuggerState.Running:
+                case DebuggerState.Terminated:
+                default:
+                    return false;
+            }
+        }
     }
 
     [PublicAPI]
@@ -19,13 +52,13 @@ namespace ZLR.VM.Debugging
         public short PackedAddress { get; }
 
         [CanBeNull]
-        public short[] Args { get; }
+        public IReadOnlyList<short> Args { get; }
 
         public int ResultStorage { get; }
         public int ReturnPC { get; }
         public int CallDepth { get; }
 
-        public EnterFunctionEventArgs(short packedAddress, [CanBeNull] short[] args, int resultStorage, int returnPC, int callDepth)
+        public EnterFunctionEventArgs(short packedAddress, [CanBeNull] IReadOnlyList<short> args, int resultStorage, int returnPC, int callDepth)
         {
             PackedAddress = packedAddress;
             Args = args;
@@ -35,18 +68,27 @@ namespace ZLR.VM.Debugging
         }
     }
 
+    [PublicAPI]
+    public sealed class DebuggerStateEventArgs : EventArgs
+    {
+        public DebuggerState State { get; }
+
+        public DebuggerStateEventArgs(DebuggerState state)
+        {
+            State = state;
+        }
+    }
+
     public interface IDebuggerEvents
     {
         event EventHandler<EnterFunctionEventArgs> EnteringFunction;
+        event EventHandler<DebuggerStateEventArgs> DebuggerStateChanged;
     }
 
-    public class DebuggerBreakException : ApplicationException
+    public sealed class DebuggerBreakException : Exception
     {
-        public int ResumePC { get; }
-
-        public DebuggerBreakException(int resumePC) : base("The debuggee was paused.")
+        public DebuggerBreakException() : base("The debuggee was paused.")
         {
-            ResumePC = resumePC;
         }
     }
 
@@ -62,6 +104,9 @@ namespace ZLR.VM.Debugging
         Task StepUpAsync();
 
         Task RunAsync();
+        Task PauseAsync();
+        CancellationToken PauseCancellationToken { get; }
+
         void SetBreakpoint(int address, bool enabled);
         int[] GetBreakpoints();
 
@@ -83,18 +128,26 @@ namespace ZLR.VM.Debugging
 
         string DecodeString(int address);
 
-        int GetObjectAddress(ushort number);
+        ushort GetObjectAddress(ushort number);
         string GetObjectName(ushort number);
-        void ParseObject(int address, out byte[] attrs, out ushort parent,
-            out ushort sibling, out ushort child, out int propertyTable);
-        void ParseProperty(int address, out byte number, out byte length);
-        int GetPropAddress(ushort obj, short prop);
-        int GetPropLength(int address);
+        void ParseObject(ushort address, [NotNull] out byte[] attrs, out ushort parent,
+            out ushort sibling, out ushort child, out ushort propertyTable);
+        void UpdateObject(ushort address, [CanBeNull] byte[] attrs, ushort? parent, ushort? sibling,
+            ushort? child, ushort? propertyTable);
+        void MoveObject(ushort obj, ushort newParent);
+        void ParseProperty(ushort address, out short number, out short length);
+        ushort GetPropAddress(ushort obj, short prop);
+        short GetPropLength(ushort address);
         short GetNextProp(ushort obj, short prop);
 
         int CallDepth { get; }
+
+        [ItemNotNull, NotNull]
         ICallFrame[] GetCallFrames();
+
         int CurrentPC { get; }
+
+        [NotNull]
         string Disassemble(int address);
 
         int StackDepth { get; }
@@ -104,6 +157,7 @@ namespace ZLR.VM.Debugging
         int UnpackAddress(short packedAddress, bool forString);
         short PackAddress(int address, bool forString);
 
+        [NotNull]
         IDebuggerEvents Events { get; }
     }
 
@@ -111,9 +165,76 @@ namespace ZLR.VM.Debugging
     {
         int ReturnPC { get; }
         int PrevStackDepth { get; }
-        short[] Locals { get; }
         int ArgCount { get; }
         int ResultStorage { get; }
+
+        [NotNull]
+        short[] Locals { get; }
+    }
+
+    public static class DebuggerExtensions
+    {
+        [NotNull]
+        public static byte[] GetObjectAttrs([NotNull] this IDebugger dbg, ushort obj)
+        {
+            dbg.ParseObject(dbg.GetObjectAddress(obj), out var attrs, out _, out _, out _, out _);
+            return attrs;
+        }
+
+        public static ushort GetObjectParent([NotNull] this IDebugger dbg, ushort obj)
+        {
+            dbg.ParseObject(dbg.GetObjectAddress(obj), out _, out var parent, out _, out _, out _);
+            return parent;
+        }
+
+        public static ushort GetObjectSibling([NotNull] this IDebugger dbg, ushort obj)
+        {
+            dbg.ParseObject(dbg.GetObjectAddress(obj), out _, out _, out var sibling, out _, out _);
+            return sibling;
+        }
+
+        public static ushort GetObjectChild([NotNull] this IDebugger dbg, ushort obj)
+        {
+            dbg.ParseObject(dbg.GetObjectAddress(obj), out _, out _, out _, out var child, out _);
+            return child;
+        }
+
+        public static ushort GetObjectPropertyTable([NotNull] this IDebugger dbg, ushort obj)
+        {
+            dbg.ParseObject(dbg.GetObjectAddress(obj), out _, out _, out _, out _, out var propertyTable);
+            return propertyTable;
+        }
+
+        public static bool TestObjectAttribute([NotNull] this IDebugger dbg, ushort obj, int attr)
+        {
+            var attrs = dbg.GetObjectAttrs(obj);
+            var bit = 128 >> (attr & 7);
+            var offset = attr >> 3;
+            return (attrs[offset] & bit) != 0;
+        }
+
+        private static void UpdateObjectAttribute([NotNull] IDebugger dbg, ushort obj, int attr, bool set)
+        {
+            var objAddr = dbg.GetObjectAddress(obj);
+
+            dbg.ParseObject(objAddr, out var attrs, out _, out _, out _, out _);
+
+            var bit = 128 >> (attr & 7);
+            var offset = attr >> 3;
+
+            if (set)
+                attrs[offset] |= (byte) bit;
+            else
+                attrs[offset] &= (byte) ~bit;
+
+            dbg.UpdateObject(objAddr, attrs, null, null, null, null);
+        }
+
+        public static void SetObjectAttribute([NotNull] this IDebugger dbg, ushort obj, int attr) =>
+            UpdateObjectAttribute(dbg, obj, attr, true);
+
+        public static void ClearObjectAttribute([NotNull] this IDebugger dbg, ushort obj, int attr) =>
+            UpdateObjectAttribute(dbg, obj, attr, false);
     }
 }
 
@@ -124,8 +245,20 @@ namespace ZLR.VM
     partial class ZMachine : IDebuggerEvents
     {
         private int stepping = -1;
-        private readonly Dictionary<int, bool> breakpoints = new Dictionary<int, bool>();
+        private readonly HashSet<int> breakpoints = new HashSet<int>();
+
         private DebuggerState debugState;
+
+        private DebuggerState DebuggerState
+        {
+            get => debugState;
+
+            set
+            {
+                debugState = value;
+                HandleDebuggerStateChanged(value);
+            }
+        }
 
         [NotNull]
         public IDebugger Debug()
@@ -147,10 +280,16 @@ namespace ZLR.VM
                     return true;
                 }
             }
-            else if (breakpoints.ContainsKey(pcToCheck))
+            else if (breakpoints.Contains(pcToCheck))
             {
                 pc = pcToCheck;
-                debugState = DebuggerState.Paused;
+                this.DebuggerState = DebuggerState.PausedByBreakpoint;
+                return true;
+            }
+            else if (interruptToken.IsCancellationRequested)
+            {
+                pc = pcToCheck;
+                this.DebuggerState = DebuggerState.PausedByUser;
                 return true;
             }
 
@@ -162,6 +301,7 @@ namespace ZLR.VM
         private class Debugger : IDebugger
         {
             private readonly ZMachine zm;
+            private readonly AsyncManualResetEvent whenStopped = new AsyncManualResetEvent(true);
 
             public Debugger(ZMachine zm)
             {
@@ -170,25 +310,32 @@ namespace ZLR.VM
 
             #region IDebugger Members
 
-            public DebuggerState State => zm.debugState;
+            public DebuggerState State => zm.DebuggerState;
+
+            public CancellationToken PauseCancellationToken => zm.interruptToken;
 
             public void Restart()
             {
+                zmachineInterruptSource.Cancel();
+                whenStopped.Set();
+
                 zm.Restart();
                 if (zm.cache == null)
                     zm.cache = new LruCache<int, CachedCode>(zm.cacheSize);
-                zm.debugState = DebuggerState.Paused;
+                zm.DebuggerState = DebuggerState.PausedOnEntry;
             }
 
             private async Task OneStepAsync()
             {
-                int thisPC = zm.pc;
-                if (thisPC < zm.romStart || zm.cache.TryGetValue(thisPC, out var entry) == false)
+                var thisPC = zm.pc;
+                if (thisPC < zm.RomStart || zm.cache.TryGetValue(thisPC, out var entry) == false)
                 {
-                    entry = new CachedCode(zm.pc, zm.CompileZCode(out var count));
-                    if (thisPC >= zm.romStart)
+                    var (code, nextPC, count) = zm.CompileZCode();
+                    entry = new CachedCode(nextPC, code);
+                    if (thisPC >= zm.RomStart)
                         zm.cache.Add(thisPC, entry, count);
                 }
+
                 zm.pc = entry.NextPC;
                 try
                 {
@@ -196,66 +343,121 @@ namespace ZLR.VM
                     if (task != null)
                         await task;
                 }
-                catch (DebuggerBreakException ex)
+                catch (DebuggerBreakException)
                 {
-                    zm.pc = ex.ResumePC;
-                    zm.debugState = DebuggerState.Paused;
+                    // OK
                 }
             }
 
-            public async Task StepIntoAsync()
+            private async Task Step([NotNull] Func<Task> operation)
             {
-                zm.stepping = 1;
-                zm.running = true;
+                try
+                {
+                    whenStopped.Reset();
+                    zmachineInterruptSource = new CancellationTokenSource();
+                    zm.interruptToken = zmachineInterruptSource.Token;
 
-                await OneStepAsync();
+                    zm.stepping = 1;
+                    zm.running = true;
+                    zm.DebuggerState = DebuggerState.Running;
 
-                zm.stepping = -1;
-                zm.debugState = zm.running ? DebuggerState.Paused : DebuggerState.Stopped;
+                    await operation();
+
+                    zm.stepping = -1;
+                    if (!zm.running)
+                    {
+                        zm.DebuggerState = DebuggerState.Terminated;
+                    }
+                    else if (zm.DebuggerState.IsRunning())
+                    {
+                        zm.DebuggerState = DebuggerState.PausedByStep;
+                    }
+                }
+                finally
+                {
+                    whenStopped.Set();
+                }
             }
 
-            public async Task StepOverAsync()
+            [NotNull]
+            public Task StepIntoAsync()
             {
-                int callDepth = zm.callStack.Count;
-                await StepIntoAsync();
-
-                while (zm.callStack.Count > callDepth)
-                    await StepIntoAsync();
+                return Step(OneStepAsync);
             }
 
-            public async Task StepUpAsync()
+            [NotNull]
+            public Task StepOverAsync()
             {
-                int callDepth = zm.callStack.Count;
-                await StepIntoAsync();
+                return Step(async () =>
+                {
+                    var callDepth = zm.callStack.Count;
+                    await OneStepAsync();
 
-                while (zm.callStack.Count >= callDepth)
-                    await StepIntoAsync();
+                    while (zm.callStack.Count > callDepth && zm.running && zm.DebuggerState.IsRunning())
+                        await OneStepAsync();
+                });
             }
+
+            [NotNull]
+            public Task StepUpAsync()
+            {
+                return Step(async () =>
+                {
+                    var callDepth = zm.callStack.Count;
+                    await OneStepAsync();
+
+                    while (zm.callStack.Count >= callDepth && zm.running && zm.DebuggerState.IsRunning())
+                        await OneStepAsync();
+                });
+            }
+
+            [NotNull]
+            private CancellationTokenSource zmachineInterruptSource = new CancellationTokenSource();
 
             public async Task RunAsync()
             {
-                // step ahead if the current line has a breakpoint on it
-                if (zm.breakpoints.ContainsKey(zm.pc))
-                    await StepIntoAsync();
+                // TODO: merge with Step()
+                try
+                {
+                    whenStopped.Reset();
+                    zmachineInterruptSource = new CancellationTokenSource();
+                    zm.interruptToken = zmachineInterruptSource.Token;
 
-                zm.running = true;
-                zm.debugState = DebuggerState.Running;
-                while (zm.running && zm.debugState == DebuggerState.Running)
-                    await OneStepAsync();
+                    // step past a breakpoint on the current line, if we're continuing
+                    if (zm.breakpoints.Contains(zm.pc) && zm.DebuggerState != DebuggerState.PausedOnEntry)
+                        await StepIntoAsync();
 
-                zm.debugState = zm.running ? DebuggerState.Paused : DebuggerState.Stopped;
+                    zm.running = true;
+                    zm.DebuggerState = DebuggerState.Running;
+                    while (zm.running && zm.DebuggerState.IsRunning())
+                        await OneStepAsync();
+
+                    if (!zm.running)
+                        zm.DebuggerState = DebuggerState.Terminated;
+                }
+                finally
+                {
+                    whenStopped.Set();
+                }
+            }
+
+            public async Task PauseAsync()
+            {
+                zmachineInterruptSource.Cancel();
+                // ReSharper disable once MethodSupportsCancellation
+                await whenStopped.WaitAsync();
             }
 
             public void SetBreakpoint(int address, bool enabled)
             {
                 if (enabled)
-                    zm.breakpoints[address] = true;
+                    zm.breakpoints.Add(address);
                 else
                     zm.breakpoints.Remove(address);
             }
 
             [NotNull]
-            public int[] GetBreakpoints() => zm.breakpoints.Keys.ToArray();
+            public int[] GetBreakpoints() => zm.breakpoints.ToArray();
 
             public async Task<short?> CallAsync(short packedAddress, short[] args)
             {
@@ -266,17 +468,15 @@ namespace ZLR.VM
                     await zm.JitLoopAsync();
                     return zm.stack.Pop();
                 }
-                catch (DebuggerBreakException ex)
+                catch (DebuggerBreakException)
                 {
-                    zm.pc = ex.ResumePC;
-                    zm.debugState = DebuggerState.Paused;
                     return null;
                 }
             }
 
             public byte ReadByte(int address) => zm.zmem[address];
 
-            public short ReadWord(int address) => (short)((zm.zmem[address] << 8) | zm.zmem[address + 1]);
+            public short ReadWord(int address) => (short) ((zm.zmem[address] << 8) | zm.zmem[address + 1]);
 
             public void WriteByte(int address, byte value)
             {
@@ -285,8 +485,8 @@ namespace ZLR.VM
 
             public void WriteWord(int address, short value)
             {
-                zm.zmem[address] = (byte)(value >> 8);
-                zm.zmem[address + 1] = (byte)value;
+                zm.zmem[address] = (byte) (value >> 8);
+                zm.zmem[address + 1] = (byte) value;
             }
 
             public short ReadVariable(byte number)
@@ -295,14 +495,13 @@ namespace ZLR.VM
                 {
                     return zm.stack.Peek();
                 }
-                else if (number < 16)
+
+                if (number < 16)
                 {
                     return zm.TopFrame.Locals[number - 1];
                 }
-                else
-                {
-                    return zm.GetWord(zm.GlobalsOffset + 2 * (number - 16));
-                }
+
+                return zm.GetWord(zm.GlobalsOffset + 2 * (number - 16));
             }
 
             public void WriteVariable(byte number, short value)
@@ -325,88 +524,150 @@ namespace ZLR.VM
             [NotNull]
             public string DecodeString(int address) => zm.DecodeString(address);
 
-            public int GetObjectAddress(ushort number) => zm.GetObjectAddress(number);
+            public ushort GetObjectAddress(ushort number) => zm.GetObjectAddress(number);
 
             [NotNull]
             public string GetObjectName(ushort number) => zm.GetObjectName(number);
 
-            public void ParseObject(int address, [NotNull] out byte[] attrs,
-                out ushort parent, out ushort sibling, out ushort child, out int propertyTable)
+            // TODO: use System.Memory and/or ref returns to provide direct access?
+            public void ParseObject(ushort address, out byte[] attrs,
+                out ushort parent, out ushort sibling, out ushort child, out ushort propertyTable)
             {
                 if (zm.zversion <= 3)
                 {
-                    attrs = new[] {
+                    attrs = new[]
+                    {
                         zm.GetByte(address),
-                        zm.GetByte(address+1),
-                        zm.GetByte(address+2),
-                        zm.GetByte(address+3),
+                        zm.GetByte(address + 1),
+                        zm.GetByte(address + 2),
+                        zm.GetByte(address + 3),
                     };
                     parent = zm.GetByte(address + 4);
                     sibling = zm.GetByte(address + 5);
                     child = zm.GetByte(address + 6);
-                    propertyTable = zm.GetWord(address + 7);
+                    propertyTable = (ushort) zm.GetWord(address + 7);
                 }
                 else
                 {
-                    attrs = new[] {
+                    attrs = new[]
+                    {
                         zm.GetByte(address),
-                        zm.GetByte(address+1),
-                        zm.GetByte(address+2),
-                        zm.GetByte(address+3),
-                        zm.GetByte(address+4),
-                        zm.GetByte(address+5),
+                        zm.GetByte(address + 1),
+                        zm.GetByte(address + 2),
+                        zm.GetByte(address + 3),
+                        zm.GetByte(address + 4),
+                        zm.GetByte(address + 5),
                     };
-                    parent = (ushort)zm.GetWord(address + 6);
-                    sibling = (ushort)zm.GetWord(address + 8);
-                    child = (ushort)zm.GetWord(address + 10);
-                    propertyTable = zm.GetWord(address + 12);
+                    parent = (ushort) zm.GetWord(address + 6);
+                    sibling = (ushort) zm.GetWord(address + 8);
+                    child = (ushort) zm.GetWord(address + 10);
+                    propertyTable = (ushort) zm.GetWord(address + 12);
                 }
             }
 
-            public void ParseProperty(int address, out byte number, out byte length)
+            public void UpdateObject(ushort address, byte[] attrs, ushort? parent, ushort? sibling,
+                ushort? child, ushort? propertyTable)
             {
-                //XXX
-                throw new NotImplementedException();
+                if (zm.zversion <= 3)
+                {
+                    if (attrs != null)
+                    {
+                        if (attrs.Length != 4)
+                            throw new ArgumentException("Expected 4 bytes of attributes", nameof(attrs));
+
+                        zm.SetByte(address, attrs[0]);
+                        zm.SetByte(address + 1, attrs[1]);
+                        zm.SetByte(address + 2, attrs[2]);
+                        zm.SetByte(address + 3, attrs[3]);
+                    }
+
+                    if (parent != null)
+                        zm.SetByte(address + 4, (byte) parent);
+
+                    if (sibling != null)
+                        zm.SetByte(address + 5, (byte) sibling);
+
+                    if (child != null)
+                        zm.SetByte(address + 6, (byte) child);
+
+                    if (propertyTable != null)
+                        zm.SetWord(address + 7, (short) propertyTable);
+                }
+                else
+                {
+                    if (attrs != null)
+                    {
+                        if (attrs.Length != 6)
+                            throw new ArgumentException("Expected 6 bytes of attributes", nameof(attrs));
+
+                        zm.SetByte(address, attrs[0]);
+                        zm.SetByte(address + 1, attrs[1]);
+                        zm.SetByte(address + 2, attrs[2]);
+                        zm.SetByte(address + 3, attrs[3]);
+                        zm.SetByte(address + 4, attrs[4]);
+                        zm.SetByte(address + 5, attrs[5]);
+                    }
+
+                    if (parent != null)
+                        zm.SetWord(address + 6, (short) parent);
+
+                    if (sibling != null)
+                        zm.SetWord(address + 8, (short) sibling);
+
+                    if (child != null)
+                        zm.SetWord(address + 10, (short) child);
+
+                    if (propertyTable != null)
+                        zm.SetWord(address + 12, (short) propertyTable);
+                }
             }
 
-            public int GetPropAddress(ushort obj, short prop) => zm.GetPropAddr(obj, prop);
+            public void MoveObject(ushort obj, ushort newParent) => zm.InsertObject(obj, newParent);
 
-            public int GetPropLength(int address) => zm.GetPropLength((ushort)address);
+            public void ParseProperty(ushort address, out short number, out short length)
+            {
+                length = zm.GetPropLength(address);
+                number = (short) (zm.GetByte(address) & (zm.zversion <= 3 ? 31 : 63));
+            }
+
+            public ushort GetPropAddress(ushort obj, short prop) => zm.GetPropAddr(obj, prop);
+
+            public short GetPropLength(ushort address) => zm.GetPropLength(address);
 
             public short GetNextProp(ushort obj, short prop) => zm.GetNextProp(obj, prop);
 
             public int CallDepth => zm.callStack.Count;
 
-            [ItemNotNull]
-            [NotNull]
             public ICallFrame[] GetCallFrames() => zm.callStack.ToArray<ICallFrame>();
 
             public int CurrentPC => zm.pc;
 
             public string Disassemble(int address)
             {
-                int opc = zm.pc;
+                var opc = zm.pc;
                 try
                 {
                     zm.pc = address;
-                    OperandType[] types = new OperandType[8];
-                    short[] argv = new short[8];
+                    var types = new OperandType[8];
+                    var argv = new short[8];
 
-                    Opcode opcode = zm.DecodeOneOp(types, argv);
+                    var opcode = zm.DecodeOneOp(types, argv);
 
-                    var rtn = zm.debugFile?.FindRoutine(address);
+                    var rtn = zm.DebugInfo?.FindRoutine(address);
 
-                    return opcode.Disassemble(delegate(byte varnum)
+                    return opcode.Disassemble(varnum =>
                     {
                         if (rtn != null && varnum - 1 < rtn.Locals.Length)
                             return "local_" + varnum + "(" + rtn.Locals[varnum - 1] + ")";
+
                         if (varnum < 16)
                             return "local_" + varnum;
-                        if (zm.debugFile != null && zm.debugFile.Globals.Contains((byte)(varnum - 16)))
-                            return "global_" + varnum + "(" + zm.debugFile.Globals[(byte)(varnum - 16)] + ")";
+
+                        if (zm.DebugInfo != null && zm.DebugInfo.Globals.Contains((byte) (varnum - 16)))
+                            return "global_" + varnum + "(" + zm.DebugInfo.Globals[(byte) (varnum - 16)] + ")";
+
                         return "global_" + varnum;
                     });
-
                 }
                 finally
                 {
@@ -416,20 +677,11 @@ namespace ZLR.VM
 
             public int StackDepth => zm.stack.Count;
 
-            public void StackPush(short value)
-            {
-                zm.stack.Push(value);
-            }
+            public void StackPush(short value) => zm.stack.Push(value);
 
-            public short StackPop()
-            {
-                return zm.stack.Pop();
-            }
+            public short StackPop() => zm.stack.Pop();
 
-            public int UnpackAddress(short packedAddress, bool forString)
-            {
-                return zm.UnpackAddress(packedAddress, forString);
-            }
+            public int UnpackAddress(short packedAddress, bool forString) => zm.UnpackAddress(packedAddress, forString);
 
             public short PackAddress(int address, bool forString)
             {
@@ -438,21 +690,21 @@ namespace ZLR.VM
                     case 1:
                     case 2:
                     case 3:
-                        return (short) (address/2);
+                        return (short) (address / 2);
 
                     case 4:
                     case 5:
-                        return (short) (address/4);
+                        return (short) (address / 4);
 
                     case 6:
                     case 7:
                         const int HDR_CODE_OFFSET = 0x28;
                         const int HDR_STR_OFFSET = 0x2A;
-                        var offset = ReadWord(forString ? HDR_STR_OFFSET : HDR_CODE_OFFSET)*8;
-                        return (short) ((address - offset)/4);
+                        var offset = ReadWord(forString ? HDR_STR_OFFSET : HDR_CODE_OFFSET) * 8;
+                        return (short) ((address - offset) / 4);
 
                     case 8:
-                        return (short) (address/8);
+                        return (short) (address / 8);
 
                     default:
                         throw new NotImplementedException();
@@ -467,13 +719,19 @@ namespace ZLR.VM
         #region IDebuggerEvents Members
 
         public event EventHandler<EnterFunctionEventArgs> EnteringFunction;
+        public event EventHandler<DebuggerStateEventArgs> DebuggerStateChanged;
 
         #endregion
 
         private void HandleEnterFunction(short packedAddress, short[] args, int resultStorage, int returnPC)
         {
             EnteringFunction?.Invoke(this, new EnterFunctionEventArgs(
-                    packedAddress, args, resultStorage, returnPC, callStack.Count));
+                packedAddress, args, resultStorage, returnPC, callStack.Count));
+        }
+
+        private void HandleDebuggerStateChanged(DebuggerState state)
+        {
+            DebuggerStateChanged?.Invoke(this, new DebuggerStateEventArgs(state));
         }
     }
 }

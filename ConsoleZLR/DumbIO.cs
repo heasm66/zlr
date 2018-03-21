@@ -38,7 +38,7 @@ namespace ZLR.Interfaces.SystemConsole
             short ch;
             do
             {
-                ConsoleKeyInfo info = Console.ReadKey();
+                var info = Console.ReadKey();
                 ch = translator(info.KeyChar);
             } while (ch == 0);
             return ch;
@@ -64,19 +64,19 @@ namespace ZLR.Interfaces.SystemConsole
         public void PutTextRectangle(string[] lines)
         {
             if (!bottomWinOnly || curWin == 0) 
-                foreach (string str in lines)
+                foreach (var str in lines)
                     Console.WriteLine(str);
         }
 
         public bool Buffering
         {
-            get { return false; }
+            get => false;
             set { /* nada */ }
         }
 
         public bool Transcripting
         {
-            get { return false; }
+            get => false;
             set { /* nada */ }
         }
 
@@ -222,7 +222,7 @@ namespace ZLR.Interfaces.SystemConsole
 
         public bool ForceFixedPitch
         {
-            get { return false; }
+            get => false;
             set { /* nada */ }
         }
 
@@ -236,7 +236,7 @@ namespace ZLR.Interfaces.SystemConsole
 
         public bool ScrollFromBottom
         {
-            get { return false; }
+            get => false;
             set { /* nada */ }
         }
 

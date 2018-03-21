@@ -15,3 +15,6 @@ using System.Diagnostics.CodeAnalysis;
         "ContracsReSharperInterop_CreateContractInvariantMethod:Missing Contract Invariant Method.",
         Justification = "Not using contracts")]
 
+[assembly:
+    SuppressMessage("CodeContracts",
+        "ContracsReSharperInterop_CreateContractClass:Missing Contract Class.")]

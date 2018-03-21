@@ -1,19 +1,34 @@
-﻿using System;
+﻿//#define DEBUG_DEBUGGER
+//#define TRACE_DEBUGGER
+
+using System;
 using System.Collections.Generic;
+using System.Collections.Immutable;
 using System.IO;
+using System.Linq;
 using System.Text;
+using System.Threading;
 using System.Threading.Tasks;
 using JetBrains.Annotations;
+using Nito.AsyncEx;
 using ZLR.VM;
 using ZLR.VM.Debugging;
 
 namespace ZLR.Interfaces.SystemConsole.Debugger
 {
-    public sealed class DebuggingConsole
+    public sealed class DebuggingConsole : IDisposable
     {
-        private readonly ZMachine zm;
-        private readonly IZMachineIO io;
-        private readonly string[] sourcePath;
+        [NotNull] private readonly ZMachine zm;
+
+        [CanBeNull] private readonly IDisposable[] disposables;
+
+        [NotNull] private readonly TextReader reader;
+
+        [NotNull] private readonly TextWriter writer;
+
+        [NotNull, ItemNotNull] private readonly string[] sourcePath;
+
+        private readonly bool sharingIO;
 
         private enum ActiveState
         {
@@ -32,16 +47,201 @@ namespace ZLR.Interfaces.SystemConsole.Debugger
 
         private static readonly char[] COMMAND_DELIM = { ' ' };
 
-        public DebuggingConsole(ZMachine zm, IZMachineIO io, string[] sourcePath)
+        public DebuggingConsole(
+            [NotNull] ZMachine zm,
+            [NotNull] IAsyncZMachineIO io,
+            [ItemNotNull, NotNull] IEnumerable<string> sourcePath)
+            : this(zm, new ZIOReader(io), new ZIOWriter(io), sourcePath)
+        {
+            sharingIO = true;
+
+            // ReSharper disable once SuspiciousTypeConversion.Global
+            if (io is IDisposable dio)
+                disposables = new[] { dio };
+        }
+
+        public DebuggingConsole(
+            [NotNull] ZMachine zm,
+            [NotNull] Stream stream,
+            [ItemNotNull, NotNull] IEnumerable<string> sourcePath)
+            : this(zm, stream, Encoding.UTF8, sourcePath)
+        {
+        }
+
+        public DebuggingConsole(
+            [NotNull] ZMachine zm,
+            [NotNull] Stream stream,
+            [NotNull] Encoding encoding,
+            [ItemNotNull, NotNull] IEnumerable<string> sourcePath)
+            : this(zm, new StreamReader(stream, encoding), new StreamWriter(stream, encoding), sourcePath)
+        {
+            disposables = new IDisposable[] { stream };
+        }
+
+        private DebuggingConsole([NotNull] ZMachine zm, [NotNull] TextReader reader, [NotNull] TextWriter writer,
+            [NotNull, ItemNotNull] IEnumerable<string> sourcePath)
         {
             this.zm = zm;
-            this.io = io;
-            this.sourcePath = sourcePath;
+            this.reader = reader;
+            this.writer = writer;
+            this.sourcePath = sourcePath.ToArray();
+        }
+
+        [System.Diagnostics.Conditional("DEBUG_DEBUGGER")]
+        private static void AttachDebugger()
+        {
+            System.Diagnostics.Debugger.Launch();
+        }
+
+        [System.Diagnostics.Conditional("TRACE_DEBUGGER"), StringFormatMethod("format")]
+        private static void DebugWriteLine([NotNull] string format, [NotNull] params object[] args)
+        {
+            System.Diagnostics.Debug.Write(
+                $"[{TaskScheduler.Current.Id} @ {System.Threading.Thread.CurrentThread.ManagedThreadId}] ");
+            System.Diagnostics.Debug.WriteLine(format, args);
+        }
+
+        public async Task RunDebuggerAsync()
+        {
+            AttachDebugger();
+
+            Activate();
+            try
+            {
+                if (sharingIO)
+                {
+                    // simple case, no interrupts
+                    await SimpleDebuggerLoopAsync();
+                }
+                else
+                {
+                    // complex case, allow interrupts
+                    await InterruptibleDebuggerLoopAsync();
+                }
+            }
+            finally
+            {
+                Deactivate();
+            }
+
+            DebugWriteLine("Goodbye.");
+        }
+
+        private async Task SimpleDebuggerLoopAsync()
+        {
+            DebugWriteLine("Hi, I'm the mayor of Simpleton");
+
+            while (this.Active)
+            {
+                ShowStatus();
+                await writer.FlushAsync().ConfigureAwait(false);
+
+                var command = await reader.ReadLineAsync().ConfigureAwait(false);
+                DebugWriteLine("Read command: {0}", command);
+
+                await HandleCommandAsync(command).ConfigureAwait(false);
+            }
+        }
+
+        private async Task InterruptibleDebuggerLoopAsync(CancellationToken loopCancellationToken = default)
+        {
+            DebugWriteLine("Help, I'm steppin' into the twilight zone");
+
+            ShowStatus();
+            await writer.FlushAsync().ConfigureAwait(false);
+
+            // interrupts are handled by the producer when read
+            // non-interrupts are queued for the consumer to handle in order
+            var queue = new AsyncProducerConsumerQueue<string>();
+
+            var producerCanceller = new CancellationTokenSource();
+            var producerTask = Task.Run(ProduceAsync, producerCanceller.Token);
+            var consumerTask = Task.Run(ConsumeAsync, loopCancellationToken);
+
+            async Task ProduceAsync()
+            {
+                var ct = producerCanceller.Token;
+
+                try
+                {
+                    while (this.Active)
+                    {
+                        var command = await reader.ReadLineAsync().WaitAsync(ct).ConfigureAwait(false);
+                        DebugWriteLine("Read command: {0}", command);
+
+                        try
+                        {
+                            if (await TryHandleInterruptAsync(command).ConfigureAwait(false))
+                            {
+                                // don't do any I/O here, since the stream may be locked by the consumer
+                                continue;
+                            }
+                        }
+                        catch (Exception ex)
+                        {
+                            DebugWriteLine("Producer exception while handling interrupt \"{0}\": {1}", command, ex);
+                            writer.WriteLine("*** ERROR ({0}): {1}", ex.GetType().Name, ex.Message);
+                        }
+
+                        DebugWriteLine("Queuing: {0}", command);
+                        await queue.EnqueueAsync(command, ct).ConfigureAwait(false);
+                    }
+                }
+                finally
+                {
+                    DebugWriteLine("Producer finished");
+                    queue.CompleteAdding();
+                }
+            }
+
+            async Task ConsumeAsync()
+            {
+                var ct = loopCancellationToken;
+
+                try
+                {
+                    while (Active && await queue.OutputAvailableAsync(ct).ConfigureAwait(false))
+                    {
+                        var command = await queue.DequeueAsync(ct).ConfigureAwait(false);
+                        DebugWriteLine("Dequeued: {0}", command);
+
+                        try
+                        {
+                            await HandleCommandAsync(command).ConfigureAwait(false);
+                            await writer.FlushAsync().ConfigureAwait(false);
+                        }
+                        catch (Exception ex)
+                        {
+                            DebugWriteLine("Consumer exception while handling non-interrupt \"{0}\": {1}", command, ex);
+                            writer.WriteLine("*** ERROR ({0}): {1}", ex.GetType().Name, ex.Message);
+                        }
+
+                        if (Active)
+                            ShowStatus();
+
+                        await writer.FlushAsync().ConfigureAwait(false);
+                    }
+                }
+                finally
+                {
+                    DebugWriteLine("Consumer finished");
+                    producerCanceller.Cancel();
+                }
+            }
+
+            try
+            {
+                await Task.WhenAll(producerTask, consumerTask).ConfigureAwait(false);
+            }
+            catch (TaskCanceledException ex) when (ex.CancellationToken == producerCanceller.Token && !loopCancellationToken.IsCancellationRequested)
+            {
+                // loop terminated normally
+            }
         }
 
         public bool Active => active == ActiveState.Active;
 
-        public void Activate()
+        private void Activate()
         {
             if (active != ActiveState.NotStarted)
                 throw new InvalidOperationException("Wrong state");
@@ -49,59 +249,98 @@ namespace ZLR.Interfaces.SystemConsole.Debugger
             active = ActiveState.Active;
 
             dbg = zm.Debug();
+            dbg.Events.DebuggerStateChanged += DebuggerStateChangedEventHandler;
+
             src = new SourceCache(sourcePath);
             valueFormatter = new ValueFormatter(zm, dbg);
 
-            io.PutString("ZLR Debugger\n");
+            writer.WriteLine("ZLR Debugger {0}", typeof(DebuggingConsole).Assembly.GetName().Version);
             dbg.Restart();
-            ShowStatus();
+        }
+
+        private void Deactivate()
+        {
+            dbg.Events.DebuggerStateChanged -= DebuggerStateChangedEventHandler;
+
+            dbg = null;
+            src = null;
+            valueFormatter = null;
         }
 
         private void TraceCallsEventHandler(object sender, [NotNull] EnterFunctionEventArgs e)
         {
-            io.PutString("[ ");
+            writer.Write("[ ");
 
             for (var i = 0; i < e.CallDepth; i++)
-                io.PutString(". ");
+                writer.Write(". ");
 
             RoutineInfo rtn;
             if (zm.DebugInfo != null &&
                 (rtn = zm.DebugInfo.FindRoutine(dbg.UnpackAddress(e.PackedAddress, false))) != null)
             {
-                io.PutString(rtn.Name);
+                writer.Write(rtn.Name);
             }
             else
             {
-                io.PutString($"${e.PackedAddress:x4}");
+                writer.Write($"${e.PackedAddress:x4}");
             }
 
-            io.PutChar('(');
+            writer.Write('(');
             if (e.Args != null)
             {
-                for (var i = 0; i < e.Args.Length; i++)
+                for (var i = 0; i < e.Args.Count; i++)
                 {
                     if (i > 0)
-                        io.PutString(", ");
+                        writer.Write(", ");
 
-                    io.PutString(e.Args[i].ToString());
+                    writer.Write(e.Args[i].ToString());
                 }
             }
-            io.PutString(") ]\n");
+
+            writer.WriteLine(") ]");
         }
+
+        private DebuggerState? lastState = DebuggerState.PausedOnEntry;
+
+        private void DebuggerStateChangedEventHandler(object sender, [NotNull] DebuggerStateEventArgs e)
+        {
+            // re-report the pause reason the next time we pause after running or stepping
+            if (e.State == DebuggerState.Running)
+                lastState = null;
+        }
+
+        private static readonly ImmutableDictionary<DebuggerState, string> DebuggerStateExplanations =
+            ImmutableDictionary<DebuggerState, string>.Empty
+                .Add(DebuggerState.PausedByBreakpoint, "Game is paused (breakpoint).")
+                .Add(DebuggerState.PausedByError, "Game is paused (error).")
+                .Add(DebuggerState.PausedByUser, "Game is paused (user request).")
+                .Add(DebuggerState.PausedOnEntry, "Game is paused (entry point).")
+                .Add(DebuggerState.Terminated, "Game has ended.");
 
         private void ShowStatus()
         {
-            if (dbg.State == DebuggerState.Paused)
+            bool pcShown;
+
+            if (dbg.State.IsPaused())
             {
                 ShowCurrentPC();
+                pcShown = true;
             }
-            else if (dbg.State == DebuggerState.Stopped)
+            else
             {
-                io.PutString("Debugger is stopped.\n");
+                pcShown = false;
             }
 
+            if ((!pcShown || dbg.State != lastState) &&
+                DebuggerStateExplanations.TryGetValue(dbg.State, out var explanation))
+            {
+                writer.WriteLine(explanation);
+            }
+
+            lastState = dbg.State;
+
             // prompt
-            io.PutString("D> ");
+            writer.Write("D> ");
         }
 
         private void ShowCurrentPC()
@@ -110,31 +349,43 @@ namespace ZLR.Interfaces.SystemConsole.Debugger
             if (zm.DebugInfo != null &&
                 (rtn = zm.DebugInfo.FindRoutine(dbg.CurrentPC)) != null)
             {
-                io.PutString(
-                    $"${dbg.CurrentPC:x5} ({rtn.Name}+{dbg.CurrentPC - rtn.CodeStart})   {dbg.Disassemble(dbg.CurrentPC)}\n");
+                writer.WriteLine(
+                    $"${dbg.CurrentPC:x5} ({rtn.Name}+{dbg.CurrentPC - rtn.CodeStart})   {dbg.Disassemble(dbg.CurrentPC)}");
 
                 var li = zm.DebugInfo.FindLine(dbg.CurrentPC);
                 if (li != null)
                 {
-                    io.PutString($"{li.Value.File}:{li.Value.Line}: {src.Load(li.Value)}\n");
+                    writer.WriteLine($"{li.Value.File}:{li.Value.Line}: {src.Load(li.Value)}");
                 }
             }
             else
             {
-                io.PutString($"${dbg.CurrentPC:x5}   {dbg.Disassemble(dbg.CurrentPC)}\n");
+                writer.WriteLine($"${dbg.CurrentPC:x5}   {dbg.Disassemble(dbg.CurrentPC)}");
             }
         }
 
-        public async Task HandleCommandAsync([NotNull] string cmd)
+        private async Task<bool> TryHandleInterruptAsync([NotNull] string cmd)
+        {
+            switch (cmd.ToLower())
+            {
+                case "!pause":
+                    await dbg.PauseAsync();
+                    return true;
+            }
+
+            return false;
+        }
+
+        private async Task HandleCommandAsync([NotNull] string cmd)
         {
             if (cmd.Trim() == "")
             {
                 if (lastCmd == null)
                 {
-                    io.PutString("No last command.\n");
-                    ShowStatus();
+                    writer.WriteLine("No last command.");
                     return;
                 }
+
                 cmd = lastCmd;
             }
             else
@@ -142,7 +393,8 @@ namespace ZLR.Interfaces.SystemConsole.Debugger
                 lastCmd = cmd;
             }
 
-            try {
+            try
+            {
                 var parts = cmd.Split(COMMAND_DELIM, 2, StringSplitOptions.RemoveEmptyEntries);
                 switch (parts[0].ToLower())
                 {
@@ -152,18 +404,18 @@ namespace ZLR.Interfaces.SystemConsole.Debugger
 
                     case "s":
                     case "step":
-                        if (dbg.State == DebuggerState.Paused)
+                        if (dbg.State.IsPaused())
                             await dbg.StepIntoAsync();
                         break;
 
                     case "o":
                     case "over":
-                        if (dbg.State == DebuggerState.Paused)
+                        if (dbg.State.IsPaused())
                             await dbg.StepOverAsync();
                         break;
 
                     case "up":
-                        if (dbg.State == DebuggerState.Paused)
+                        if (dbg.State.IsPaused())
                             await dbg.StepUpAsync();
                         break;
 
@@ -179,7 +431,7 @@ namespace ZLR.Interfaces.SystemConsole.Debugger
 
                     case "r":
                     case "run":
-                        if (dbg.State == DebuggerState.Stopped)
+                        if (dbg.State.IsTerminated())
                             dbg.Restart();
                         await dbg.RunAsync();
                         break;
@@ -216,7 +468,7 @@ namespace ZLR.Interfaces.SystemConsole.Debugger
 
                     case "g":
                     case "globals":
-                        io.PutString("Not implemented.\n");
+                        DoShowGlobals();
                         break;
 
                     case "p":
@@ -229,66 +481,82 @@ namespace ZLR.Interfaces.SystemConsole.Debugger
                         DoShowObject(parts);
                         break;
 
+                    case "tree":
+                        DoShowTree(parts);
+                        break;
+
                     case "q":
                     case "quit":
-                        io.PutString("Goodbye.\n");
+                        writer.WriteLine("Goodbye.");
                         active = ActiveState.Finished;
                         return;
 
-                    default:
-                        io.PutString("Unrecognized debugger command.\n");
+                    case "h":
+                    case "help":
+                    case "?":
+                        writer.WriteLine("Commands:");
+                        writer.WriteLine("reset, (s)tep, (o)ver, stepline (sl), overline (ol), up, (r)un,");
+                        writer.WriteLine("(b)reak, (c)lear, breakpoints (bps), tracecalls (tc)");
+                        writer.WriteLine("backtrace (bt), (l)ocals, (g)lobals");
+                        writer.WriteLine("(p)rint, showobj (so), tree");
+                        writer.WriteLine("(q)uit");
 
-                        io.PutString("Commands:\n");
-                        io.PutString("reset, (s)tep, (o)ver, stepline (sl), overline (ol), up, (r)un,\n");
-                        io.PutString("(b)reak, (c)lear, breakpoints (bps), tracecalls (tc)\n");
-                        io.PutString("backtrace (bt), (l)ocals, (g)lobals\n");
-                        io.PutString("(p)rint, showobj (so)\n");
-                        io.PutString("(q)uit\n");
+                        // TODO: mention interrupts? or ask IO to explain debugger break key?
                         break;
+
+                    default:
+                        writer.WriteLine("Unrecognized debugger command.");
+                        writer.WriteLine();
+                        goto case "help";
+
                 }
             }
             catch (DebuggerException ex)
             {
-                io.PutString(ex.ToString());
+                writer.WriteLine(ex.ToString());
             }
-
-            ShowStatus();
         }
 
-        private void DoPrint([ItemNotNull] [NotNull] string[] parts)
+        private Value Evaluate([NotNull] string exprText, bool wantLvalue = false)
+        {
+            // TODO: option to switch between Inform and ZIL expression syntax
+            //return InformExpression.Evaluate(zm, dbg, exprText, wantLvalue);
+            return ZilExpression.Evaluate(zm, dbg, exprText, wantLvalue);
+        }
+
+        private void DoPrint([ItemNotNull, NotNull] string[] parts)
         {
             if (parts.Length < 2)
             {
-                io.PutString("Usage: print <expr>\n");
+                writer.WriteLine("Usage: print <expr>");
                 return;
             }
 
-            var value = Expression.Evaluate(zm, dbg, parts[1], true);
-            io.PutString(valueFormatter.Format(value));
-            io.PutChar('\n');
+            var value = Evaluate(parts[1], true);
+            writer.WriteLine(valueFormatter.Format(value));
         }
 
-        private void DoShowObject([ItemNotNull] [NotNull] string[] parts)
+        private void DoShowObject([ItemNotNull, NotNull] string[] parts)
         {
             if (parts.Length < 2)
             {
-                io.PutString("Usage: showobj <expr>\n");
+                writer.WriteLine("Usage: showobj <expr>");
                 return;
             }
 
-            var value = Expression.Evaluate(zm, dbg, parts[1]);
+            var value = Evaluate(parts[1]);
 
-            var address = dbg.GetObjectAddress((ushort)value.Content);
+            var address = dbg.GetObjectAddress((ushort) value.Content);
 
-            dbg.ParseObject(address, out var attrs, out var parent, out var sibling, out var child, out var propertyTable);
+            dbg.ParseObject(address, out var attrs, out var parent, out var sibling, out var child,
+                out var propertyTable);
 
-            io.PutString(
-                $"=== {valueFormatter.Format(new Value(ValueType.Object, value.Content))} ===\n" +
-                $"Parent: {valueFormatter.Format(new Value(ValueType.Object, parent))}\n" +
-                $"Sibling: {valueFormatter.Format(new Value(ValueType.Object, sibling))}\n" +
-                $"Child: {valueFormatter.Format(new Value(ValueType.Object, child))}\n");
+            writer.WriteLine($"=== {valueFormatter.Format(Value.Object(value.Content))} ===");
+            writer.WriteLine($"Parent: {valueFormatter.Format(Value.Object(parent))}");
+            writer.WriteLine($"Sibling: {valueFormatter.Format(Value.Object(sibling))}");
+            writer.WriteLine($"Child: {valueFormatter.Format(Value.Object(child))}");
 
-            io.PutString("Attributes:\n");
+            writer.WriteLine("Attributes:");
             for (var i = 0; i < attrs.Length; i++)
             {
                 byte bit = 0x80;
@@ -296,32 +564,118 @@ namespace ZLR.Interfaces.SystemConsole.Debugger
                 for (var j = 0; j < 8; j++)
                 {
                     if ((attrs[i] & bit) != 0)
-                    {
-                        io.PutString("  ");
-                        io.PutString(valueFormatter.Format(new Value(ValueType.Attribute, i * 8 + j)));
-                        io.PutChar('\n');
-                    }
+                        writer.WriteLine("  {0}", valueFormatter.Format(Value.Attribute(i * 8 + j)));
+
+                    bit >>= 1;
                 }
             }
 
-            io.PutString($"Properties (table at ${propertyTable:x4}):\n");
-            for (var prop = dbg.GetNextProp((ushort)value.Content, 0); prop != 0; prop = dbg.GetNextProp((ushort)value.Content, prop))
+            writer.WriteLine($"Properties (table at ${propertyTable:x4}):");
+            for (var prop = dbg.GetNextProp((ushort) value.Content, 0);
+                prop != 0;
+                prop = dbg.GetNextProp((ushort) value.Content, prop))
             {
-                var addr = dbg.GetPropAddress((ushort)value.Content, prop);
+                var addr = dbg.GetPropAddress((ushort) value.Content, prop);
                 var length = dbg.GetPropLength(addr);
 
-                io.PutString($"  {valueFormatter.Format(new Value(ValueType.Property, prop))} (length {length}):\n");
+                writer.WriteLine($"  {valueFormatter.Format(Value.Property(prop))} (length {length}):");
 
-                io.PutString("   ");
+                writer.Write("   ");
                 for (var i = 0; i < length; i++)
                 {
                     var b = dbg.ReadByte(addr + i);
-                    io.PutString($" {b:x2}");
+                    writer.Write($" {b:x2}");
                 }
-                io.PutChar('\n');
+
+                writer.WriteLine();
             }
 
-            io.PutString("==========\n");
+            writer.WriteLine("==========");
+        }
+
+        private void DoShowTree([ItemNotNull, NotNull] string[] parts)
+        {
+            var seen = new HashSet<ushort>();
+
+            if (parts.Length >= 2)
+            {
+                var obj = Evaluate(parts[1]);
+                if (!obj.IsValid)
+                {
+                    writer.WriteLine("Usage: tree [<expr>]");
+                    return;
+                }
+
+                WriteTreeFrom((ushort) obj.Content, "- ", "  ");
+                return;
+            }
+
+            var lastObj = GuessLastObject();
+
+            for (ushort i = 1; i <= lastObj; i++)
+            {
+                if (seen.Contains(i))
+                    continue;
+
+                if (dbg.GetObjectParent(i) == 0)
+                    WriteTreeFrom(i, "- ", "  ");
+            }
+
+            // TODO: stacks of prefix chunks instead of string concatenation?
+            void WriteTreeFrom(ushort obj, string firstPrefix, string innerPrefix)
+            {
+                seen.Add(obj);
+
+                writer.Write(firstPrefix);
+                writer.WriteLine(valueFormatter.Format(Value.Object(obj)));
+
+                var child = GetUnseenChild(obj);
+
+                while (child != 0 && !seen.Contains(child) /* avoid cycles */)
+                {
+                    var next = GetUnseenSibling(child);
+
+                    if (next != 0)
+                        WriteTreeFrom(child, innerPrefix + "|- ", innerPrefix + "|  ");
+                    else
+                        WriteTreeFrom(child, innerPrefix + "`- ", innerPrefix + "   ");
+
+                    child = next;
+                }
+            }
+
+            ushort GetUnseenChild(ushort obj)
+            {
+                var child = dbg.GetObjectChild(obj);
+                return seen.Contains(child) ? GetUnseenSibling(child) : child;
+            }
+
+            ushort GetUnseenSibling(ushort obj)
+            {
+                do
+                {
+                    obj = dbg.GetObjectSibling(obj);
+                } while (obj != 0 && seen.Contains(obj));
+
+                return obj;
+            }
+        }
+
+        private ushort GuessLastObject()
+        {
+            if (zm.DebugInfo != null)
+                return (ushort) zm.DebugInfo.Objects.Max(o => o.Number);
+
+            // Inform and ZILF both put the property tables immediately after the object table
+            var firstPropsTable = dbg.GetObjectPropertyTable(1);
+            ushort i;
+            for (i = 2; dbg.GetObjectAddress(i) < firstPropsTable; i++)
+            {
+                var nextPropsTable = dbg.GetObjectPropertyTable(i);
+                firstPropsTable = Math.Min(firstPropsTable, nextPropsTable);
+            }
+
+            return (ushort) (i - 1);
         }
 
         private void DoShowLocals()
@@ -330,7 +684,7 @@ namespace ZLR.Interfaces.SystemConsole.Debugger
             int stackItems;
             if (frames.Length == 0)
             {
-                io.PutString("No call frame.\n");
+                writer.WriteLine("No call frame.");
                 stackItems = dbg.StackDepth;
             }
             else
@@ -338,96 +692,138 @@ namespace ZLR.Interfaces.SystemConsole.Debugger
                 var cf = frames[0];
                 if (cf.Locals.Length == 0)
                 {
-                    io.PutString("No local variables.\n");
+                    writer.WriteLine("No local variables.");
                 }
                 else
                 {
-                    io.PutString($"{cf.Locals.Length} local variable{(cf.Locals.Length == 1 ? "" : "s")}:\n");
+                    writer.WriteLine($"{cf.Locals.Length} local variable{(cf.Locals.Length == 1 ? "" : "s")}:");
 
                     var rtn = zm.DebugInfo?.FindRoutine(dbg.CurrentPC);
                     for (var i = 0; i < cf.Locals.Length; i++)
                     {
-                        io.PutString("    ");
+                        writer.Write("    ");
                         if (rtn != null && i < rtn.Locals.Length)
-                            io.PutString(rtn.Locals[i]);
+                            writer.Write(rtn.Locals[i]);
                         else
-                            io.PutString($"local_{i + 1}");
-                        io.PutString(string.Format(" = {0} (${0:x4})\n", cf.Locals[i]));
+                            writer.Write($"local_{i + 1}");
+                        writer.WriteLine(" = ${0:x4} ({0})", cf.Locals[i]);
                     }
                 }
+
                 stackItems = dbg.StackDepth - cf.PrevStackDepth;
             }
+
             if (stackItems == 0)
             {
-                io.PutString("No data on stack.\n");
+                writer.WriteLine("No data on stack.");
             }
             else
             {
-                io.PutString($"{stackItems} word{(stackItems == 1 ? "" : "s")} on stack:\n");
+                writer.WriteLine($"{stackItems} word{(stackItems == 1 ? "" : "s")} on stack:");
                 var temp = new Stack<short>();
                 for (var i = 0; i < stackItems; i++)
                 {
                     var value = dbg.StackPop();
                     temp.Push(value);
-                    io.PutString(string.Format("    ${0:x4} (${0})\n", value));
+                    writer.WriteLine("    ${0:x4} ({0})", value);
                 }
+
                 while (temp.Count > 0)
                     dbg.StackPush(temp.Pop());
+            }
+        }
+
+        private void DoShowGlobals()
+        {
+            int GuessNumberOfGlobals()
+            {
+                /* In games compiled by ZILF, the globals table is followed by the property defaults.
+                 * Inform's globals are followed by the dictionary (V1-4) or terminating characters (V5+).
+                 */
+                var zversion = dbg.ReadByte(0);
+                var globalsStart = (ushort) dbg.ReadWord(0xc);
+                var propdefStart = (ushort) dbg.ReadWord(0xa);
+                var dictStart = (ushort) dbg.ReadWord(0x8);
+                var tcharsStart = zversion < 5 ? (ushort) 0 : (ushort) dbg.ReadWord(0x2e);
+
+                var globalsEnd = (ushort) 0xffff;
+                if (propdefStart >= globalsStart && propdefStart < globalsEnd)
+                    globalsEnd = propdefStart;
+                if (dictStart >= globalsStart && dictStart < globalsEnd)
+                    globalsEnd = dictStart;
+                if (tcharsStart >= globalsStart && tcharsStart < globalsEnd)
+                    globalsEnd = tcharsStart;
+
+                return (globalsEnd - globalsStart) / 2;
+            }
+
+            var globals = zm.DebugInfo != null
+                ? (from p in zm.DebugInfo.Globals
+                   orderby p.Value
+                   select new { num = (byte) (p.Value + 16), name = p.Key })
+                : (from byte i in Enumerable.Range(16, GuessNumberOfGlobals())
+                   select new { num = i, name = $"global_{i}" });
+
+            foreach (var g in globals)
+            {
+                var value = dbg.ReadVariable(g.num);
+                writer.WriteLine($"    {g.name} = ${value:x4} ({value})");
             }
         }
 
         private void DoShowBacktrace()
         {
             var frames = dbg.GetCallFrames();
-            io.PutString($"Call depth: {frames.Length}\n");
-            io.PutString($"PC = {DumpCodeAddress(zm, dbg.CurrentPC)}\n");
+            writer.WriteLine($"Call depth: {frames.Length}");
+            writer.WriteLine($"PC = {DumpCodeAddress(zm, dbg.CurrentPC)}");
 
             for (var i = 0; i < frames.Length; i++)
             {
                 var cf = frames[i];
-                io.PutString("==========\n");
-                io.PutString($"[{i + 1}] return PC = {DumpCodeAddress(zm, cf.ReturnPC)}\n");
-                io.PutString(
+                writer.WriteLine("==========");
+                writer.WriteLine($"[{i + 1}] return PC = {DumpCodeAddress(zm, cf.ReturnPC)}");
+                writer.WriteLine(
                     $"called with {cf.ArgCount} arg{(cf.ArgCount == 1 ? "" : "s")}, " +
-                    $"stack depth {cf.PrevStackDepth}\n");
+                    $"stack depth {cf.PrevStackDepth}");
 
                 if (cf.ResultStorage < 16)
                 {
                     if (cf.ResultStorage == -1)
                     {
-                        io.PutString("discarding result\n");
+                        writer.WriteLine("discarding result");
                     }
                     else if (cf.ResultStorage == 0)
                     {
-                        io.PutString("storing result to stack\n");
+                        writer.WriteLine("storing result to stack");
                     }
                     else
                     {
                         var rtn = zm.DebugInfo?.FindRoutine(cf.ReturnPC);
                         if (rtn != null && cf.ResultStorage - 1 < rtn.Locals.Length)
                         {
-                            io.PutString(
+                            writer.WriteLine(
                                 $"storing result to local {cf.ResultStorage} " +
-                                $"({rtn.Locals[cf.ResultStorage - 1]})\n");
+                                $"({rtn.Locals[cf.ResultStorage - 1]})");
                         }
                         else
                         {
-                            io.PutString($"storing result to local {cf.ResultStorage}\n");
+                            writer.WriteLine($"storing result to local {cf.ResultStorage}");
                         }
                     }
                 }
-                else if (zm.DebugInfo != null && zm.DebugInfo.Globals.Contains((byte)cf.ResultStorage))
+                else if (zm.DebugInfo != null && zm.DebugInfo.Globals.Contains((byte) cf.ResultStorage))
                 {
-                    io.PutString(
+                    writer.WriteLine(
                         $"storing result to global {cf.ResultStorage} " +
-                        $"({zm.DebugInfo.Globals[(byte) (cf.ResultStorage - 16)]})\n");
+                        $"({zm.DebugInfo.Globals[(byte) (cf.ResultStorage - 16)]})");
                 }
                 else
                 {
-                    io.PutString($"storing result to global {cf.ResultStorage}\n");
+                    writer.WriteLine($"storing result to global {cf.ResultStorage}");
                 }
             }
-            io.PutString("==========\n");
+
+            writer.WriteLine("==========");
         }
 
         private void DoToggleTraceCalls()
@@ -436,13 +832,13 @@ namespace ZLR.Interfaces.SystemConsole.Debugger
             {
                 tracingCalls = false;
                 dbg.Events.EnteringFunction -= TraceCallsEventHandler;
-                io.PutString("Tracing calls disabled.\n");
+                writer.WriteLine("Tracing calls disabled.");
             }
             else
             {
                 tracingCalls = true;
                 dbg.Events.EnteringFunction += TraceCallsEventHandler;
-                io.PutString("Tracing calls enabled.\n");
+                writer.WriteLine("Tracing calls enabled.");
             }
         }
 
@@ -451,53 +847,53 @@ namespace ZLR.Interfaces.SystemConsole.Debugger
             var breakpoints = dbg.GetBreakpoints();
             if (breakpoints.Length == 0)
             {
-                io.PutString("No breakpoints.\n");
+                writer.WriteLine("No breakpoints.");
             }
             else
             {
-                io.PutString($"{breakpoints.Length} breakpoint{(breakpoints.Length == 1 ? "" : "s")}:\n");
+                writer.WriteLine($"{breakpoints.Length} breakpoint{(breakpoints.Length == 1 ? "" : "s")}:");
 
                 Array.Sort(breakpoints);
                 foreach (var bp in breakpoints)
-                    io.PutString($"    {DumpCodeAddress(zm, bp)}\n");
+                    writer.WriteLine($"    {DumpCodeAddress(zm, bp)}");
             }
         }
 
-        private void DoClearBreakpoint([ItemNotNull] [NotNull] string[] parts)
+        private void DoClearBreakpoint([ItemNotNull, NotNull] string[] parts)
         {
             int address;
             if (parts.Length < 2 || (address = ParseAddress(zm, parts[1])) < 0)
             {
-                io.PutString("Usage: clear <addrspec>\n");
+                writer.WriteLine("Usage: clear <addrspec>");
             }
             else
             {
                 dbg.SetBreakpoint(address, false);
-                io.PutString($"Cleared breakpoint at {DumpCodeAddress(zm, address)}.\n");
+                writer.WriteLine($"Cleared breakpoint at {DumpCodeAddress(zm, address)}.");
             }
         }
 
-        private void DoSetBreakpoint([ItemNotNull] [NotNull] string[] parts)
+        private void DoSetBreakpoint([ItemNotNull, NotNull] string[] parts)
         {
             int address;
             if (parts.Length < 2 || (address = ParseAddress(zm, parts[1])) < 0)
             {
-                io.PutString("Usage: break <addrspec>\n");
+                writer.WriteLine("Usage: break <addrspec>");
             }
             else
             {
                 dbg.SetBreakpoint(address, true);
-                io.PutString($"Set breakpoint at {DumpCodeAddress(zm, address)}.\n");
+                writer.WriteLine($"Set breakpoint at {DumpCodeAddress(zm, address)}.");
             }
         }
 
         private async Task DoOverLineAsync()
         {
-            if (dbg.State == DebuggerState.Paused)
+            if (dbg.State.IsPaused())
             {
                 if (zm.DebugInfo == null)
                 {
-                    io.PutString("No line information.\n");
+                    writer.WriteLine("No line information.");
                 }
                 else
                 {
@@ -506,7 +902,7 @@ namespace ZLR.Interfaces.SystemConsole.Debugger
                     do
                     {
                         await dbg.StepOverAsync();
-                        if (dbg.State != DebuggerState.Paused)
+                        if (!dbg.State.IsPaused())
                             break;
 
                         newLI = zm.DebugInfo.FindLine(dbg.CurrentPC);
@@ -517,11 +913,11 @@ namespace ZLR.Interfaces.SystemConsole.Debugger
 
         private async Task DoStepLineAsync()
         {
-            if (dbg.State == DebuggerState.Paused)
+            if (dbg.State.IsPaused())
             {
                 if (zm.DebugInfo == null)
                 {
-                    io.PutString("No line information.\n");
+                    writer.WriteLine("No line information.");
                 }
                 else
                 {
@@ -530,7 +926,7 @@ namespace ZLR.Interfaces.SystemConsole.Debugger
                     do
                     {
                         await dbg.StepIntoAsync();
-                        if (dbg.State != DebuggerState.Paused)
+                        if (!dbg.State.IsPaused())
                             break;
 
                         newLI = zm.DebugInfo.FindLine(dbg.CurrentPC);
@@ -583,8 +979,12 @@ namespace ZLR.Interfaces.SystemConsole.Debugger
                     if (result >= 0)
                         return result;
                 }
-                catch (FormatException) { }
-                catch (OverflowException) { }
+                catch (FormatException)
+                {
+                }
+                catch (OverflowException)
+                {
+                }
             }
 
             RoutineInfo rtn;
@@ -598,8 +998,12 @@ namespace ZLR.Interfaces.SystemConsole.Debugger
                     if (rtn != null)
                         return rtn.CodeStart + Convert.ToInt32(spec.Substring(idx + 1));
                 }
-                catch (FormatException) { }
-                catch (OverflowException) { }
+                catch (FormatException)
+                {
+                }
+                catch (OverflowException)
+                {
+                }
             }
 
             rtn = zm.DebugInfo.FindRoutine(spec);
@@ -631,16 +1035,13 @@ namespace ZLR.Interfaces.SystemConsole.Debugger
                         return combined;
                 }
 
-                if (File.Exists(filename))
-                    return Path.GetFullPath(filename);
-
-                return null;
+                return File.Exists(filename) ? Path.GetFullPath(filename) : null;
             }
 
             [CanBeNull]
             public string Load(LineInfo li)
             {
-                if (!cache.TryGetValue(li.File, out string[] lines))
+                if (!cache.TryGetValue(li.File, out var lines))
                 {
                     var file = FindFile(li.File);
                     if (file == null)
@@ -673,6 +1074,137 @@ namespace ZLR.Interfaces.SystemConsole.Debugger
                 }
 
                 return null;
+            }
+        }
+
+        #region IO adapters
+
+        private sealed class ZIOReader : TextReader
+        {
+            private static readonly byte[] DummyTerminatingKeys = { };
+
+            private readonly IAsyncZMachineIO io;
+
+            public ZIOReader(IAsyncZMachineIO io)
+            {
+                this.io = io;
+            }
+
+            public override string ReadLine()
+            {
+                return ReadLineAsync().GetAwaiter().GetResult();
+            }
+
+            [ItemNotNull]
+            public override async Task<string> ReadLineAsync()
+            {
+                var result = await io.ReadLineAsync(string.Empty, DummyTerminatingKeys, allowDebuggerBreak: false);
+                if (result.Outcome != ReadOutcome.KeyPressed)
+                    throw new InvalidOperationException(
+                        $"{nameof(io.ReadLineAsync)} had unexpected outcome ${result.Outcome}");
+
+                return result.Text;
+            }
+
+            public override int Peek()
+            {
+                throw new NotSupportedException();
+            }
+
+            public override int Read()
+            {
+                throw new NotSupportedException();
+            }
+
+            public override int Read(char[] buffer, int index, int count)
+            {
+                throw new NotSupportedException();
+            }
+
+            public override Task<int> ReadAsync(char[] buffer, int index, int count)
+            {
+                throw new NotSupportedException();
+            }
+
+            public override int ReadBlock(char[] buffer, int index, int count)
+            {
+                throw new NotSupportedException();
+            }
+
+            public override Task<int> ReadBlockAsync(char[] buffer, int index, int count)
+            {
+                throw new NotSupportedException();
+            }
+
+            public override string ReadToEnd()
+            {
+                throw new NotSupportedException();
+            }
+
+            public override Task<string> ReadToEndAsync()
+            {
+                throw new NotSupportedException();
+            }
+        }
+
+        internal sealed class ZIOWriter : TextWriter
+        {
+            private readonly IAsyncZMachineIO io;
+
+            public ZIOWriter(IAsyncZMachineIO io)
+            {
+                this.io = io;
+
+                base.NewLine = "\n";
+            }
+
+            public override Encoding Encoding => Encoding.Default;
+
+            public override string NewLine
+            {
+                get => "\n";
+                set
+                {
+                    if (value != "\n")
+                        throw new ArgumentException("Cannot change line ending", nameof(value));
+                }
+            }
+
+            public override void Write(char value)
+            {
+                io.PutChar(value);
+            }
+
+            public override void Write(char[] buffer, int index, int count)
+            {
+                io.PutString(new string(buffer, index, count));
+            }
+
+            public override void Write([NotNull] string value)
+            {
+                io.PutString(value);
+            }
+
+            // TODO: async methods, if io.PutStringAsync() etc is implemented
+
+            public override void WriteLine([NotNull] string value)
+            {
+                io.PutString(value);
+                io.PutChar('\n');
+            }
+        }
+
+        #endregion
+
+        public void Dispose()
+        {
+            if (disposables == null)
+                return;
+
+            for (var i = 0; i < disposables.Length; i++)
+            {
+                disposables[i].Dispose();
+                disposables[i] = null;
             }
         }
     }

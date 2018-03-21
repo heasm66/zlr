@@ -72,7 +72,7 @@ namespace ZLR.VM
                     // branching version
                     impl = ZMachine.GetMethodInfo(nameof(ZMachine.RestoreQuetzal));
 
-                    int failurePC = PC + ZCodeLength;
+                    var failurePC = PC + ZCodeLength;
                     if (!branchIfTrue)
                         failurePC += branchOffset - 2;
 
@@ -117,7 +117,7 @@ namespace ZLR.VM
         {
             if (operandTypes[1] == OperandType.Variable)
             {
-                MethodInfo impl = typeof(ZMachine).GetMethod(nameof(ZMachine.LogShiftImpl), BindingFlags.NonPublic | BindingFlags.Static);
+                var impl = typeof(ZMachine).GetMethod(nameof(ZMachine.LogShiftImpl), BindingFlags.NonPublic | BindingFlags.Static);
                 System.Diagnostics.Debug.Assert(impl != null);
 
                 LoadOperand(il, 0);
@@ -127,7 +127,7 @@ namespace ZLR.VM
             else if (operandValues[1] < 0)
             {
                 // shift right
-                int value = -operandValues[1];
+                var value = -operandValues[1];
                 LoadOperand(il, 0);
                 il.Emit(OpCodes.Conv_U2);
                 il.Emit(OpCodes.Ldc_I4, value);
@@ -148,7 +148,7 @@ namespace ZLR.VM
         {
             if (operandTypes[1] == OperandType.Variable)
             {
-                MethodInfo impl = typeof(ZMachine).GetMethod(nameof(ZMachine.ArtShiftImpl), BindingFlags.NonPublic | BindingFlags.Static);
+                var impl = typeof(ZMachine).GetMethod(nameof(ZMachine.ArtShiftImpl), BindingFlags.NonPublic | BindingFlags.Static);
                 System.Diagnostics.Debug.Assert(impl != null);
 
                 LoadOperand(il, 0);
@@ -158,7 +158,7 @@ namespace ZLR.VM
             else if (operandValues[1] < 0)
             {
                 // shift right
-                int value = -operandValues[1];
+                var value = -operandValues[1];
                 LoadOperand(il, 0);
                 il.Emit(OpCodes.Conv_I2);
                 il.Emit(OpCodes.Ldc_I4, value);
@@ -178,7 +178,7 @@ namespace ZLR.VM
         private void op_set_font([NotNull] ILGenerator il)
         {
             var ioFI = ZMachine.GetFieldInfo(nameof(ZMachine.io));
-            MethodInfo setFontMI = typeof(IZMachineIO).GetMethod(nameof(IZMachineIO.SetFont));
+            var setFontMI = typeof(IZMachineIO).GetMethod(nameof(IZMachineIO.SetFont));
             System.Diagnostics.Debug.Assert(setFontMI != null);
 
             il.Emit(OpCodes.Ldarg_0);
@@ -204,7 +204,7 @@ namespace ZLR.VM
         [Opcode(OpCount.Ext, 10, Store = true, Terminates = true, MinVersion = 5)]
         private void op_restore_undo([NotNull] ILGenerator il)
         {
-            MethodInfo impl = ZMachine.GetMethodInfo(nameof(ZMachine.RestoreUndo));
+            var impl = ZMachine.GetMethodInfo(nameof(ZMachine.RestoreUndo));
 
             il.Emit(OpCodes.Ldarg_0);
             il.Emit(OpCodes.Ldc_I4, resultStorage);
@@ -217,7 +217,7 @@ namespace ZLR.VM
         [Opcode(OpCount.Ext, 11, MinVersion = 5)]
         private void op_print_unicode([NotNull] ILGenerator il)
         {
-            MethodInfo impl = ZMachine.GetMethodInfo(nameof(ZMachine.PrintUnicode));
+            var impl = ZMachine.GetMethodInfo(nameof(ZMachine.PrintUnicode));
 
             il.Emit(OpCodes.Ldarg_0);
             LoadOperand(il, 0);
@@ -228,7 +228,7 @@ namespace ZLR.VM
         private void op_check_unicode([NotNull] ILGenerator il)
         {
             var ioFI = ZMachine.GetFieldInfo(nameof(ZMachine.io));
-            MethodInfo checkUnicodeMI = typeof(IZMachineIO).GetMethod(nameof(IZMachineIO.CheckUnicode));
+            var checkUnicodeMI = typeof(IZMachineIO).GetMethod(nameof(IZMachineIO.CheckUnicode));
             System.Diagnostics.Debug.Assert(checkUnicodeMI != null);
 
             il.Emit(OpCodes.Ldarg_0);
@@ -243,7 +243,7 @@ namespace ZLR.VM
         {
             if (argc == 1)
             {
-                MethodInfo impl = ZMachine.GetMethodInfo(nameof(ZMachine.PopStack));
+                var impl = ZMachine.GetMethodInfo(nameof(ZMachine.PopStack));
 
                 il.Emit(OpCodes.Ldarg_0);
                 LoadOperand(il, 0);
@@ -251,7 +251,7 @@ namespace ZLR.VM
             }
             else
             {
-                MethodInfo impl = ZMachine.GetMethodInfo(nameof(ZMachine.PopUserStack));
+                var impl = ZMachine.GetMethodInfo(nameof(ZMachine.PopUserStack));
 
                 il.Emit(OpCodes.Ldarg_0);
                 LoadOperand(il, 0);
@@ -263,7 +263,7 @@ namespace ZLR.VM
         [Opcode(OpCount.Ext, 24, Branch = true, MinVersion = 6, MaxVersion = 6)]
         private void op_push_stack([NotNull] ILGenerator il)
         {
-            MethodInfo impl = ZMachine.GetMethodInfo(nameof(ZMachine.PushOntoUserStack));
+            var impl = ZMachine.GetMethodInfo(nameof(ZMachine.PushOntoUserStack));
 
             il.Emit(OpCodes.Ldarg_0);
             LoadOperand(il, 0);

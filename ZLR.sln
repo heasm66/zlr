@@ -9,7 +9,7 @@ Project("{2150E333-8FDC-42A3-9474-1A3956D46DE8}") = "Gargoyle", "Gargoyle", "{32
 		Demona\Gargoyle\support\sdl\SDL_mixer.def = Demona\Gargoyle\support\sdl\SDL_mixer.def
 	EndProjectSection
 EndProject
-Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "ConsoleZLR", "ConsoleZLR\ConsoleZLR.csproj", "{0FF5AD11-1849-4BDF-A2DE-D97586EE95B0}"
+Project("{9A19103F-16F7-4668-BE54-9A1E7A4F7556}") = "ConsoleZLR", "ConsoleZLR\ConsoleZLR.csproj", "{0FF5AD11-1849-4BDF-A2DE-D97586EE95B0}"
 EndProject
 Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Demona", "Demona\Demona.csproj", "{2B837CC9-6BD8-484C-B7F9-75D3F18FD251}"
 	ProjectSection(ProjectDependencies) = postProject
@@ -30,14 +30,12 @@ Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "TestSuite", "TestSuite\Test
 EndProject
 Project("{930C7802-8A8C-48F9-8165-68863BCCD9DD}") = "DemonaWiX", "DemonaWiX\DemonaWiX.wixproj", "{DA4E0918-5A69-423D-BB20-362FB168BA80}"
 EndProject
-Project("{2150E333-8FDC-42A3-9474-1A3956D46DE8}") = ".nuget", ".nuget", "{F838A6EA-375B-4E57-B32B-5381AD987DD8}"
-	ProjectSection(SolutionItems) = preProject
-		.nuget\NuGet.Config = .nuget\NuGet.Config
-		.nuget\NuGet.exe = .nuget\NuGet.exe
-		.nuget\NuGet.targets = .nuget\NuGet.targets
-	EndProjectSection
-EndProject
 Project("{9A19103F-16F7-4668-BE54-9A1E7A4F7556}") = "ZLR.VM", "ZLR.VM\ZLR.VM.csproj", "{FC857DD8-AB2D-4E4C-A2D7-943547694249}"
+EndProject
+Project("{2150E333-8FDC-42A3-9474-1A3956D46DE8}") = "Solution Items", "Solution Items", "{8BE8F43B-49A7-4970-8656-FBF2DD6E2EB8}"
+	ProjectSection(SolutionItems) = preProject
+		ZLR.ruleset = ZLR.ruleset
+	EndProjectSection
 EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution
