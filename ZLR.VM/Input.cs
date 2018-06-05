@@ -563,11 +563,20 @@ namespace ZLR.VM
         /// will be called to get a stream for the command file. The property will be
         /// reset to false after the game finishes running.</para>
         /// </remarks>
-        [PublicAPI]
+        [PublicAPI, Obsolete("Use " + nameof(SetWritingCommandsToFileAsync) + " and " + nameof(IsWritingCommandsToFile) + " instead.")]
         public bool WritingCommandsToFile
         {
             get => cmdWtr != null;
-            set => SetOutputStreamAsync((short) (value ? 4 : -4), 0, PC).GetAwaiter().GetResult();  // XXX asyncify
+            set => SetWritingCommandsToFileAsync(value).GetAwaiter().GetResult();
+        }
+
+        [PublicAPI]
+        public bool IsWritingCommandsToFile => cmdWtr != null;
+
+        [PublicAPI]
+        public async Task SetWritingCommandsToFileAsync(bool value)
+        {
+            await SetOutputStreamAsync((short) (value ? 4 : -4), 0, PC).ConfigureAwait(false);
         }
 
         /// <summary>
@@ -581,11 +590,20 @@ namespace ZLR.VM
         /// will be called to get a stream for the command file. The property will be
         /// reset to false after the game finishes running.</para>
         /// </remarks>
-        [PublicAPI]
+        [PublicAPI, Obsolete("Use " + nameof(SetReadingCommandsFromFileAsync) + " and " + nameof(IsReadingCommandsFromFile) + " instead.")]
         public bool ReadingCommandsFromFile
         {
             get => cmdRdr != null;
-            set => SetInputStreamAsync((short) (value ? 1 : 0), PC).GetAwaiter().GetResult();       // XXX asyncify
+            set => SetReadingCommandsFromFileAsync(value).GetAwaiter().GetResult();
+        }
+
+        [PublicAPI]
+        public bool IsReadingCommandsFromFile => cmdRdr != null;
+
+        [PublicAPI]
+        public async Task SetReadingCommandsFromFileAsync(bool value)
+        {
+            await SetInputStreamAsync((short) (value ? 1 : 0), PC).ConfigureAwait(false);
         }
 
         private class CommandFileReader : IDisposable

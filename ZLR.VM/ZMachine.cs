@@ -556,7 +556,10 @@ namespace ZLR.VM
 #endif
 
                 var thisPC = pc;
+#pragma warning disable IDE0018 // Inline variable declaration
+                // ReSharper disable once InlineOutVariableDeclaration
                 CachedCode entry;
+#pragma warning restore IDE0018 // Inline variable declaration
 #if !DISABLE_CACHE
                 if (thisPC < RomStart || cache.TryGetValue(thisPC, out entry) == false)
 #endif
@@ -624,12 +627,6 @@ namespace ZLR.VM
                 InstructionCount = instructionCount;
                 NextPC = nextPC;
                 Code = code;
-            }
-
-            public void Deconstruct(out ZCodeDelegate code, out int nextPC)
-            {
-                code = this.Code;
-                nextPC = this.NextPC;
             }
 
             public void Deconstruct(out ZCodeDelegate code, out int nextPC, out int instructionCount)

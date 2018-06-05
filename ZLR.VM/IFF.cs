@@ -2,7 +2,9 @@ using System;
 using System.Collections.Generic;
 using System.Text;
 using System.IO;
+using System.Threading;
 using JetBrains.Annotations;
+using System.Threading.Tasks;
 
 // ReSharper disable once CheckNamespace
 namespace ZLR.IFF
@@ -89,10 +91,12 @@ namespace ZLR.IFF
             return index == -1 ? null : blocks[index];
         }
 
-        public void WriteToStream([NotNull] Stream stream)
+        public async Task WriteToStreamAsync([NotNull] Stream stream, CancellationToken cancellationToken = default)
         {
-            stream.Seek(0, SeekOrigin.Begin);
+            cancellationToken.ThrowIfCancellationRequested();
+
             // IFF header
+            stream.Seek(0, SeekOrigin.Begin);
             stream.WriteByte((byte)'F');
             stream.WriteByte((byte)'O');
             stream.WriteByte((byte)'R');
@@ -111,6 +115,8 @@ namespace ZLR.IFF
             stream.WriteByte((byte)(formSubType >> 8));
             stream.WriteByte((byte)formSubType);
 
+            cancellationToken.ThrowIfCancellationRequested();
+
             // block data
             var sortedBlocks = new int[blocks.Count];
             for (var i = 0; i < sortedBlocks.Length; i++)
@@ -120,6 +126,8 @@ namespace ZLR.IFF
 
             foreach (var i in sortedBlocks)
             {
+                cancellationToken.ThrowIfCancellationRequested();
+
                 // block type
                 var type = types[i];
                 stream.WriteByte((byte)(type >> 24));
@@ -136,7 +144,7 @@ namespace ZLR.IFF
                 stream.WriteByte((byte)length);
 
                 // block data
-                stream.Write(block, 0, length);
+                await stream.WriteAsync(block, 0, length, cancellationToken);
 
                 // padding
                 if (length % 2 == 1)

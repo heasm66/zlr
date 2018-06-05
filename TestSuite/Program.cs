@@ -109,8 +109,8 @@ namespace TestSuite
                         var zm = new ZMachine(zcode, io)
                         {
                             PredictableRandom = true,
-                            WritingCommandsToFile = true
                         };
+                        await zm.SetWritingCommandsToFileAsync(true);
 
                         var output = await RunAndCollectOutputAsync(zm, io);
                         File.WriteAllText(selected.OutputFile, output);
@@ -212,8 +212,8 @@ namespace TestSuite
                     var zm = new ZMachine(zcode, io)
                     {
                         PredictableRandom = true,
-                        ReadingCommandsFromFile = true
                     };
+                    await zm.SetReadingCommandsFromFileAsync(true);
 
                     var output = await RunAndCollectOutputAsync(zm, io);
                     var expectedOutput = File.ReadAllText(test.OutputFile);

@@ -1,38 +1,99 @@
 using System.IO;
 using System.Collections.Generic;
 using System;
+using System.Threading.Tasks;
 using JetBrains.Annotations;
 using ZLR.IFF;
+using ZLR.VM.Debugging;
 
 namespace ZLR.VM
 {
     public partial class ZMachine
     {
-#pragma warning disable 0169
-        internal bool SaveQuetzal(int savedPC)
+        internal async Task SaveQuetzalAndStoreAsync(int savedPC, int resultStorage, int retryPC, int nextPC)
+        {
+            try
+            {
+                var saved = await SaveQuetzalAsync(savedPC);
+
+                if (resultStorage >= 0)
+                    StoreResult((byte) resultStorage, (short) (saved ? 1 : 0));
+
+                pc = nextPC;
+            }
+            catch (TaskCanceledException ex) when (ex.CancellationToken == interruptToken)
+            {
+                pc = retryPC;
+                debugState = DebuggerState.PausedByUser;
+                throw new DebuggerBreakException();
+            }
+        }
+
+        internal async Task SaveQuetzalAndBranchAsync(int savedPC, bool branchIfTrue, int branchOffset, int retryPC,
+            int nextPC)
+        {
+            try
+            {
+                var saved = await SaveQuetzalAsync(savedPC);
+
+                pc = nextPC;
+
+                if (branchIfTrue == saved)
+                    BranchImpl(branchOffset);
+            }
+            catch (TaskCanceledException ex) when (ex.CancellationToken == interruptToken)
+            {
+                pc = retryPC;
+                debugState = DebuggerState.PausedByUser;
+                throw new DebuggerBreakException();
+            }
+        }
+
+        internal async Task<bool> SaveQuetzalAsync(int savedPC)
         {
             var quetzal = new Quetzal();
+            var cancellationToken = interruptToken;
+
             // savedPC points to the result storage byte (V3) or branch offset (V4+) of the save instruction
             quetzal.AddBlock("IFhd", MakeIFHD(savedPC));
             quetzal.AddBlock("CMem", CompressRAM());
             quetzal.AddBlock("Stks", SerializeStacks());
 
-            using (var stream = io.OpenSaveFile(quetzal.Length))
-            {
-                if (stream == null)
-                {
-                    return false;
-                }
+            cancellationToken.ThrowIfCancellationRequested();
 
-                try
+            BeginExternalWait();
+            var inWait = true;
+            try
+            {
+                using (var stream = await io.OpenSaveFileAsync(quetzal.Length, cancellationToken))
                 {
-                    quetzal.WriteToStream(stream);
-                    return true;
+                    EndExternalWait();
+                    inWait = false;
+
+                    cancellationToken.ThrowIfCancellationRequested();
+
+                    if (stream == null)
+                    {
+                        return false;
+                    }
+                    else
+                    {
+                        try
+                        {
+                            await quetzal.WriteToStreamAsync(stream, cancellationToken);
+                            return true;
+                        }
+                        catch
+                        {
+                            return false;
+                        }
+                    }
                 }
-                catch
-                {
-                    return false;
-                }
+            }
+            finally
+            {
+                if (inWait)
+                    EndExternalWait();
             }
         }
 
@@ -96,7 +157,6 @@ namespace ZLR.VM
                 }
             }
         }
-#pragma warning restore 0169
 
         [NotNull]
         private byte[] CompressRAM()

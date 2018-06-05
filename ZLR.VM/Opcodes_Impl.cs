@@ -6,6 +6,15 @@ namespace ZLR.VM
 {
     partial class ZMachine
     {
+        /// <summary>
+        /// Implements the store semantics used for most store instructions.
+        /// </summary>
+        /// <param name="dest">The destination variable index, or 0 to store to the stack.</param>
+        /// <param name="result">The value to store.</param>
+        /// <remarks>
+        /// Unlike <see cref="StoreVariableImpl"/>, this will push a new value onto the stack
+        /// instead of replacing the existing value.
+        /// </remarks>
         void StoreResult(byte dest, short result)
         {
             if (dest == 0)
@@ -72,7 +81,32 @@ namespace ZLR.VM
                 StoreResult((byte)frame.ResultStorage, result);
         }
 
+        private void BranchImpl(int branchOffset)
+        {
+            switch (branchOffset)
+            {
+                case 0:
+                    LeaveFunctionImpl(0);
+                    break;
+                case 1:
+                    LeaveFunctionImpl(1);
+                    break;
+                default:
+                    pc += branchOffset - 2;
+                    break;
+            }
+        }
+
 #pragma warning disable 0169
+        /// <summary>
+        /// Implements the store semantics used by @store and @pull.
+        /// </summary>
+        /// <param name="dest">The destination variable index, or 0 to store to the stack.</param>
+        /// <param name="result">The value to store.</param>
+        /// <remarks>
+        /// Unlike <see cref="StoreResult"/>, this will replace the top value on the stack
+        /// instead of pushing a new value.
+        /// </remarks>
         internal void StoreVariableImpl(byte dest, short result)
         {
             if (dest == 0)

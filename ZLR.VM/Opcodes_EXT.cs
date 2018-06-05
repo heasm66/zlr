@@ -7,9 +7,9 @@ namespace ZLR.VM
     partial class Opcode
     {
 #pragma warning disable 0169
-        [Opcode(OpCount.Zero, 181, Branch = true, MaxVersion = 3)]
-        [Opcode(OpCount.Zero, 181, Store = true, MinVersion = 4, MaxVersion = 4)]
-        [Opcode(OpCount.Ext, 0, Store = true, MinVersion = 5)]
+        [Opcode(OpCount.Zero, 181, Branch = true, MaxVersion = 3, Async = true)]
+        [Opcode(OpCount.Zero, 181, Store = true, MinVersion = 4, MaxVersion = 4, Async = true)]
+        [Opcode(OpCount.Ext, 0, Store = true, MinVersion = 5, Async = true)]
         private void op_save([NotNull] ILGenerator il)
         {
             MethodInfo impl;
@@ -20,39 +20,46 @@ namespace ZLR.VM
                 case 2:
                 case 3:
                     // branching version
-                    impl = ZMachine.GetMethodInfo(nameof(ZMachine.SaveQuetzal));
+                    impl = ZMachine.GetMethodInfo(nameof(ZMachine.SaveQuetzalAndBranchAsync));
 
                     il.Emit(OpCodes.Ldarg_0);
                     // pass the address of this instruction's branch offset, which is always the 2nd instruction byte because this is 0OP
-                    il.Emit(OpCodes.Ldc_I4, PC + 1);
+                    il.Emit(OpCodes.Ldc_I4, PC + 1);            // savedPC
+                    il.Emit(branchIfTrue ? OpCodes.Ldc_I4_1 : OpCodes.Ldc_I4_0);    // branchIfTrue
+                    il.Emit(OpCodes.Ldc_I4, branchOffset);                          // branchOffset
+                    il.Emit(OpCodes.Ldc_I4, PC);                // retryPC
+                    il.Emit(OpCodes.Ldc_I4, PC + ZCodeLength);  // nextPC
                     il.Emit(OpCodes.Call, impl);
-                    Branch(il, OpCodes.Brtrue, OpCodes.Brfalse);
+                    il.Emit(OpCodes.Ret);
+                    compiling = false;
+                    break;
+
+                case var _ when argc == 0:
+                    // storing version
+                    // in V4, argc is always 0 since this is a 0OP instruction
+                    impl = ZMachine.GetMethodInfo(nameof(ZMachine.SaveQuetzalAndStoreAsync));
+
+                    il.Emit(OpCodes.Ldarg_0);
+                    // pass the address of this instruction's result storage, which is always the last instruction byte
+                    il.Emit(OpCodes.Ldc_I4, PC + ZCodeLength - 1);  // savedPC
+                    il.Emit(OpCodes.Ldc_I4, resultStorage);         // resultStorage
+                    il.Emit(OpCodes.Ldc_I4, PC);                    // retryPC
+                    il.Emit(OpCodes.Ldc_I4, PC + ZCodeLength);      // nextPC
+                    il.Emit(OpCodes.Call, impl);
+                    il.Emit(OpCodes.Ret);
+                    compiling = false;
                     break;
 
                 default:
-                    // storing version
-                    // in V4, argc is always 0 since this is a 0OP instruction
-                    if (argc == 0)
-                    {
-                        impl = ZMachine.GetMethodInfo(nameof(ZMachine.SaveQuetzal));
+                    impl = ZMachine.GetMethodInfo(nameof(ZMachine.SaveAuxiliary));
 
-                        il.Emit(OpCodes.Ldarg_0);
-                        // pass the address of this instruction's result storage, which is always the last instruction byte
-                        il.Emit(OpCodes.Ldc_I4, PC + ZCodeLength - 1);
-                        il.Emit(OpCodes.Call, impl);
-                        StoreResult(il);
-                    }
-                    else
-                    {
-                        impl = ZMachine.GetMethodInfo(nameof(ZMachine.SaveAuxiliary));
-
-                        il.Emit(OpCodes.Ldarg_0);
-                        LoadOperand(il, 0);
-                        LoadOperand(il, 1);
-                        LoadOperand(il, 2);
-                        il.Emit(OpCodes.Call, impl);
-                        StoreResult(il);
-                    }
+                    il.Emit(OpCodes.Ldarg_0);
+                    LoadOperand(il, 0);
+                    LoadOperand(il, 1);
+                    LoadOperand(il, 2);
+                    il.Emit(OpCodes.Call, impl);
+                    StoreResult(il);
+                    il.Emit(OpCodes.Ldnull);
                     break;
             }
         }

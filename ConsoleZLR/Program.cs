@@ -149,7 +149,7 @@ namespace ZLR.Interfaces.SystemConsole
 
                 var zm = new ZMachine(gameStream, io) { PredictableRandom = predictable };
                 if (commandFile != null)
-                    zm.ReadingCommandsFromFile = true;
+                    await zm.SetReadingCommandsFromFileAsync(true);
                 if (debugStream != null)
                     zm.LoadDebugInfo(debugStream);
 

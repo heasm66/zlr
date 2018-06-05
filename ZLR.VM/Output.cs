@@ -471,11 +471,11 @@ namespace ZLR.VM
         /// to repeat the sound forever.</param>
         /// <param name="callback">A function to call after the sound is finished playing or
         /// repeating. This should not be called if the sound is explicitly stopped.</param>
-        /// <seealso cref="SoundSamplesAvailable"/>
         /// <remarks>
         /// Sampled sounds are played in the background: this method must not wait for
         /// the sound to finish before returning.
         /// </remarks>
+        /// <seealso cref="SoundSamplesAvailable"/>
         void PlaySoundSample(ushort number, SoundAction action, byte volume, byte repeats,
             [NotNull] SoundFinishedCallback callback);
         /// <summary>
