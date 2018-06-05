@@ -1,20 +1,23 @@
 syntax: glob
+*.exe
+*.lib
 *.ncb
-bin
-obj
+*.nupkg
+*.opensdf
+*.orig
+*.rej
+*.sdf
 *.suo
 *.user
-*.orig
-Demona/Gargoyle/**/{Debug,Release}
-*.lib
-UpgradeLog*
-_UpgradeReport_Files
-*.sdf
-*.opensdf
-Demona/icon.res
-*.exe
-*.nupkg
-packages
+*~
 .vs
 _ReSharper.Caches
+_UpgradeReport_Files
+bin
+Demona/Gargoyle/**/{Debug,Release}
+Demona/icon.res
 launchSettings.json
+obj
+packages
+TestSuite/Test Cases/*
+UpgradeLog*
