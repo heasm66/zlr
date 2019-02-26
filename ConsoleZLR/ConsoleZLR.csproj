@@ -21,55 +21,26 @@
 
     <PublishUrl>publish\</PublishUrl>
   </PropertyGroup>
+  <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Debug|AnyCPU'">
+    <DefineConstants>DEBUG;TRACE</DefineConstants>
+  </PropertyGroup>
 
   <ItemGroup>
     <ProjectReference Include="..\ZLR.VM\ZLR.VM.csproj" />
   </ItemGroup>
 
   <ItemGroup>
-    <PackageReference Include="JetBrains.Annotations" Version="11.1.0">
+    <PackageReference Include="JetBrains.Annotations" Version="2018.3.0">
       <PrivateAssets>All</PrivateAssets>
     </PackageReference>
     <PackageReference Include="Nito.AsyncEx" Version="5.0.0-pre-05" />
-    <PackageReference Include="System.Collections.Immutable" Version="1.4.0" />
+    <PackageReference Include="System.Collections.Immutable" Version="1.5.0" />
   </ItemGroup>
 
   <ItemGroup>
-    <PackageReference Include="Antlr4.Runtime" Version="4.6.4" />
-    <PackageReference Include="Antlr4.CodeGenerator" Version="4.6.5-beta001">
+    <PackageReference Include="Antlr4.Runtime" Version="4.6.6" />
+    <PackageReference Include="Antlr4.CodeGenerator" Version="4.6.6">
       <PrivateAssets>All</PrivateAssets>
     </PackageReference>
-  </ItemGroup>
-
-  <ItemGroup>
-    <Antlr4 Include="Debugger\InformExpression.g4">
-      <Generator>MSBuild:Compile</Generator>
-      <CustomToolNamespace>ZLR.Interfaces.SystemConsole.Debugger</CustomToolNamespace>
-      <Listener>false</Listener>
-      <Visitor>true</Visitor>
-    </Antlr4>
-
-    <Compile Update="Debugger\InformExpression.g4.lexer.cs">
-      <DependentUpon>InformExpression.g4</DependentUpon>
-    </Compile>
-    <Compile Update="Debugger\InformExpression.g4.parser.cs">
-      <DependentUpon>InformExpression.g4</DependentUpon>
-    </Compile>
-  </ItemGroup>
-
-  <ItemGroup>
-    <Antlr4 Include="Debugger\ZilExpression.g4">
-      <Generator>MSBuild:Compile</Generator>
-      <CustomToolNamespace>ZLR.Interfaces.SystemConsole.Debugger</CustomToolNamespace>
-      <Listener>false</Listener>
-      <Visitor>true</Visitor>
-    </Antlr4>
-    
-    <Compile Update="Debugger\ZilExpression.g4.lexer.cs">
-      <DependentUpon>ZilExpression.g4</DependentUpon>
-    </Compile>
-    <Compile Update="Debugger\ZilExpression.g4.parser.cs">
-      <DependentUpon>ZilExpression.g4</DependentUpon>
-    </Compile>
   </ItemGroup>
 </Project>
