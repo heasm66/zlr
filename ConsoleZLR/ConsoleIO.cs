@@ -61,6 +61,11 @@ namespace ZLR.Interfaces.SystemConsole
                 // Mono's Console class doesn't support changing some of these properties
                 weakConsole = true;
             }
+            catch (NotImplementedException)
+            {
+                // Mono's Console class doesn't support changing some of these properties
+                weakConsole = true;
+            }
 
             prevWinWidth = Console.WindowWidth;
             prevWinHeight = Console.WindowHeight;
@@ -1117,6 +1122,9 @@ namespace ZLR.Interfaces.SystemConsole
 
         private void CheckScroll(bool force = false)
         {
+            if (weakConsole)
+                return;
+
             if (split > 0)
             {
                 var atRightEdge = Console.CursorLeft == Console.BufferWidth - 1;
