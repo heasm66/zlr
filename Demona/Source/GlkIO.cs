@@ -11,13 +11,14 @@ namespace ZLR.Interfaces.Demona
 {
     class GlkIO : IZMachineIO, IDisposable
     {
-        private bool unicode;
-
-        private winid_t upperWin, lowerWin;
+        private readonly bool unicode;
+        private winid_t upperWin;
+        private readonly winid_t lowerWin;
         private winid_t currentWin;
         private bool forceFixed;
         private int xpos, ypos; // in Glk coordinates (i.e. counting from 0)
-        private uint screenWidth, screenHeight;
+        private uint screenWidth;
+        private readonly uint screenHeight;
         private Style lastStyle = Style.Normal;
         private int targetSplit;
 
@@ -74,7 +75,7 @@ namespace ZLR.Interfaces.Demona
             else
             {
                 Glk.glk_window_get_size(tempWin, out screenWidth, out screenHeight);
-                Glk.glk_window_close(tempWin, out var dummy);
+                Glk.glk_window_close(tempWin, out _);
             }
 
             // open the lower window
@@ -316,30 +317,29 @@ namespace ZLR.Interfaces.Demona
 
         private static byte GlkKeyToZSCII(KeyCode key)
         {
-            switch (key)
+            return key switch
             {
-                case KeyCode.Delete: return 8;
-                case KeyCode.Return: return 13;
-                case KeyCode.Escape: return 27;
-
-                case KeyCode.Up: return 129;
-                case KeyCode.Down: return 130;
-                case KeyCode.Left: return 131;
-                case KeyCode.Right: return 132;
-                case KeyCode.Func1: return 133;
-                case KeyCode.Func2: return 134;
-                case KeyCode.Func3: return 135;
-                case KeyCode.Func4: return 136;
-                case KeyCode.Func5: return 137;
-                case KeyCode.Func6: return 138;
-                case KeyCode.Func7: return 139;
-                case KeyCode.Func8: return 140;
-                case KeyCode.Func9: return 141;
-                case KeyCode.Func10: return 142;
-                case KeyCode.Func11: return 143;
-                case KeyCode.Func12: return 144;
-                default: return 0;
-            }
+                KeyCode.Delete => 8,
+                KeyCode.Return => 13,
+                KeyCode.Escape => 27,
+                KeyCode.Up => 129,
+                KeyCode.Down => 130,
+                KeyCode.Left => 131,
+                KeyCode.Right => 132,
+                KeyCode.Func1 => 133,
+                KeyCode.Func2 => 134,
+                KeyCode.Func3 => 135,
+                KeyCode.Func4 => 136,
+                KeyCode.Func5 => 137,
+                KeyCode.Func6 => 138,
+                KeyCode.Func7 => 139,
+                KeyCode.Func8 => 140,
+                KeyCode.Func9 => 141,
+                KeyCode.Func10 => 142,
+                KeyCode.Func11 => 143,
+                KeyCode.Func12 => 144,
+                _ => 0,
+            };
         }
 
         [NotNull]
@@ -746,7 +746,7 @@ namespace ZLR.Interfaces.Demona
             {
                 if (!upperWin.IsNull)
                 {
-                    Glk.glk_window_close(upperWin, out var dummy);
+                    Glk.glk_window_close(upperWin, out _);
                     upperWin = winid_t.Null;
                     currentWin = lowerWin;
                 }
@@ -792,7 +792,7 @@ namespace ZLR.Interfaces.Demona
                     // erase both and unsplit
                     if (!upperWin.IsNull)
                     {
-                        Glk.glk_window_close(upperWin, out var dummy);
+                        Glk.glk_window_close(upperWin, out _);
                         upperWin = winid_t.Null;
                     }
                     goto case -2;
@@ -1011,7 +1011,7 @@ namespace ZLR.Interfaces.Demona
         {
             if (!gstr.IsNull)
             {
-                Glk.glk_stream_close(gstr, out var dummy);
+                Glk.glk_stream_close(gstr, out _);
                 gstr = strid_t.Null;
             }
         }
@@ -1051,14 +1051,13 @@ namespace ZLR.Interfaces.Demona
 
         public override long Seek(long offset, SeekOrigin origin)
         {
-            SeekMode gseek;
-            switch (origin)
+            var gseek = origin switch
             {
-                case SeekOrigin.Begin: gseek = SeekMode.Start; break;
-                case SeekOrigin.Current: gseek = SeekMode.Current; break;
-                case SeekOrigin.End: gseek = SeekMode.End; break;
-                default: throw new ArgumentOutOfRangeException(nameof(origin));
-            }
+                SeekOrigin.Begin => SeekMode.Start,
+                SeekOrigin.Current => SeekMode.Current,
+                SeekOrigin.End => SeekMode.End,
+                _ => throw new ArgumentOutOfRangeException(nameof(origin)),
+            };
             Glk.glk_stream_set_position(gstr, (int)offset, gseek);
             return Glk.glk_stream_get_position(gstr);
         }

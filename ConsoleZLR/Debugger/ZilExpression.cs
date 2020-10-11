@@ -23,9 +23,7 @@ namespace ZLR.Interfaces.SystemConsole.Debugger
 
             var visitor = new EvaluatingVisitor(zm, dbg);
             var result = visitor.Visit(resultContext);
-            if (!wantLvalue)
-                result = visitor.Resolve(result);
-            return result;
+            return wantLvalue ? result : visitor.Resolve(result);
         }
 
         class EvaluatingVisitor : ZilExpressionBaseVisitor<Value>

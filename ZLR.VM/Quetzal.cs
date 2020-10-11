@@ -2,7 +2,6 @@ using System.IO;
 using System.Collections.Generic;
 using System;
 using System.Threading.Tasks;
-using JetBrains.Annotations;
 using ZLR.IFF;
 using ZLR.VM.Debugging;
 
@@ -14,10 +13,10 @@ namespace ZLR.VM
         {
             try
             {
-                var saved = await SaveQuetzalAsync(savedPC);
+                var saved = await SaveQuetzalAsync(savedPC).ConfigureAwait(false);
 
                 if (resultStorage >= 0)
-                    StoreResult((byte) resultStorage, (short) (saved ? 1 : 0));
+                    StoreResult((byte)resultStorage, (short)(saved ? 1 : 0));
 
                 pc = nextPC;
             }
@@ -34,7 +33,7 @@ namespace ZLR.VM
         {
             try
             {
-                var saved = await SaveQuetzalAsync(savedPC);
+                var saved = await SaveQuetzalAsync(savedPC).ConfigureAwait(false);
 
                 pc = nextPC;
 
@@ -65,28 +64,26 @@ namespace ZLR.VM
             var inWait = true;
             try
             {
-                using (var stream = await io.OpenSaveFileAsync(quetzal.Length, cancellationToken))
+                using var stream = await io.OpenSaveFileAsync(quetzal.Length, cancellationToken).ConfigureAwait(false);
+                EndExternalWait();
+                inWait = false;
+
+                cancellationToken.ThrowIfCancellationRequested();
+
+                if (stream == null)
                 {
-                    EndExternalWait();
-                    inWait = false;
-
-                    cancellationToken.ThrowIfCancellationRequested();
-
-                    if (stream == null)
+                    return false;
+                }
+                else
+                {
+                    try
+                    {
+                        await quetzal.WriteToStreamAsync(stream, cancellationToken).ConfigureAwait(false);
+                        return true;
+                    }
+                    catch
                     {
                         return false;
-                    }
-                    else
-                    {
-                        try
-                        {
-                            await quetzal.WriteToStreamAsync(stream, cancellationToken);
-                            return true;
-                        }
-                        catch
-                        {
-                            return false;
-                        }
                     }
                 }
             }
@@ -103,62 +100,62 @@ namespace ZLR.VM
             // if the restore succeeds, what we change up here won't matter anyway.
             pc = failurePC;
 
-            using (var stream = io.OpenRestoreFile())
+            using var stream = io.OpenRestoreFile();
+            if (stream == null)
+                return false;
+
+            try
             {
-                if (stream == null)
+                var quetzal = new Quetzal(stream);
+
+                // verify everything first
+                var ifhd = quetzal.GetBlock("IFhd");
+                if (ifhd == null || !VerifyIFHD(ifhd, out var savedPC))
                     return false;
 
-                try
-                {
-                    var quetzal = new Quetzal(stream);
+                var compressedMem = quetzal.GetBlock("CMem");
+                var uncompressedMem = compressedMem != null ? UncompressRAM(compressedMem) : quetzal.GetBlock("UMem");
 
-                    // verify everything first
-                    var ifhd = quetzal.GetBlock("IFhd");
-                    if (ifhd == null || !VerifyIFHD(ifhd, out var savedPC))
-                        return false;
-
-                    var cmem = quetzal.GetBlock("CMem");
-                    var umem = cmem != null ? UncompressRAM(cmem) : quetzal.GetBlock("UMem");
-
-                    if (umem == null || umem.Length != RomStart)
-                        return false;
-
-                    var stks = quetzal.GetBlock("Stks");
-                    DeserializeStacks(stks, out var savedStack, out var savedCallStack);
-                    if (savedStack == null || savedCallStack == null)
-                        return false;
-
-                    // ok, restore it
-                    SetBytes(0, umem.Length, umem, 0);
-                    stack = savedStack;
-                    callStack = savedCallStack;
-                    SetTopFrame();
-                    pc = savedPC;
-
-                    if (ZVersion < 4)
-                    {
-                        DecodeBranch(out var branchIfTrue, out var branchOffset);
-                        if (branchIfTrue)
-                            pc += branchOffset - 2;
-                    }
-                    else
-                    {
-                        // savedPC points to the save instruction's result storage byte
-                        var dest = GetByte(pc++);
-                        StoreResult(dest, 2);
-                    }
-
-                    ResetHeaderFields();
-                    return true;
-                }
-                catch
-                {
+                if (uncompressedMem == null || uncompressedMem.Length != RomStart)
                     return false;
+
+                var stks = quetzal.GetBlock("Stks");
+                if (stks == null)
+                    return false;
+
+                DeserializeStacks(stks, out var savedStack, out var savedCallStack);
+                if (savedStack == null || savedCallStack == null)
+                    return false;
+
+                // ok, restore it
+                SetBytes(0, uncompressedMem.Length, uncompressedMem, 0);
+                stack = savedStack;
+                callStack = savedCallStack;
+                SetTopFrame();
+                pc = savedPC;
+
+                if (ZVersion < 4)
+                {
+                    DecodeBranch(out var branchIfTrue, out var branchOffset);
+                    if (branchIfTrue)
+                        pc += branchOffset - 2;
                 }
+                else
+                {
+                    // savedPC points to the save instruction's result storage byte
+                    var dest = GetByte(pc++);
+                    StoreResult(dest, 2);
+                }
+
+                ResetHeaderFields();
+                return true;
+            }
+            catch
+            {
+                return false;
             }
         }
 
-        [NotNull]
         private byte[] CompressRAM()
         {
             var origRam = new byte[RomStart];
@@ -197,8 +194,7 @@ namespace ZLR.VM
             return result.ToArray();
         }
 
-        [CanBeNull]
-        private byte[] UncompressRAM(byte[] cmem)
+        private byte[]? UncompressRAM(byte[] cmem)
         {
             var result = new byte[RomStart];
             gameFile.Seek(0, SeekOrigin.Begin);
@@ -224,7 +220,6 @@ namespace ZLR.VM
             return result;
         }
 
-        [NotNull]
         private byte[] MakeIFHD(int savePC)
         {
             var result = new byte[13];
@@ -255,7 +250,7 @@ namespace ZLR.VM
             return result;
         }
 
-        private bool VerifyIFHD([NotNull] byte[] ifhd, out int savedPC)
+        private bool VerifyIFHD(byte[] ifhd, out int savedPC)
         {
             if (ifhd.Length < 13)
             {
@@ -265,17 +260,18 @@ namespace ZLR.VM
 
             var myIFHD = MakeIFHD(0);
             for (var i = 0; i < 10; i++)
-                if (ifhd[i] != myIFHD[i])
-                {
-                    savedPC = 0;
-                    return false;
-                }
+            {
+                if (ifhd[i] == myIFHD[i])
+                    continue;
+
+                savedPC = 0;
+                return false;
+            }
 
             savedPC = (ifhd[10] << 16) + (ifhd[11] << 8) + ifhd[12];
             return true;
         }
 
-        [NotNull]
         private byte[] SerializeStacks()
         {
             var result = new List<byte>(stack.Count * 2 + callStack.Count * 24);
@@ -288,7 +284,7 @@ namespace ZLR.VM
             // save dummy frame first (always, since we don't support V6)
             var dummyStackUsage = flatCallStack.Length == 0
                 ? flatStack.Length
-                : flatCallStack[flatCallStack.Length - 1].PrevStackDepth;
+                : flatCallStack[^1].PrevStackDepth;
 
             // return PC
             result.Add(0);
@@ -332,19 +328,17 @@ namespace ZLR.VM
                     result.Add(0);
                 else
                     result.Add((byte)frame.ResultStorage);
-                // args supplied
-                byte argbits;
-                switch (frame.ArgCount)
+                byte argbits = frame.ArgCount switch
                 {
-                    case 1: argbits = 1; break;
-                    case 2: argbits = 3; break;
-                    case 3: argbits = 7; break;
-                    case 4: argbits = 15; break;
-                    case 5: argbits = 31; break;
-                    case 6: argbits = 63; break;
-                    case 7: argbits = 127; break;
-                    default: argbits = 0; break;
-                }
+                    1 => 1,
+                    2 => 3,
+                    3 => 7,
+                    4 => 15,
+                    5 => 31,
+                    6 => 63,
+                    7 => 127,
+                    _ => 0,
+                };
                 result.Add(argbits);
                 // stack usage
                 var curDepth = nextFrame?.PrevStackDepth ?? flatStack.Length;
@@ -361,7 +355,7 @@ namespace ZLR.VM
                 System.Diagnostics.Debug.Assert(sp == frame.PrevStackDepth);
                 for (var j = 0; j < stackUsage; j++)
                 {
-                    var value = flatStack[flatStack.Length - 1 - sp];
+                    var value = flatStack[^(1 - sp)];
                     sp++;
                     result.Add((byte)(value >> 8));
                     result.Add((byte)value);
@@ -371,8 +365,8 @@ namespace ZLR.VM
             return result.ToArray();
         }
 
-        private static void DeserializeStacks(byte[] stks, [CanBeNull] out Stack<short> savedStack,
-            [CanBeNull] out Stack<CallFrame> savedCallStack)
+        private static void DeserializeStacks(byte[] stks, out Stack<short>? savedStack,
+            out Stack<CallFrame>? savedCallStack)
         {
             savedStack = new Stack<short>();
             savedCallStack = new Stack<CallFrame>();
@@ -462,7 +456,7 @@ namespace ZLR.VM
         {
         }
 
-        public Quetzal([NotNull] Stream fromStream)
+        public Quetzal(Stream fromStream)
             : base(fromStream)
         {
             if (FileType != QUETZAL_TYPE)
@@ -471,16 +465,16 @@ namespace ZLR.VM
 
         private static readonly uint IFHD_TYPE_ID = StringToTypeID("IFhd");
 
-        protected override int CompareBlocks(uint type1, uint type2, byte[] data1, byte[] data2,
-            int index1, int index2)
+        protected override int CompareBlocks((uint type, byte[] data, int index) block1, (uint type, byte[] data, int index) block2)
         {
             // make sure IFhd is first, but leave other blocks in order
-            if (type1 == IFHD_TYPE_ID && type2 != IFHD_TYPE_ID)
+            if (block1.type == IFHD_TYPE_ID && block2.type != IFHD_TYPE_ID)
                 return -1;
-            else if (type2 == IFHD_TYPE_ID && type1 != IFHD_TYPE_ID)
+
+            if (block2.type == IFHD_TYPE_ID && block1.type != IFHD_TYPE_ID)
                 return 1;
-            else
-                return index1.CompareTo(index2);
+
+            return block1.index.CompareTo(block2.index);
         }
     }
 }

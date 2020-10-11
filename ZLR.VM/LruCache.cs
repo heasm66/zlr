@@ -1,7 +1,7 @@
 using System;
 using System.Collections.Generic;
+using System.Diagnostics.CodeAnalysis;
 using System.Linq;
-using JetBrains.Annotations;
 
 namespace ZLR.VM
 {
@@ -10,7 +10,6 @@ namespace ZLR.VM
     /// </summary>
     /// <typeparam name="TKey">The type of keys in the cache.</typeparam>
     /// <typeparam name="TValue">The type of values being cached.</typeparam>
-    [PublicAPI]
     public class LruCache<TKey, TValue>
     {
         private struct Entry
@@ -63,7 +62,7 @@ namespace ZLR.VM
         /// <param name="key">The cache key or address.</param>
         /// <param name="value">The value to store.</param>
         /// <param name="size">The amount of cache space this value occupied by this value.</param>
-        public void Add([NotNull] TKey key, TValue value, int size)
+        public void Add(TKey key, TValue value, int size)
         {
             if (dict.ContainsKey(key))
                 throw new ArgumentException("Key already exists in cache", nameof(key));
@@ -102,7 +101,7 @@ namespace ZLR.VM
         /// <param name="key">The cache key or address to search for.</param>
         /// <param name="value">Set to the cached value, if it was found.</param>
         /// <returns><b>true</b> if the value was found in the cache.</returns>
-        public bool TryGetValue([NotNull] TKey key, out TValue value)
+        public bool TryGetValue(TKey key, [MaybeNullWhen(false)] out TValue value)
         {
             if (dict.TryGetValue(key, out var node) == false)
             {
@@ -125,7 +124,7 @@ namespace ZLR.VM
         /// </summary>
         /// <param name="key">The key to search for.</param>
         /// <returns><b>true</b> if the key is present in the cache.</returns>
-        public bool ContainsKey([NotNull] TKey key)
+        public bool ContainsKey(TKey key)
         {
             return dict.ContainsKey(key);
         }

@@ -7,7 +7,7 @@ namespace ZLR.VM.IOFilters
 {
     public sealed class InternalSaveFilter : FilterBase
     {
-        private MemoryStream saveData;
+        private MemoryStream? saveData;
 
         public InternalSaveFilter([NotNull] IAsyncZMachineIO next)
             : base(next)
@@ -15,16 +15,16 @@ namespace ZLR.VM.IOFilters
         }
 
         [ItemNotNull]
-        public override Task<Stream> OpenSaveFileAsync(int size, CancellationToken cancellationToken = default)
+        public override Task<Stream?> OpenSaveFileAsync(int size, CancellationToken cancellationToken = default)
         {
             saveData = new MemoryStream(size);
-            return Task.FromResult<Stream>(saveData);
+            return Task.FromResult<Stream?>(saveData);
         }
 
         [ItemNotNull]
-        public override Task<Stream> OpenRestoreFileAsync(CancellationToken cancellationToken = default)
+        public override Task<Stream?> OpenRestoreFileAsync(CancellationToken cancellationToken = default)
         {
-            return Task.FromResult<Stream>(saveData != null ? new MemoryStream(saveData.ToArray(), false) : null);
+            return Task.FromResult<Stream?>(saveData != null ? new MemoryStream(saveData.ToArray(), false) : null);
         }
     }
 }

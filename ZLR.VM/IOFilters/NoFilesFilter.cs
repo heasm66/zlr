@@ -12,24 +12,24 @@ namespace ZLR.VM.IOFilters
         {
         }
 
-        public override Task<Stream> OpenAuxiliaryFileAsync(string name, int size, bool writing, CancellationToken cancellationToken = default)
+        public override Task<Stream?> OpenAuxiliaryFileAsync(string name, int size, bool writing, CancellationToken cancellationToken = default)
         {
-            return Task.FromResult<Stream>(null);
+            return Task.FromResult<Stream?>(null);
         }
 
-        public override Task<Stream> OpenCommandFileAsync(bool writing, CancellationToken cancellationToken = default)
+        public override Task<Stream?> OpenCommandFileAsync(bool writing, CancellationToken cancellationToken = default)
         {
-            return Task.FromResult<Stream>(null);
+            return Task.FromResult<Stream?>(null);
         }
 
-        public override Task<Stream> OpenRestoreFileAsync(CancellationToken cancellationToken = default)
+        public override Task<Stream?> OpenRestoreFileAsync(CancellationToken cancellationToken = default)
         {
-            return Task.FromResult<Stream>(null);
+            return Task.FromResult<Stream?>(null);
         }
 
-        public override Task<Stream> OpenSaveFileAsync(int size, CancellationToken cancellationToken = default)
+        public override Task<Stream?> OpenSaveFileAsync(int size, CancellationToken cancellationToken = default)
         {
-            return Task.FromResult<Stream>(null);
+            return Task.FromResult<Stream?>(null);
         }
     }
 }

@@ -63,26 +63,21 @@ namespace ZLR.Interfaces.SystemConsole.Debugger
 
         private static ValueType AdditionResultType(Value left, Value right)
         {
-            ValueType resultType;
+            switch (left, right)
+            {
+                case ({ Type: ValueType.Number }, { Type: var otherType }):
+                    return otherType;
 
-            if (left.Type == ValueType.Number)
-            {
-                resultType = right.Type;
-            }
-            else if (right.Type == ValueType.Number)
-            {
-                resultType = left.Type;
-            }
-            else if (left.IsUnpackedAddress && !right.IsAddress || right.IsUnpackedAddress && !left.IsAddress)
-            {
-                resultType = ValueType.Pointer;
-            }
-            else
-            {
-                resultType = ValueType.Number;
-            }
+                case ({ Type: var otherType }, { Type: ValueType.Number }):
+                    return otherType;
 
-            return resultType;
+                case ({ IsUnpackedAddress: true }, { IsAddress: false }):
+                case ({ IsAddress: false }, { IsUnpackedAddress: true }):
+                    return ValueType.Pointer;
+
+                default:
+                    return ValueType.Number;
+            }
         }
 
         public static Value operator *(Value left, Value right)
@@ -186,76 +181,34 @@ namespace ZLR.Interfaces.SystemConsole.Debugger
 
         public static readonly Value Invalid = new Value(ValueType.Invalid, 0);
 
-        public static Value Number(int num)
-        {
-            return new Value(ValueType.Number, num);
-        }
+        public static Value Number(int num) => new Value(ValueType.Number, num);
 
-        public static Value Boolean(bool b)
-        {
-            return new Value(ValueType.Number, b ? 1 : 0);
-        }
+        public static Value Boolean(bool b) => new Value(ValueType.Number, b ? 1 : 0);
 
-        public static Value Object(int num)
-        {
-            return new Value(ValueType.Object, num);
-        }
+        public static Value Object(int num) => new Value(ValueType.Object, num);
 
-        public static Value Attribute(int num)
-        {
-            return new Value(ValueType.Attribute, num);
-        }
+        public static Value Attribute(int num) => new Value(ValueType.Attribute, num);
 
-        public static Value Property(int num)
-        {
-            return new Value(ValueType.Property, num);
-        }
+        public static Value Property(int num) => new Value(ValueType.Property, num);
 
-        public static Value Variable(int num)
-        {
-            return new Value(ValueType.Variable, num);
-        }
+        public static Value Variable(int num) => new Value(ValueType.Variable, num);
 
-        public static Value Routine(int num)
-        {
-            return new Value(ValueType.Routine, num);
-        }
+        public static Value Routine(int num) => new Value(ValueType.Routine, num);
 
-        public static Value Pointer(int num)
-        {
-            return new Value(ValueType.Pointer, num);
-        }
+        public static Value Pointer(int num) => new Value(ValueType.Pointer, num);
 
-        public static Value ByteAtAddress(int addr)
-        {
-            return new Value(ValueType.ByteAtAddress, addr);
-        }
+        public static Value ByteAtAddress(int address) => new Value(ValueType.ByteAtAddress, address);
 
-        public static Value WordAtAddress(int addr)
-        {
-            return new Value(ValueType.WordAtAddress, addr);
-        }
+        public static Value WordAtAddress(int address) => new Value(ValueType.WordAtAddress, address);
 
-        public static Value VariableNumber(int num)
-        {
-            return new Value(ValueType.VariableNumber, num);
-        }
+        public static Value VariableNumber(int num) => new Value(ValueType.VariableNumber, num);
 
         #endregion
 
-        public static Value Guard(Value a, Func<Value, Value> ifValid)
-        {
-            return a.IsValid ? ifValid(a) : Invalid;
-        }
+        public static Value Guard(Value a, Func<Value, Value> ifValid) => a.IsValid ? ifValid(a) : Invalid;
 
-        public static Value Guard(Value a, Value b, Func<Value, Value, Value> ifValid)
-        {
-            return a.IsValid && b.IsValid ? ifValid(a, b) : Invalid;
-        }
+        public static Value Guard(Value a, Value b, Func<Value, Value, Value> ifValid) => a.IsValid && b.IsValid ? ifValid(a, b) : Invalid;
 
-        public static Value Guard(Value a, Value b, Value c, Func<Value, Value, Value, Value> ifValid)
-        {
-            return a.IsValid && b.IsValid && c.IsValid ? ifValid(a, b, c) : Invalid;
-        }
+        public static Value Guard(Value a, Value b, Value c, Func<Value, Value, Value, Value> ifValid) => a.IsValid && b.IsValid && c.IsValid ? ifValid(a, b, c) : Invalid;
     }
 }

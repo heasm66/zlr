@@ -144,17 +144,17 @@ namespace ZLR.VM.IOFilters
             CancellationToken cancellationToken = default) =>
             next.ReadKeyAsync(translator, cancellationToken);
 
-        public virtual Task<Stream> OpenSaveFileAsync(int size, CancellationToken cancellationToken = default) =>
+        public virtual Task<Stream?> OpenSaveFileAsync(int size, CancellationToken cancellationToken = default) =>
             next.OpenSaveFileAsync(size, cancellationToken);
 
-        public virtual Task<Stream> OpenRestoreFileAsync(CancellationToken cancellationToken = default) =>
+        public virtual Task<Stream?> OpenRestoreFileAsync(CancellationToken cancellationToken = default) =>
             next.OpenRestoreFileAsync(cancellationToken);
 
-        public virtual Task<Stream> OpenAuxiliaryFileAsync(string name, int size, bool writing,
+        public virtual Task<Stream?> OpenAuxiliaryFileAsync(string name, int size, bool writing,
             CancellationToken cancellationToken = default) =>
             next.OpenAuxiliaryFileAsync(name, size, writing, cancellationToken);
 
-        public virtual Task<Stream> OpenCommandFileAsync(bool writing, CancellationToken cancellationToken = default) =>
+        public virtual Task<Stream?> OpenCommandFileAsync(bool writing, CancellationToken cancellationToken = default) =>
             next.OpenCommandFileAsync(writing, cancellationToken);
 
         #endregion

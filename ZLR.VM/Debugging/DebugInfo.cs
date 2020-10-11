@@ -18,208 +18,212 @@ namespace ZLR.VM.Debugging
             public bool IsValid => FileNum != 0 && FileNum != 255;
         }
 
-        private readonly byte[] matchingHeader;
+        private readonly byte[]? matchingHeader;
 
         public DebugInfo([NotNull] Stream fromStream)
         {
-            using (var br = new BinaryReader(fromStream))
+            using var br = new BinaryReader(fromStream);
+
+            if (ReadWord(br) != 0xDEBF)
+                throw new ArgumentException("Invalid debug file header", nameof(fromStream));
+            if (ReadWord(br) != 0)
+                throw new ArgumentException("Unrecognized debug file version", nameof(fromStream));
+            ReadWord(br); // skip Inform version
+
+            var filenames = new Dictionary<byte, string>(5);
+
+            var codeArea = 0;
+            RoutineInfo? routine = null;
+            var localList = new List<string>();
+            var lineList = new List<LineInfo>();
+            var offsetList = new List<ushort>();
+
+            while (fromStream.Position < fromStream.Length)
             {
-                if (ReadWord(br) != 0xDEBF)
-                    throw new ArgumentException("Invalid debug file header", nameof(fromStream));
-                if (ReadWord(br) != 0)
-                    throw new ArgumentException("Unrecognized debug file version", nameof(fromStream));
-                ReadWord(br); // skip Inform version
-
-                var filenames = new Dictionary<byte, string>(5);
-
-                var codeArea = 0;
-                RoutineInfo routine = null;
-                var localList = new List<string>();
-                var lineList = new List<LineInfo>();
-                var offsetList = new List<ushort>();
-
-                while (fromStream.Position < fromStream.Length)
-                {
-                    var type = br.ReadByte();
+                var type = br.ReadByte();
                 
-                    try
+                try
+                {
+                    int i;
+                    byte b;
+                    ushort w;
+                    string str;
+                    LineRef line;
+
+                    /**
+                     * Within each case, calls that may throw (like <see cref="DoubleMap{TKey, TValue}.Add(TKey, TValue)"/>)
+                     * should happen after reads, to allow for error recovery.
+                     */
+                    switch (type)
                     {
-                        int i;
-                        byte b;
-                        ushort w;
-                        string str;
-                        LineRef line;
+                        case 0:
+                            // EOF_DBR
+                            fromStream.Seek(0, SeekOrigin.End);
+                            break;
 
-                        /**
-                         * Within each case, calls that may throw (like <see cref="DoubleMap{TKey, TValue}.Add(TKey, TValue)"/>)
-                         * should happen after reads, to allow for error recovery.
-                         */
-                        switch (type)
-                        {
-                            case 0:
-                                // EOF_DBR
-                                fromStream.Seek(0, SeekOrigin.End);
-                                break;
+                        case 1:
+                            // FILE_DBR
+                            b = br.ReadByte();
+                            ReadString(br); // skip include name
+                            str = ReadString(br);
+                            filenames[b] = str;
+                            break;
 
-                            case 1:
-                                // FILE_DBR
-                                b = br.ReadByte();
-                                ReadString(br); // skip include name
-                                str = ReadString(br);
-                                filenames[b] = str;
-                                break;
+                        case 2:
+                            // CLASS_DBR
+                            ReadString(br);
+                            ReadLineRef(br);
+                            ReadLineRef(br);
+                            break;
 
-                            case 2:
-                                // CLASS_DBR
-                                ReadString(br);
-                                ReadLineRef(br);
-                                ReadLineRef(br);
-                                break;
+                        case 3:
+                            // OBJECT_DBR
+                            var obj = new ObjectInfo();
+                            this.Objects.Add(obj);
+                            obj.Number = ReadWord(br);
+                            obj.Name = ReadString(br);
+                            line = ReadLineRef(br);
+                            if (line.IsValid)
+                            {
+                                obj.DefinedAt = new LineInfo(
+                                    filenames[line.FileNum],
+                                    line.LineNum,
+                                    line.Column);
+                            }
 
-                            case 3:
-                                // OBJECT_DBR
-                                var obj = new ObjectInfo();
-                                Objects.Add(obj);
-                                obj.Number = ReadWord(br);
-                                obj.Name = ReadString(br);
+                            ReadLineRef(br);
+                            break;
+
+                        case 4:
+                            // GLOBAL_DBR
+                            b = br.ReadByte();
+                            str = ReadString(br);
+                            this.Globals.Add(str, b);
+                            break;
+
+                        case 12:
+                            // ARRAY_DBR
+                            w = ReadWord(br);
+                            str = ReadString(br);
+                            this.Arrays.Add(str, w);
+                            break;
+
+                        case 5:
+                            // ATTR_DBR
+                            w = ReadWord(br);
+                            str = ReadString(br);
+                            this.Attributes.Add(str, w);
+                            break;
+
+                        case 6: // PROP_DBR
+                            w = ReadWord(br);
+                            str = ReadString(br);
+                            this.Properties.Add(str, w);
+                            break;
+
+                        case 7: // FAKE_ACTION_DBR
+                        case 8: // ACTION_DBR
+                            w = ReadWord(br);
+                            str = ReadString(br);
+                            this.Actions.Add(str, w);
+                            break;
+
+                        case 9:
+                            // HEADER_DBR
+                            matchingHeader = br.ReadBytes(64);
+                            break;
+
+                        case 11:
+                            // ROUTINE_DBR
+                            routine = new RoutineInfo();
+                            ReadWord(br);
+                            line = ReadLineRef(br);
+                            if (line.IsValid)
+                            {
+                                routine.DefinedAt = new LineInfo(
+                                    filenames[line.FileNum],
+                                    line.LineNum,
+                                    line.Column);
+                            }
+
+                            routine.CodeStart = ReadAddress(br);
+                            routine.Name = ReadString(br);
+                            localList.Clear();
+                            while ((str = ReadString(br)) != "")
+                            {
+                                localList.Add(str);
+                            }
+
+                            routine.Locals = localList.ToArray();
+                            lineList.Clear();
+                            offsetList.Clear();
+                            this.Routines.Add(routine);
+                            break;
+
+                        case 10:
+                            // LINEREF_DBR
+                            ReadWord(br);
+                            w = ReadWord(br);
+                            while (w-- > 0)
+                            {
                                 line = ReadLineRef(br);
+                                var w2 = ReadWord(br);
                                 if (line.IsValid)
                                 {
-                                    obj.DefinedAt = new LineInfo(
+                                    lineList.Add(new LineInfo(
                                         filenames[line.FileNum],
                                         line.LineNum,
-                                        line.Column);
+                                        line.Column));
+                                    offsetList.Add(w2);
                                 }
+                            }
 
-                                ReadLineRef(br);
-                                break;
+                            break;
 
-                            case 4:
-                                // GLOBAL_DBR
-                                b = br.ReadByte();
-                                str = ReadString(br);
-                                Globals.Add(str, b);
-                                break;
+                        case 14:
+                            // ROUTINE_END_DBR
+                            // assume routine is still set from earlier...
+                            ReadWord(br);    // skip routine number
+                            ReadLineRef(br); // skip defn end
+                            i = ReadAddress(br);
+                            if (routine != null)
+                            {
+                                routine.CodeLength = i - routine.CodeStart;
+                                routine.LineInfos = lineList.ToArray();
+                                routine.LineOffsets = offsetList.ToArray();
+                            }
 
-                            case 12:
-                                // ARRAY_DBR
-                                w = ReadWord(br);
-                                str = ReadString(br);
-                                Arrays.Add(str, w);
-                                break;
+                            break;
 
-                            case 5:
-                                // ATTR_DBR
-                                w = ReadWord(br);
-                                str = ReadString(br);
-                                Attributes.Add(str, w);
-                                break;
-
-                            case 6: // PROP_DBR
-                                w = ReadWord(br);
-                                str = ReadString(br);
-                                Properties.Add(str, w);
-                                break;
-
-                            case 7: // FAKE_ACTION_DBR
-                            case 8: // ACTION_DBR
-                                w = ReadWord(br);
-                                str = ReadString(br);
-                                Actions.Add(str, w);
-                                break;
-
-                            case 9:
-                                // HEADER_DBR
-                                matchingHeader = br.ReadBytes(64);
-                                break;
-
-                            case 11:
-                                // ROUTINE_DBR
-                                routine = new RoutineInfo();
-                                Routines.Add(routine);
-                                ReadWord(br);
-                                line = ReadLineRef(br);
-                                if (line.IsValid)
-                                {
-                                    routine.DefinedAt = new LineInfo(
-                                        filenames[line.FileNum],
-                                        line.LineNum,
-                                        line.Column);
-                                }
-
-                                routine.CodeStart = ReadAddress(br);
-                                routine.Name = ReadString(br);
-                                localList.Clear();
-                                while ((str = ReadString(br)) != "")
-                                {
-                                    localList.Add(str);
-                                }
-
-                                routine.Locals = localList.ToArray();
-                                lineList.Clear();
-                                offsetList.Clear();
-                                break;
-
-                            case 10:
-                                // LINEREF_DBR
-                                ReadWord(br);
-                                w = ReadWord(br);
-                                while (w-- > 0)
-                                {
-                                    line = ReadLineRef(br);
-                                    var w2 = ReadWord(br);
-                                    if (line.IsValid)
-                                    {
-                                        lineList.Add(new LineInfo(
-                                            filenames[line.FileNum],
-                                            line.LineNum,
-                                            line.Column));
-                                        offsetList.Add(w2);
-                                    }
-                                }
-
-                                break;
-
-                            case 14:
-                                // ROUTINE_END_DBR
-                                // assume routine is still set from earlier...
-                                ReadWord(br);    // skip routine number
-                                ReadLineRef(br); // skip defn end
+                        case 13:
+                            // MAP_DBR
+                            for (str = ReadString(br); str != ""; str = ReadString(br))
+                            {
                                 i = ReadAddress(br);
-                                if (routine != null)
-                                {
-                                    routine.CodeLength = i - routine.CodeStart;
-                                    routine.LineInfos = lineList.ToArray();
-                                    routine.LineOffsets = offsetList.ToArray();
-                                }
+                                if (str == "code area")
+                                    codeArea = i;
+                            }
 
-                                break;
+                            break;
 
-                            case 13:
-                                // MAP_DBR
-                                for (str = ReadString(br); str != ""; str = ReadString(br))
-                                {
-                                    i = ReadAddress(br);
-                                    if (str == "code area")
-                                        codeArea = i;
-                                }
-
-                                break;
-                        }
-                    }
-                    catch (InvalidOperationException)
-                    {
-                        // recover
-                        System.Diagnostics.Debug.WriteLine("");
+                        default:
+                            // unknown
+                            throw new InvalidDataException(
+                                $"Unrecognized DBR block type '{type}' at offset {fromStream.Position - 1}");
                     }
                 }
-
-                // patch routine addresses
-                foreach (var ri in Routines)
-                    ri.CodeStart += codeArea;
-
-                Routines.Sort((r1, r2) => r1.CodeStart - r2.CodeStart);
+                catch (InvalidOperationException)
+                {
+                    // recover
+                    System.Diagnostics.Debug.WriteLine("");
+                }
             }
+
+            // patch routine addresses
+            foreach (var ri in this.Routines)
+                ri.CodeStart += codeArea;
+
+            this.Routines.Sort((r1, r2) => r1.CodeStart - r2.CodeStart);
         }
 
         private static ushort ReadWord([NotNull] BinaryReader rdr)
@@ -305,9 +309,8 @@ namespace ZLR.VM.Debugging
         [PublicAPI]
         public DoubleMap<string, ushort> Actions { get; } = new DoubleMap<string, ushort>();
 
-        [CanBeNull]
         [PublicAPI]
-        public RoutineInfo FindRoutine(int pc)
+        public RoutineInfo? FindRoutine(int pc)
         {
             int start = 0, end = Routines.Count;
 
@@ -383,7 +386,7 @@ namespace ZLR.VM.Debugging
     [PublicAPI]
     public class ObjectInfo
     {
-        public string Name;
+        public string? Name;
         public int Number;
         public LineInfo DefinedAt;
     }
@@ -404,36 +407,19 @@ namespace ZLR.VM.Debugging
 
         public override int GetHashCode()
         {
-            // ReSharper disable ImpureMethodCallOnReadonlyValueField
-            var result = Line.GetHashCode() ^ Position.GetHashCode();
-            // ReSharper restore ImpureMethodCallOnReadonlyValueField
-            if (File != null)
-                result ^= File.GetHashCode();
-            return result;
+            return HashCode.Combine(Line, Position, File);
         }
 
-        public override bool Equals(object obj)
-        {
-            return obj is LineInfo li && Equals(li);
-        }
+        public override bool Equals(object obj) => obj is LineInfo li && Equals(li);
 
-        public bool Equals(LineInfo other)
-        {
-            return
-                File == other.File &&
-                Line == other.Line &&
-                Position == other.Position;
-        }
+        public bool Equals(LineInfo other) =>
+            File == other.File &&
+            Line == other.Line &&
+            Position == other.Position;
 
-        public static bool operator ==(LineInfo a, LineInfo b)
-        {
-            return a.Equals(b);
-        }
+        public static bool operator ==(LineInfo a, LineInfo b) => a.Equals(b);
 
-        public static bool operator !=(LineInfo a, LineInfo b)
-        {
-            return !a.Equals(b);
-        }
+        public static bool operator !=(LineInfo a, LineInfo b) => !a.Equals(b);
     }
 
     [PublicAPI]
@@ -463,20 +449,20 @@ namespace ZLR.VM.Debugging
 
         public void Remove([NotNull] TKey key)
         {
-            if (forward.TryGetValue(key, out var value))
-            {
-                forward.Remove(key);
-                backward.Remove(value);
-            }
+            if (!forward.TryGetValue(key, out var value))
+                return;
+
+            forward.Remove(key);
+            backward.Remove(value);
         }
 
         public void Remove([NotNull] TValue value)
         {
-            if (backward.TryGetValue(value, out var key))
-            {
-                forward.Remove(key);
-                backward.Remove(value);
-            }
+            if (!backward.TryGetValue(value, out var key))
+                return;
+
+            forward.Remove(key);
+            backward.Remove(value);
         }
 
         public bool Contains([NotNull] TKey key) => forward.ContainsKey(key);

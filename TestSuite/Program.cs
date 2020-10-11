@@ -103,18 +103,16 @@ namespace TestSuite
             {
                 try
                 {
-                    using (var zcode = selected.GetZCode())
+                    using var zcode = selected.GetZCode();
+                    var io = new RecordingIO(selected.InputFile);
+                    var zm = new ZMachine(zcode, io)
                     {
-                        var io = new RecordingIO(selected.InputFile);
-                        var zm = new ZMachine(zcode, io)
-                        {
-                            PredictableRandom = true,
-                        };
-                        await zm.SetWritingCommandsToFileAsync(true);
+                        PredictableRandom = true,
+                    };
+                    await zm.SetWritingCommandsToFileAsync(true);
 
-                        var output = await RunAndCollectOutputAsync(zm, io);
-                        File.WriteAllText(selected.OutputFile, output);
-                    }
+                    var output = await RunAndCollectOutputAsync(zm, io);
+                    File.WriteAllText(selected.OutputFile, output);
                 }
                 finally
                 {
@@ -206,29 +204,27 @@ namespace TestSuite
             }
             try
             {
-                using (var zcode = test.GetZCode())
+                using var zcode = test.GetZCode();
+                var io = new ReplayIO(test.InputFile);
+                var zm = new ZMachine(zcode, io)
                 {
-                    var io = new ReplayIO(test.InputFile);
-                    var zm = new ZMachine(zcode, io)
-                    {
-                        PredictableRandom = true,
-                    };
-                    await zm.SetReadingCommandsFromFileAsync(true);
+                    PredictableRandom = true,
+                };
+                await zm.SetReadingCommandsFromFileAsync(true);
 
-                    var output = await RunAndCollectOutputAsync(zm, io);
-                    var expectedOutput = File.ReadAllText(test.OutputFile);
+                var output = await RunAndCollectOutputAsync(zm, io);
+                var expectedOutput = File.ReadAllText(test.OutputFile);
 
-                    if (OutputDiffers(expectedOutput, output))
-                    {
-                        Console.WriteLine("failed!");
-                        File.WriteAllText(test.FailureFile, output);
-                        return false;
-                    }
-                    else
-                    {
-                        Console.WriteLine("passed.");
-                        return true;
-                    }
+                if (OutputDiffers(expectedOutput, output))
+                {
+                    Console.WriteLine("failed!");
+                    File.WriteAllText(test.FailureFile, output);
+                    return false;
+                }
+                else
+                {
+                    Console.WriteLine("passed.");
+                    return true;
                 }
             }
             finally

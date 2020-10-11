@@ -33,9 +33,9 @@ namespace ZLR.Interfaces.SystemConsole
                     Console.Title = "ConsoleZLR";
                 }
 
-                Stream gameStream, debugStream = null;
-                string gameDir, debugDir = null;
-                string fileName, commandFile = null;
+                Stream? gameStream, debugStream = null;
+                string? gameDir, debugDir = null;
+                string? fileName, commandFile = null;
                 var displayType = redirected ? DisplayType.DumbBottomWinOnly : DisplayType.FullScreen;
                 bool debugger = false, predictable = false;
                 var wait = true;
@@ -158,27 +158,26 @@ namespace ZLR.Interfaces.SystemConsole
                     var sourcePath = new List<string>(3);
                     if (debugDir != null)
                         sourcePath.Add(debugDir);
-                    sourcePath.Add(gameDir);
+                    if (gameDir != null)
+                        sourcePath.Add(gameDir);
                     sourcePath.Add(Directory.GetCurrentDirectory());
 
-                    using (var console = await CreateDebuggingConsole(zm, listen, sourcePath))
-                    {
-                        await console.RunDebuggerAsync();
-                    }
+                    using var console = await CreateDebuggingConsole(zm, listen, sourcePath);
+                    await console.RunDebuggerAsync();
                 }
                 else
                 {
 #if DEBUG
                     await zm.RunAsync();
 #else
-                try
-                {
-                    zm.Run();
-                }
-                catch (Exception e)
-                {
-                    Console.WriteLine(e.ToString());
-                }
+                    try
+                    {
+                        zm.Run();
+                    }
+                    catch (Exception e)
+                    {
+                        Console.WriteLine(e.ToString());
+                    }
 #endif
                     if (wait)
                     {

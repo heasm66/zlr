@@ -15,7 +15,7 @@ namespace ZLR.Interfaces.Demona
         /// </summary>
         [STAThread]
         // ReSharper disable once InconsistentNaming
-        static async Task Main([ItemNotNull] [NotNull] string[] args)
+        static void Main([ItemNotNull] [NotNull] string[] args)
         {
             Application.EnableVisualStyles();
             Application.SetCompatibleTextRenderingDefault(false);
@@ -44,53 +44,51 @@ namespace ZLR.Interfaces.Demona
             }
             else
             {
-                using (var dlg = new OpenFileDialog())
+                using var dlg = new OpenFileDialog
                 {
-                    dlg.Title = "Select Game File";
-                    dlg.Filter = "Supported Z-code files (*.z5;*.z8;*.zblorb;*.zlb)|*.z5;*.z8;*.zblorb;*.zlb|All files (*.*)|*.*";
-                    dlg.CheckFileExists = true;
-                    if (dlg.ShowDialog() != DialogResult.OK)
-                        return;
+                    Title = "Select Game File",
+                    Filter = "Supported Z-code files (*.z5;*.z8;*.zblorb;*.zlb)|*.z5;*.z8;*.zblorb;*.zlb|All files (*.*)|*.*",
+                    CheckFileExists = true
+                };
+                if (dlg.ShowDialog() != DialogResult.OK)
+                    return;
 
-                    try
-                    {
-                        gameFile = dlg.OpenFile();
-                    }
-                    catch (Exception ex)
-                    {
-                        MessageBox.Show(ex.Message, "Error Loading Game");
-                        return;
-                    }
-                    storyName = Path.GetFileName(dlg.FileName);
+                try
+                {
+                    gameFile = dlg.OpenFile();
                 }
+                catch (Exception ex)
+                {
+                    MessageBox.Show(ex.Message, "Error Loading Game");
+                    return;
+                }
+                storyName = Path.GetFileName(dlg.FileName);
             }
 
             Debug.Assert(storyName != null, "storyName != null");
 
-            using (var io = new GlkIO(args, storyName))
+            using var io = new GlkIO(args, storyName);
+#if !DEBUG
+            try
             {
-#if !DEBUG
-                try
-                {
 #endif
-                    try
-                    {
-                        var engine = new ZMachine(gameFile, io);
-                        await engine.RunAsync();
-                    }
-                    finally
-                    {
-                        gameFile.Close();
-                    }
-#if !DEBUG
-                }
-                catch (Exception ex)
-                {
-                    MessageBox.Show(ex.Message, "Error Running Game");
-                    return;
-                }
-#endif
+            try
+            {
+                var engine = new ZMachine(gameFile, io);
+                engine.RunAsync().Wait();
             }
+            finally
+            {
+                gameFile.Close();
+            }
+#if !DEBUG
+            }
+            catch (Exception ex)
+            {
+                MessageBox.Show(ex.Message, "Error Running Game");
+                return;
+            }
+#endif
         }
     }
 }

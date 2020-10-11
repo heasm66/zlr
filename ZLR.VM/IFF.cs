@@ -85,7 +85,7 @@ namespace ZLR.IFF
         }
 
         [CanBeNull]
-        public byte[] GetBlock([NotNull] string type)
+        public byte[]? GetBlock([NotNull] string type)
         {
             var index = types.IndexOf(StringToTypeID(type));
             return index == -1 ? null : blocks[index];
@@ -122,7 +122,7 @@ namespace ZLR.IFF
             for (var i = 0; i < sortedBlocks.Length; i++)
                 sortedBlocks[i] = i;
 
-            Array.Sort(sortedBlocks, (a, b) => CompareBlocks(types[a], types[b], blocks[a], blocks[b], a, b));
+            Array.Sort(sortedBlocks, (a, b) => CompareBlocks((types[a], blocks[a], a), (types[b], blocks[b], b)));
 
             foreach (var i in sortedBlocks)
             {
@@ -144,7 +144,7 @@ namespace ZLR.IFF
                 stream.WriteByte((byte)length);
 
                 // block data
-                await stream.WriteAsync(block, 0, length, cancellationToken);
+                await stream.WriteAsync(block, 0, length, cancellationToken).ConfigureAwait(false);
 
                 // padding
                 if (length % 2 == 1)
@@ -152,18 +152,12 @@ namespace ZLR.IFF
             }
         }
 
-        protected virtual int CompareBlocks(uint type1, uint type2, byte[] data1, byte[] data2,
-            int index1, int index2)
-        {
-            // no sorting by default
-            return index1.CompareTo(index2);
-        }
+        // no sorting by default
+        protected virtual int CompareBlocks((uint type, byte[] data, int index) block1,
+            (uint type, byte[] data, int index) block2) => block1.index.CompareTo(block2.index);
 
-        protected virtual bool WantBlock(uint type)
-        {
-            // load all blocks by default
-            return true;
-        }
+        // load all blocks by default
+        protected virtual bool WantBlock(uint type) => true;
 
         protected void ReadFromStream([NotNull] Stream stream)
         {
@@ -181,22 +175,22 @@ namespace ZLR.IFF
 
             // file length
             var fileLength = (br.ReadByte() << 24) + (br.ReadByte() << 16) +
-                (br.ReadByte() << 8) + br.ReadByte();
+                             (br.ReadByte() << 8) + br.ReadByte();
 
             fileLength += 8;
 
             // FORM sub-type
             formSubType = (uint)((br.ReadByte() << 24) + (br.ReadByte() << 16) +
-                (br.ReadByte() << 8) + br.ReadByte());
+                                 (br.ReadByte() << 8) + br.ReadByte());
 
             // blocks
             while (stream.Position < fileLength)
             {
                 var typeID = (uint)((br.ReadByte() << 24) + (br.ReadByte() << 16) +
-                    (br.ReadByte() << 8) + br.ReadByte());
+                                    (br.ReadByte() << 8) + br.ReadByte());
 
                 var blockLength = (br.ReadByte() << 24) + (br.ReadByte() << 16) +
-                    (br.ReadByte() << 8) + br.ReadByte();
+                                  (br.ReadByte() << 8) + br.ReadByte();
 
                 if (WantBlock(typeID))
                 {
@@ -265,21 +259,17 @@ namespace ZLR.IFF
             }
         }
 
-        protected override bool WantBlock(uint type)
-        {
-            // only load the resource index
-            return type == RIDX_TYPE_ID;
-        }
+        // only load the resource index
+        protected override bool WantBlock(uint type) => type == RIDX_TYPE_ID;
 
-        protected override int CompareBlocks(uint type1, uint type2, byte[] data1, byte[] data2,
-            int index1, int index2)
+        protected override int CompareBlocks((uint type, byte[] data, int index) block1, (uint type, byte[] data, int index) block2)
         {
             // make sure RIdx is first, but leave other blocks in order
-            if (type1 == RIDX_TYPE_ID && type2 != RIDX_TYPE_ID)
+            if (block1.type == RIDX_TYPE_ID && block2.type != RIDX_TYPE_ID)
                 return -1;
-            if (type2 == RIDX_TYPE_ID && type1 != RIDX_TYPE_ID)
+            if (block2.type == RIDX_TYPE_ID && block1.type != RIDX_TYPE_ID)
                 return 1;
-            return index1.CompareTo(index2);
+            return block1.index.CompareTo(block2.index);
         }
 
         [NotNull]
@@ -292,6 +282,16 @@ namespace ZLR.IFF
                 throw new Exception("Block ran past end of file");
             return result;
         }
+
+#if HAVE_SPAN
+        private void ReadSpan(uint offset, Span<byte> span)
+        {
+            stream.Seek(offset, SeekOrigin.Begin);
+            var actual = stream.Read(span);
+            if (actual < span.Length)
+                throw new Exception("Block ran past end of file");
+        }
+#endif
 
         private Resource? FindResource(uint usage, uint? num)
         {
@@ -313,13 +313,23 @@ namespace ZLR.IFF
         /// <returns>A four-character string identifying the story file type,
         /// or null if no story resource is present.</returns>
         [CanBeNull]
-        public string GetStoryType()
+        public string? GetStoryType()
         {
             var storyRes = FindResource(EXEC_USAGE_ID, null);
 
             if (storyRes == null)
                 return null;
 
+#if HAVE_SPAN
+            return string.Create<object?>(4, null, (span, _) =>
+            {
+                Span<byte> typeBuffer = stackalloc byte[4];
+                ReadSpan(storyRes.Value.Offset, typeBuffer);
+                for (int i = 0; i < 4; i++)
+                    span[i] = (char)typeBuffer[i];
+            });
+#endif
+#if !HAVE_SPAN
             var type = ReadBlock(storyRes.Value.Offset, 4);
             var sb = new StringBuilder(4);
             sb.Append((char)type[0]);
@@ -327,20 +337,21 @@ namespace ZLR.IFF
             sb.Append((char)type[2]);
             sb.Append((char)type[3]);
             return sb.ToString();
+#endif
         }
 
         /// <summary>
         /// Obtains a stream for the story file data in this Blorb.
         /// </summary>
+        /// <exception cref="InvalidOperationException">No story resource is present.</exception>
         /// <returns>A stream containing the story file data, or null if no
         /// story resource is present.</returns>
-        [CanBeNull]
         public Stream GetStoryStream()
         {
             var storyRes = FindResource(EXEC_USAGE_ID, null);
 
             if (storyRes == null)
-                return null;
+                throw new InvalidOperationException("No story resource is present");
 
             var lenBytes = ReadBlock(storyRes.Value.Offset + 4, 4);
             var len = (uint)((lenBytes[0] << 24) + (lenBytes[1] << 16) + (lenBytes[2] << 8) + lenBytes[3]);

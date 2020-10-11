@@ -9,7 +9,6 @@ namespace TestSuite
 {
     abstract class TestCaseIO : IZMachineIO
     {
-        protected readonly Queue<string> inputBuffer = new Queue<string>(); 
         protected readonly StringBuilder outputBuffer = new StringBuilder();
         protected MemoryStream saveData;
 
@@ -210,14 +209,14 @@ namespace TestSuite
 
         public override ReadLineResult ReadLine(string initial, int time, TimedInputCallback callback, byte[] terminatingKeys, bool allowDebuggerBreak)
         {
-            return ReadLineResult.LineEntered(inputBuffer.Dequeue());
+            // if we get here, the command file has been exhausted
+            throw new InvalidOperationException("No more test case input");
         }
 
         public override short ReadKey(int time, TimedInputCallback callback, CharTranslator translator)
         {
-            string inputLine;
-            do { inputLine = inputBuffer.Dequeue(); } while (inputLine.Length == 0);
-            return translator(inputLine[0]);
+            // if we get here, the command file has been exhausted
+            throw new InvalidOperationException("No more test case input");
         }
 
         public override void PutChar(char ch)

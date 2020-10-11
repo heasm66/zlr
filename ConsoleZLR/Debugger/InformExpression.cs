@@ -57,7 +57,7 @@ namespace ZLR.Interfaces.SystemConsole.Debugger
             public override Value VisitCharLiteral([JetBrains.Annotations.NotNull] [NotNull] InformExpressionParser.CharLiteralContext context)
             {
                 var text = context.Char_literal().GetText();
-                return Value.Number(text[text.Length - 2]);
+                return Value.Number(text[^2]);
             }
 
             public override Value VisitIdentifier([JetBrains.Annotations.NotNull] [NotNull] InformExpressionParser.IdentifierContext context)
@@ -392,17 +392,12 @@ namespace ZLR.Interfaces.SystemConsole.Debugger
 
                 var propLen = dbg.GetPropLength(propAddr);
 
-                switch (propLen)
+                return propLen switch
                 {
-                    case 1:
-                        return Value.ByteAtAddress(propAddr);
-
-                    case 2:
-                        return Value.WordAtAddress(propAddr);
-
-                    default:
-                        throw new DebuggerException("Reading property with length " + propLen);
-                }
+                    1 => Value.ByteAtAddress(propAddr),
+                    2 => Value.WordAtAddress(propAddr),
+                    _ => throw new DebuggerException("Reading property with length " + propLen),
+                };
             }
 
             public override Value VisitMemberAddress([JetBrains.Annotations.NotNull] [NotNull] InformExpressionParser.MemberAddressContext context)
@@ -443,20 +438,13 @@ namespace ZLR.Interfaces.SystemConsole.Debugger
 
             public Value Resolve(Value v)
             {
-                switch (v.Type)
+                return v.Type switch
                 {
-                    case ValueType.Variable:
-                        return Value.Number(dbg.ReadVariable((byte)v.Content));
-
-                    case ValueType.ByteAtAddress:
-                        return Value.Number(dbg.ReadByte(v.Content));
-
-                    case ValueType.WordAtAddress:
-                        return Value.Number(dbg.ReadWord(v.Content));
-
-                    default:
-                        return v;
-                }
+                    ValueType.Variable => Value.Number(dbg.ReadVariable((byte)v.Content)),
+                    ValueType.ByteAtAddress => Value.Number(dbg.ReadByte(v.Content)),
+                    ValueType.WordAtAddress => Value.Number(dbg.ReadWord(v.Content)),
+                    _ => v,
+                };
             }
         }
     }

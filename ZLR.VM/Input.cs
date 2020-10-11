@@ -30,7 +30,7 @@ namespace ZLR.VM
             }
 
             byte terminator;
-            string str;
+            string? str;
 
             if (zversion <= 3)
                 ShowStatusImpl();
@@ -87,7 +87,7 @@ namespace ZLR.VM
                 }
                 else
                 {
-                    (str, terminator) = await cmdRdr.ReadLineAsync();
+                    (str, terminator) = await cmdRdr.ReadLineAsync().ConfigureAwait(false);
                     System.Diagnostics.Debug.Assert(str != null, "str != null");
                     // ReSharper disable once AssignNullToNotNullAttribute
                     io.PutCommand(terminator == 13 ? str + "\n" : str);
@@ -134,7 +134,9 @@ namespace ZLR.VM
                 ct => io.ReadLineAsync(initial, terminatingKeys, allowDebuggerBreak, ct), cancellationToken);
         }
 
+
         // ReSharper disable once UnusedParameter.Global
+        [System.Diagnostics.CodeAnalysis.SuppressMessage("Style", "IDE0060:Remove unused parameter", Justification = "See TODO")]
         internal async Task ReadCharImplAsync(ushort time, ushort routine, int retryPC, int nextPC, int resultStorage)
         {
             // TODO: support debugger break in read_char
@@ -157,7 +159,7 @@ namespace ZLR.VM
                 }
                 else
                 {
-                    result = await cmdRdr.ReadKeyAsync();
+                    result = await cmdRdr.ReadKeyAsync().ConfigureAwait(false);
                 }
 
                 cmdWtr?.WriteKey((byte)result);
@@ -185,7 +187,7 @@ namespace ZLR.VM
 
         [ItemNotNull]
         private async Task<T> TimedReadAsync<T>(ushort time, ushort routine,
-            [NotNull] [InstantHandle] Func<CancellationToken, Task<T>> interruptibleReader,
+            [NotNull, InstantHandle] Func<CancellationToken, Task<T>> interruptibleReader,
             CancellationToken cancellationToken)
         {
             System.Diagnostics.Debug.Assert(time != 0);
@@ -201,7 +203,7 @@ namespace ZLR.VM
             {
                 cancellationToken.ThrowIfCancellationRequested();
 
-                var completed = await Task.WhenAny(readTask, delayTask);
+                var completed = await Task.WhenAny(readTask, delayTask).ConfigureAwait(false);
 
                 if (completed == readTask)
                 {
@@ -215,7 +217,7 @@ namespace ZLR.VM
                 // fault or cancel if necessary, then start a new timer before calling the routine
                 await completed;
                 delayTask = Task.Delay(time * 100, cts.Token);
-                await HandleInputTimerAsync(routine);
+                await HandleInputTimerAsync(routine).ConfigureAwait(false);
             }
         }
 
@@ -223,7 +225,7 @@ namespace ZLR.VM
         {
             EnterFunctionImpl((short)routine, null, 0, pc);
 
-            await JitLoopAsync();
+            await JitLoopAsync().ConfigureAwait(false);
 
             var result = stack.Pop();
             return result != 0;
@@ -257,6 +259,58 @@ namespace ZLR.VM
             return ch == 9 || ch == 32;
         }
 
+#if HAVE_SPAN
+        private void SplitTokens(ReadOnlySpan<byte> buffer, ushort userDict, Func<Token, bool> tokenHandler)
+        {
+            ReadOnlySpan<byte> seps;
+
+            if (userDict == 0)
+            {
+                seps = wordSeparators;
+            }
+            else
+            {
+                var n = GetByte(userDict);
+                seps = GetSpan(userDict + 1, n);
+            }
+
+            var i = 0;
+            do
+            {
+                // skip whitespace
+                while (i < buffer.Length && IsTokenSpace(buffer[i]))
+                    i++;
+
+                if (i >= buffer.Length)
+                    break;
+
+                // found a separator?
+                if (seps.IndexOf(buffer[i]) >= 0)
+                {
+                    if (!tokenHandler(new Token((byte)i, 1)))
+                        return;
+
+                    i++;
+                }
+                else
+                {
+                    var start = (byte)i;
+
+                    // find the end of the word
+                    while (i < buffer.Length && !IsTokenSpace(buffer[i]) &&
+                           seps.IndexOf(buffer[i]) == -1)
+                    {
+                        i++;
+                    }
+
+                    // add it to the list
+                    if (!tokenHandler(new Token(start, (byte)(i - start))))
+                        return;
+                }
+            } while (i < buffer.Length);
+        }
+#endif
+#if !HAVE_SPAN
         [NotNull]
         private List<Token> SplitTokens([NotNull] byte[] buffer, ushort userDict)
         {
@@ -296,7 +350,7 @@ namespace ZLR.VM
 
                     // find the end of the word
                     while (i < buffer.Length && !IsTokenSpace(buffer[i]) &&
-                            Array.IndexOf(seps, buffer[i]) == -1)
+                           Array.IndexOf(seps, buffer[i]) == -1)
                     {
                         i++;
                     }
@@ -308,6 +362,7 @@ namespace ZLR.VM
 
             return result;
         }
+#endif
 
         internal void Tokenize(ushort buffer, ushort parse, ushort userDict, bool skipUnrecognized)
         {
@@ -337,6 +392,23 @@ namespace ZLR.VM
 
             var myBuffer = new byte[bufLen];
             GetBytes(buffer + tokenOffset, bufLen, myBuffer, 0);
+
+#if HAVE_SPAN
+            SplitTokens(myBuffer, userDict, tok =>
+            {
+                var word = LookUpWord(userDict, myBuffer, tok.StartPos, tok.Length);
+                if (word == 0 && skipUnrecognized)
+                    return true;
+
+                SetWord(parse + 2 + 4 * count, (short)word);
+                SetByte(parse + 2 + 4 * count + 2, tok.Length);
+                SetByte(parse + 2 + 4 * count + 3, (byte)(tokenOffset + tok.StartPos));
+                count++;
+
+                return count != max;
+            });
+#endif
+#if !HAVE_SPAN
             var tokens = SplitTokens(myBuffer, userDict);
 
             foreach (var tok in tokens)
@@ -353,10 +425,77 @@ namespace ZLR.VM
                 if (count == max)
                     break;
             }
-
+#endif
             SetByte(parse + 1, count);
         }
 
+#if HAVE_SPAN
+        private ushort LookUpWord(int userDict, byte[] buffer, int pos, int length)
+        {
+            int dictStart;
+
+            Span<byte> word = stackalloc byte[DictWordSize * 2 / 3];
+            EncodeText(buffer.AsSpan(pos, length), word);
+
+            if (userDict != 0)
+            {
+                var n = GetByte(userDict);
+                dictStart = userDict + 1 + n;
+            }
+            else
+            {
+                dictStart = dictionaryTable + 1 + wordSeparators.Length;
+            }
+
+            var entryLength = GetByte(dictStart++);
+
+            int entries;
+            if (userDict == 0)
+                entries = (ushort)GetWord(dictStart);
+            else
+                entries = GetWord(dictStart);
+            dictStart += 2;
+
+            var dictionary = GetSpan(dictStart, Math.Abs(entries) * entryLength);
+
+            if (entries < 0)
+            {
+                // use linear search for unsorted user dictionary
+                for (var i = 0; i < entries; i++)
+                {
+                    var offset = i * entryLength;
+                    var candidate = dictionary.Slice(offset, word.Length);
+                    if (word.SequenceEqual(candidate))
+                        return (ushort)(dictStart + offset);
+                }
+            }
+            else
+            {
+                // use binary search
+                int start = 0, end = entries;
+                while (start < end)
+                {
+                    var mid = (start + end) / 2;
+                    var offset = mid * entryLength;
+                    var candidate = dictionary.Slice(offset, word.Length);
+                    switch (word.SequenceCompareTo(candidate))
+                    {
+                        case 0:
+                            return (ushort)(dictStart + offset);
+                        case int n when n < 0:
+                            end = mid;
+                            break;
+                        default:
+                            start = mid + 1;
+                            break;
+                    }
+                }
+            }
+
+            return 0;
+        }
+#endif
+#if !HAVE_SPAN
         private ushort LookUpWord(int userDict, byte[] buffer, int pos, int length)
         {
             int dictStart;
@@ -424,18 +563,87 @@ namespace ZLR.VM
 
             return 0;
         }
+#endif
 
+#if HAVE_SPAN
+        /// <summary>
+        /// Encodes a section of text, truncating or padding the output to a fixed size.
+        /// </summary>
+        /// <param name="input">The buffer containing the plain text.</param>
+        /// <param name="output">The buffer in which to write the encoded text.</param>
+        private void EncodeText(ReadOnlySpan<byte> input, Span<byte> output)
+        {
+            if (output.Length % 2 != 0)
+                throw new ArgumentException("Output size must be a multiple of 2 bytes");
+
+            var numZchars = output.Length * 3 / 2;
+            Span<byte> zchars = stackalloc byte[numZchars + 3];
+
+            var j = 0;
+
+            for (var i = 0; i < input.Length && j < numZchars; i++)
+            {
+                var zc = input[i];
+                var ch = CharFromZSCII(zc);
+
+                if (ch == ' ')
+                {
+                    zchars[j++] = 0;
+                }
+                else
+                {
+                    int alpha;
+                    if ((alpha = Array.IndexOf(alphabet0, ch)) >= 0)
+                    {
+                        zchars[j++] = (byte)(alpha + 6);
+                    }
+                    else if ((alpha = Array.IndexOf(alphabet1, ch)) >= 0)
+                    {
+                        zchars[j++] = 4;
+                        zchars[j++] = (byte)(alpha + 6);
+                    }
+                    else if ((alpha = Array.IndexOf(alphabet2, ch)) >= 0)
+                    {
+                        zchars[j++] = 5;
+                        zchars[j++] = (byte)(alpha + 6);
+                    }
+                    else
+                    {
+                        zchars[j++] = 5;
+                        zchars[j++] = 6;
+                        zchars[j++] = (byte)(zc >> 5);
+                        zchars[j++] = (byte)(zc & 31);
+                    }
+                }
+            }
+
+            // pad up to the fixed size
+            if (j < zchars.Length)
+                zchars.Slice(j).Fill(5);
+
+            int zi = 0, ri = 0;
+            while (ri < output.Length)
+            {
+                output[ri] = (byte)((zchars[zi] << 2) | (zchars[zi + 1] >> 3));
+                output[ri + 1] = (byte)((zchars[zi + 1] << 5) | zchars[zi + 2]);
+                ri += 2;
+                zi += 3;
+            }
+
+            output[^2] |= 128;
+        }
+#endif
+#if !HAVE_SPAN
         /// <summary>
         /// Encodes a section of text, optionally truncating or padding the output to a fixed size.
         /// </summary>
-        /// <param name="input">The buffer containing the plain text.</param>
         /// <param name="start">The index within <paramref name="input"/> where the
         /// plain text starts.</param>
         /// <param name="length">The length of the plain text.</param>
         /// <param name="numZchars">The number of 5-bit characters that the output should be
         /// truncated or padded to, which must be a multiple of 3; or 0 to allow variable size
         /// output (padded up to a multiple of 2 bytes, if necessary).</param>
-        /// <returns>The encoded text, with th.</returns>
+        /// <returns>The encoded text.</returns>
         [NotNull]
         private byte[] EncodeText(byte[] input, int start, int length, int numZchars)
         {
@@ -516,6 +724,7 @@ namespace ZLR.VM
             result[resultBytes - 2] |= 128;
             return result;
         }
+#endif
 
         internal async Task SetInputStreamAsync(short num, int nextPC)
         {
@@ -530,7 +739,7 @@ namespace ZLR.VM
                     break;
 
                 case 1:
-                    var cmdStream = await io.OpenCommandFileAsync(false, interruptToken);
+                    var cmdStream = await io.OpenCommandFileAsync(false, interruptToken).ConfigureAwait(false);
                     if (cmdStream != null)
                     {
                         cmdRdr?.Dispose();
@@ -610,7 +819,7 @@ namespace ZLR.VM
         {
             private StreamReader rdr;
 
-            public CommandFileReader([NotNull] Stream stream)
+            public CommandFileReader(Stream stream)
             {
                 rdr = new StreamReader(stream);
             }
@@ -620,24 +829,23 @@ namespace ZLR.VM
                 if (rdr != null)
                 {
                     rdr.Close();
-                    rdr = null;
+                    rdr = null!;
                 }
             }
 
             public bool EOF => rdr.EndOfStream;
 
-            [NotNull]
-            public async Task<(string line, byte terminator)> ReadLineAsync()
+            public async Task<(string? line, byte terminator)> ReadLineAsync()
             {
                 byte terminator = 13;
-                var line = await rdr.ReadLineAsync();
+                var line = await rdr.ReadLineAsync().ConfigureAwait(false);
 
                 if (line != null && line.EndsWith("]"))
                 {
                     var idx = line.LastIndexOf('[');
                     if (idx >= 0)
                     {
-                        var key = line.Substring(idx + 1, line.Length - idx - 2);
+                        var key = line[(idx + 1)..^1];
                         if (int.TryParse(key, out var keyCode))
                         {
                             line = line.Substring(0, idx);
@@ -649,10 +857,9 @@ namespace ZLR.VM
                 return (line, terminator);
             }
 
-            [NotNull]
             public async Task<byte> ReadKeyAsync()
             {
-                var line = await rdr.ReadLineAsync();
+                var line = await rdr.ReadLineAsync().ConfigureAwait(false);
 
                 if (string.IsNullOrEmpty(line))
                     return 13;
@@ -662,7 +869,7 @@ namespace ZLR.VM
                     var idx = line.IndexOf(']');
                     if (idx >= 0)
                     {
-                        var key = line.Substring(1, idx - 1);
+                        var key = line[1..idx];
                         if (int.TryParse(key, out var keyCode))
                             return (byte)keyCode;
                     }
@@ -686,7 +893,7 @@ namespace ZLR.VM
                 if (wtr != null)
                 {
                     wtr.Close();
-                    wtr = null;
+                    wtr = null!;
                 }
             }
 
@@ -695,7 +902,7 @@ namespace ZLR.VM
                 await wtr.WriteLineAsync(
                     terminator != 13 || text.EndsWith("]")
                         ? $"{text}[{terminator}]"
-                        : text);
+                        : text).ConfigureAwait(false);
             }
 
             public void WriteKey(byte key)

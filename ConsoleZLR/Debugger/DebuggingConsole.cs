@@ -4,12 +4,13 @@
 using System;
 using System.Collections.Generic;
 using System.Collections.Immutable;
+using System.Diagnostics.CodeAnalysis;
 using System.IO;
 using System.Linq;
 using System.Text;
 using System.Threading;
 using System.Threading.Tasks;
-using JetBrains.Annotations;
+//using JetBrains.Annotations;
 using Nito.AsyncEx;
 using ZLR.VM;
 using ZLR.VM.Debugging;
@@ -18,15 +19,17 @@ namespace ZLR.Interfaces.SystemConsole.Debugger
 {
     public sealed class DebuggingConsole : IDisposable
     {
-        [NotNull] private readonly ZMachine zm;
+        private readonly ZMachine zm;
 
-        [CanBeNull] private readonly IDisposable[] disposables;
+        private readonly DebugInfo? debugInfo;
 
-        [NotNull] private readonly TextReader reader;
+        private readonly IDisposable?[]? disposables;
 
-        [NotNull] private readonly TextWriter writer;
+        private readonly TextReader reader;
 
-        [NotNull, ItemNotNull] private readonly string[] sourcePath;
+        private readonly TextWriter writer;
+
+        private readonly string[] sourcePath;
 
         private readonly bool sharingIO;
 
@@ -39,18 +42,19 @@ namespace ZLR.Interfaces.SystemConsole.Debugger
 
         private ActiveState active;
 
-        private IDebugger dbg;
-        private SourceCache src;
+        private IDebugger dbg = null!;
+        private SourceCache src = null!;
+        private ValueFormatter valueFormatter = null!;
+
         private bool tracingCalls;
-        private string lastCmd;
-        private ValueFormatter valueFormatter;
+        private string? lastCmd;
 
         private static readonly char[] COMMAND_DELIM = { ' ' };
 
         public DebuggingConsole(
-            [NotNull] ZMachine zm,
-            [NotNull] IAsyncZMachineIO io,
-            [ItemNotNull, NotNull] IEnumerable<string> sourcePath)
+            ZMachine zm,
+            IAsyncZMachineIO io,
+            IEnumerable<string> sourcePath)
             : this(zm, new ZIOReader(io), new ZIOWriter(io), sourcePath)
         {
             sharingIO = true;
@@ -61,27 +65,28 @@ namespace ZLR.Interfaces.SystemConsole.Debugger
         }
 
         public DebuggingConsole(
-            [NotNull] ZMachine zm,
-            [NotNull] Stream stream,
-            [ItemNotNull, NotNull] IEnumerable<string> sourcePath)
+            ZMachine zm,
+            Stream stream,
+            IEnumerable<string> sourcePath)
             : this(zm, stream, Encoding.UTF8, sourcePath)
         {
         }
 
         public DebuggingConsole(
-            [NotNull] ZMachine zm,
-            [NotNull] Stream stream,
-            [NotNull] Encoding encoding,
-            [ItemNotNull, NotNull] IEnumerable<string> sourcePath)
+            ZMachine zm,
+            Stream stream,
+            Encoding encoding,
+            IEnumerable<string> sourcePath)
             : this(zm, new StreamReader(stream, encoding), new StreamWriter(stream, encoding), sourcePath)
         {
             disposables = new IDisposable[] { stream };
         }
 
-        private DebuggingConsole([NotNull] ZMachine zm, [NotNull] TextReader reader, [NotNull] TextWriter writer,
-            [NotNull, ItemNotNull] IEnumerable<string> sourcePath)
+        private DebuggingConsole(ZMachine zm, TextReader reader, TextWriter writer,
+            IEnumerable<string> sourcePath)
         {
             this.zm = zm;
+            this.debugInfo = zm.DebugInfo;
             this.reader = reader;
             this.writer = writer;
             this.sourcePath = sourcePath.ToArray();
@@ -93,7 +98,7 @@ namespace ZLR.Interfaces.SystemConsole.Debugger
             System.Diagnostics.Debugger.Launch();
         }
 
-        [System.Diagnostics.Conditional("TRACE_DEBUGGER"), StringFormatMethod("format")]
+        [System.Diagnostics.Conditional("TRACE_DEBUGGER"), JetBrains.Annotations.StringFormatMethod("format")]
         private static void DebugWriteLine([NotNull] string format, [NotNull] params object[] args)
         {
             System.Diagnostics.Debug.Write(
@@ -137,6 +142,10 @@ namespace ZLR.Interfaces.SystemConsole.Debugger
                 await writer.FlushAsync().ConfigureAwait(false);
 
                 var command = await reader.ReadLineAsync().ConfigureAwait(false);
+
+                if (command is null)
+                    break;
+
                 DebugWriteLine("Read command: {0}", command);
 
                 await HandleCommandAsync(command).ConfigureAwait(false);
@@ -167,6 +176,10 @@ namespace ZLR.Interfaces.SystemConsole.Debugger
                     while (this.Active)
                     {
                         var command = await reader.ReadLineAsync().WaitAsync(ct).ConfigureAwait(false);
+
+                        if (command is null)
+                            break;
+
                         DebugWriteLine("Read command: {0}", command);
 
                         try
@@ -262,21 +275,21 @@ namespace ZLR.Interfaces.SystemConsole.Debugger
         {
             dbg.Events.DebuggerStateChanged -= DebuggerStateChangedEventHandler;
 
-            dbg = null;
-            src = null;
-            valueFormatter = null;
+            dbg = null!;
+            src = null!;
+            valueFormatter = null!;
         }
 
-        private void TraceCallsEventHandler(object sender, [NotNull] EnterFunctionEventArgs e)
+        private void TraceCallsEventHandler(object? sender, [NotNull] EnterFunctionEventArgs e)
         {
             writer.Write("[ ");
 
             for (var i = 0; i < e.CallDepth; i++)
                 writer.Write(". ");
 
-            RoutineInfo rtn;
-            if (zm.DebugInfo != null &&
-                (rtn = zm.DebugInfo.FindRoutine(dbg.UnpackAddress(e.PackedAddress, false))) != null)
+            RoutineInfo? rtn;
+            if (debugInfo != null &&
+                (rtn = debugInfo.FindRoutine(dbg.UnpackAddress(e.PackedAddress, false))) != null)
             {
                 writer.Write(rtn.Name);
             }
@@ -302,7 +315,7 @@ namespace ZLR.Interfaces.SystemConsole.Debugger
 
         private DebuggerState? lastState = DebuggerState.PausedOnEntry;
 
-        private void DebuggerStateChangedEventHandler(object sender, [NotNull] DebuggerStateEventArgs e)
+        private void DebuggerStateChangedEventHandler(object? sender, DebuggerStateEventArgs e)
         {
             // re-report the pause reason the next time we pause after running or stepping
             if (e.State == DebuggerState.Running)
@@ -345,14 +358,14 @@ namespace ZLR.Interfaces.SystemConsole.Debugger
 
         private void ShowCurrentPC()
         {
-            RoutineInfo rtn;
-            if (zm.DebugInfo != null &&
-                (rtn = zm.DebugInfo.FindRoutine(dbg.CurrentPC)) != null)
+            RoutineInfo? rtn;
+            if (debugInfo != null &&
+                (rtn = debugInfo.FindRoutine(dbg.CurrentPC)) != null)
             {
                 writer.WriteLine(
                     $"${dbg.CurrentPC:x5} ({rtn.Name}+{dbg.CurrentPC - rtn.CodeStart})   {dbg.Disassemble(dbg.CurrentPC)}");
 
-                var li = zm.DebugInfo.FindLine(dbg.CurrentPC);
+                var li = debugInfo.FindLine(dbg.CurrentPC);
                 if (li != null)
                 {
                     writer.WriteLine($"{li.Value.File}:{li.Value.Line}: {src.Load(li.Value)}");
@@ -382,7 +395,7 @@ namespace ZLR.Interfaces.SystemConsole.Debugger
             {
                 if (lastCmd == null)
                 {
-                    writer.WriteLine("No last command.");
+                    await writer.WriteLineAsync("No last command.");
                     return;
                 }
 
@@ -487,33 +500,33 @@ namespace ZLR.Interfaces.SystemConsole.Debugger
 
                     case "q":
                     case "quit":
-                        writer.WriteLine("Goodbye.");
+                        await writer.WriteLineAsync("Goodbye.");
                         active = ActiveState.Finished;
                         return;
 
                     case "h":
                     case "help":
                     case "?":
-                        writer.WriteLine("Commands:");
-                        writer.WriteLine("reset, (s)tep, (o)ver, stepline (sl), overline (ol), up, (r)un,");
-                        writer.WriteLine("(b)reak, (c)lear, breakpoints (bps), tracecalls (tc)");
-                        writer.WriteLine("backtrace (bt), (l)ocals, (g)lobals");
-                        writer.WriteLine("(p)rint, showobj (so), tree");
-                        writer.WriteLine("(q)uit");
+                        await writer.WriteLineAsync("Commands:");
+                        await writer.WriteLineAsync("reset, (s)tep, (o)ver, stepline (sl), overline (ol), up, (r)un,");
+                        await writer.WriteLineAsync("(b)reak, (c)lear, breakpoints (bps), tracecalls (tc)");
+                        await writer.WriteLineAsync("backtrace (bt), (l)ocals, (g)lobals");
+                        await writer.WriteLineAsync("(p)rint, showobj (so), tree");
+                        await writer.WriteLineAsync("(q)uit");
 
                         // TODO: mention interrupts? or ask IO to explain debugger break key?
                         break;
 
                     default:
-                        writer.WriteLine("Unrecognized debugger command.");
-                        writer.WriteLine();
+                        await writer.WriteLineAsync("Unrecognized debugger command.");
+                        await writer.WriteLineAsync();
                         goto case "help";
 
                 }
             }
             catch (DebuggerException ex)
             {
-                writer.WriteLine(ex.ToString());
+                await writer.WriteLineAsync(ex.ToString());
             }
         }
 
@@ -524,7 +537,7 @@ namespace ZLR.Interfaces.SystemConsole.Debugger
             return ZilExpression.Evaluate(zm, dbg, exprText, wantLvalue);
         }
 
-        private void DoPrint([ItemNotNull, NotNull] string[] parts)
+        private void DoPrint(string[] parts)
         {
             if (parts.Length < 2)
             {
@@ -536,7 +549,7 @@ namespace ZLR.Interfaces.SystemConsole.Debugger
             writer.WriteLine(valueFormatter.Format(value));
         }
 
-        private void DoShowObject([ItemNotNull, NotNull] string[] parts)
+        private void DoShowObject(string[] parts)
         {
             if (parts.Length < 2)
             {
@@ -593,7 +606,7 @@ namespace ZLR.Interfaces.SystemConsole.Debugger
             writer.WriteLine("==========");
         }
 
-        private void DoShowTree([ItemNotNull, NotNull] string[] parts)
+        private void DoShowTree(string[] parts)
         {
             var seen = new HashSet<ushort>();
 
@@ -663,8 +676,8 @@ namespace ZLR.Interfaces.SystemConsole.Debugger
 
         private ushort GuessLastObject()
         {
-            if (zm.DebugInfo != null)
-                return (ushort) zm.DebugInfo.Objects.Max(o => o.Number);
+            if (debugInfo != null)
+                return (ushort) debugInfo.Objects.Max(o => o.Number);
 
             // Inform and ZILF both put the property tables immediately after the object table
             var firstPropsTable = dbg.GetObjectPropertyTable(1);
@@ -698,7 +711,7 @@ namespace ZLR.Interfaces.SystemConsole.Debugger
                 {
                     writer.WriteLine($"{cf.Locals.Length} local variable{(cf.Locals.Length == 1 ? "" : "s")}:");
 
-                    var rtn = zm.DebugInfo?.FindRoutine(dbg.CurrentPC);
+                    var rtn = debugInfo?.FindRoutine(dbg.CurrentPC);
                     for (var i = 0; i < cf.Locals.Length; i++)
                     {
                         writer.Write("    ");
@@ -757,8 +770,8 @@ namespace ZLR.Interfaces.SystemConsole.Debugger
                 return (globalsEnd - globalsStart) / 2;
             }
 
-            var globals = zm.DebugInfo != null
-                ? (from p in zm.DebugInfo.Globals
+            var globals = debugInfo != null
+                ? (from p in debugInfo.Globals
                    orderby p.Value
                    select new { num = (byte) (p.Value + 16), name = p.Key })
                 : (from byte i in Enumerable.Range(16, GuessNumberOfGlobals())
@@ -775,13 +788,13 @@ namespace ZLR.Interfaces.SystemConsole.Debugger
         {
             var frames = dbg.GetCallFrames();
             writer.WriteLine($"Call depth: {frames.Length}");
-            writer.WriteLine($"PC = {DumpCodeAddress(zm, dbg.CurrentPC)}");
+            writer.WriteLine($"PC = {DumpCodeAddress(dbg.CurrentPC)}");
 
             for (var i = 0; i < frames.Length; i++)
             {
                 var cf = frames[i];
                 writer.WriteLine("==========");
-                writer.WriteLine($"[{i + 1}] return PC = {DumpCodeAddress(zm, cf.ReturnPC)}");
+                writer.WriteLine($"[{i + 1}] return PC = {DumpCodeAddress(cf.ReturnPC)}");
                 writer.WriteLine(
                     $"called with {cf.ArgCount} arg{(cf.ArgCount == 1 ? "" : "s")}, " +
                     $"stack depth {cf.PrevStackDepth}");
@@ -798,7 +811,7 @@ namespace ZLR.Interfaces.SystemConsole.Debugger
                     }
                     else
                     {
-                        var rtn = zm.DebugInfo?.FindRoutine(cf.ReturnPC);
+                        var rtn = debugInfo?.FindRoutine(cf.ReturnPC);
                         if (rtn != null && cf.ResultStorage - 1 < rtn.Locals.Length)
                         {
                             writer.WriteLine(
@@ -811,11 +824,11 @@ namespace ZLR.Interfaces.SystemConsole.Debugger
                         }
                     }
                 }
-                else if (zm.DebugInfo != null && zm.DebugInfo.Globals.Contains((byte) cf.ResultStorage))
+                else if (debugInfo != null && debugInfo.Globals.Contains((byte) cf.ResultStorage))
                 {
                     writer.WriteLine(
                         $"storing result to global {cf.ResultStorage} " +
-                        $"({zm.DebugInfo.Globals[(byte) (cf.ResultStorage - 16)]})");
+                        $"({debugInfo.Globals[(byte) (cf.ResultStorage - 16)]})");
                 }
                 else
                 {
@@ -855,35 +868,35 @@ namespace ZLR.Interfaces.SystemConsole.Debugger
 
                 Array.Sort(breakpoints);
                 foreach (var bp in breakpoints)
-                    writer.WriteLine($"    {DumpCodeAddress(zm, bp)}");
+                    writer.WriteLine($"    {DumpCodeAddress(bp)}");
             }
         }
 
-        private void DoClearBreakpoint([ItemNotNull, NotNull] string[] parts)
+        private void DoClearBreakpoint(string[] parts)
         {
             int address;
-            if (parts.Length < 2 || (address = ParseAddress(zm, parts[1])) < 0)
+            if (parts.Length < 2 || (address = ParseAddress(parts[1])) < 0)
             {
                 writer.WriteLine("Usage: clear <addrspec>");
             }
             else
             {
                 dbg.SetBreakpoint(address, false);
-                writer.WriteLine($"Cleared breakpoint at {DumpCodeAddress(zm, address)}.");
+                writer.WriteLine($"Cleared breakpoint at {DumpCodeAddress(address)}.");
             }
         }
 
-        private void DoSetBreakpoint([ItemNotNull, NotNull] string[] parts)
+        private void DoSetBreakpoint(string[] parts)
         {
             int address;
-            if (parts.Length < 2 || (address = ParseAddress(zm, parts[1])) < 0)
+            if (parts.Length < 2 || (address = ParseAddress(parts[1])) < 0)
             {
                 writer.WriteLine("Usage: break <addrspec>");
             }
             else
             {
                 dbg.SetBreakpoint(address, true);
-                writer.WriteLine($"Set breakpoint at {DumpCodeAddress(zm, address)}.");
+                writer.WriteLine($"Set breakpoint at {DumpCodeAddress(address)}.");
             }
         }
 
@@ -891,13 +904,13 @@ namespace ZLR.Interfaces.SystemConsole.Debugger
         {
             if (dbg.State.IsPaused())
             {
-                if (zm.DebugInfo == null)
+                if (debugInfo == null)
                 {
-                    writer.WriteLine("No line information.");
+                    await writer.WriteLineAsync("No line information.");
                 }
                 else
                 {
-                    var oldLI = zm.DebugInfo.FindLine(dbg.CurrentPC);
+                    var oldLI = debugInfo.FindLine(dbg.CurrentPC);
                     LineInfo? newLI;
                     do
                     {
@@ -905,7 +918,7 @@ namespace ZLR.Interfaces.SystemConsole.Debugger
                         if (!dbg.State.IsPaused())
                             break;
 
-                        newLI = zm.DebugInfo.FindLine(dbg.CurrentPC);
+                        newLI = debugInfo.FindLine(dbg.CurrentPC);
                     } while (newLI != null && newLI == oldLI);
                 }
             }
@@ -915,13 +928,13 @@ namespace ZLR.Interfaces.SystemConsole.Debugger
         {
             if (dbg.State.IsPaused())
             {
-                if (zm.DebugInfo == null)
+                if (debugInfo == null)
                 {
-                    writer.WriteLine("No line information.");
+                    await writer.WriteLineAsync("No line information.");
                 }
                 else
                 {
-                    var oldLI = zm.DebugInfo.FindLine(dbg.CurrentPC);
+                    var oldLI = debugInfo.FindLine(dbg.CurrentPC);
                     LineInfo? newLI;
                     do
                     {
@@ -929,34 +942,36 @@ namespace ZLR.Interfaces.SystemConsole.Debugger
                         if (!dbg.State.IsPaused())
                             break;
 
-                        newLI = zm.DebugInfo.FindLine(dbg.CurrentPC);
+                        newLI = debugInfo.FindLine(dbg.CurrentPC);
                     } while (newLI != null && newLI == oldLI);
                 }
             }
         }
 
-        [NotNull]
-        private static string DumpCodeAddress([NotNull] ZMachine zm, int address)
+        private string DumpCodeAddress(int address)
         {
             var sb = new StringBuilder();
             sb.AppendFormat("${0:x5}", address);
 
-            var rtn = zm.DebugInfo?.FindRoutine(address);
-            if (rtn != null)
+            if (debugInfo != null)
             {
-                sb.AppendFormat(" ({0}+{1}", rtn.Name, address - rtn.CodeStart);
+                var rtn = debugInfo.FindRoutine(address);
+                if (rtn != null)
+                {
+                    sb.AppendFormat(" ({0}+{1}", rtn.Name, address - rtn.CodeStart);
 
-                var li = zm.DebugInfo.FindLine(address);
-                if (li != null)
-                    sb.AppendFormat(", {0}:{1}", li.Value.File, li.Value.Line);
+                    var li = debugInfo.FindLine(address);
+                    if (li != null)
+                        sb.AppendFormat(", {0}:{1}", li.Value.File, li.Value.Line);
 
-                sb.Append(')');
+                    sb.Append(')');
+                }
             }
 
             return sb.ToString();
         }
 
-        private static int ParseAddress(ZMachine zm, [NotNull] string spec)
+        private int ParseAddress([NotNull] string spec)
         {
             if (string.IsNullOrEmpty(spec)) return -1;
 
@@ -966,14 +981,14 @@ namespace ZLR.Interfaces.SystemConsole.Debugger
             if (char.IsDigit(spec[0]))
                 return Convert.ToInt32(spec);
 
-            if (zm.DebugInfo == null) return -1;
+            if (debugInfo == null) return -1;
 
             var idx = spec.LastIndexOf(':');
             if (idx >= 0)
             {
                 try
                 {
-                    var result = zm.DebugInfo.FindCodeAddress(
+                    var result = debugInfo.FindCodeAddress(
                         spec.Substring(0, idx),
                         Convert.ToInt32(spec.Substring(idx + 1)));
                     if (result >= 0)
@@ -994,7 +1009,7 @@ namespace ZLR.Interfaces.SystemConsole.Debugger
             {
                 try
                 {
-                    rtn = zm.DebugInfo.FindRoutine(spec.Substring(0, idx));
+                    rtn = debugInfo.FindRoutine(spec.Substring(0, idx));
                     if (rtn != null)
                         return rtn.CodeStart + Convert.ToInt32(spec.Substring(idx + 1));
                 }
@@ -1006,7 +1021,7 @@ namespace ZLR.Interfaces.SystemConsole.Debugger
                 }
             }
 
-            rtn = zm.DebugInfo.FindRoutine(spec);
+            rtn = debugInfo.FindRoutine(spec);
             if (rtn != null && rtn.LineOffsets.Length > 0)
                 return rtn.CodeStart + rtn.LineOffsets[0];
 
@@ -1018,15 +1033,14 @@ namespace ZLR.Interfaces.SystemConsole.Debugger
             private const int MAX_SRC_LINE_LEN = 50;
 
             private readonly string[] searchPath;
-            private readonly Dictionary<string, string[]> cache = new Dictionary<string, string[]>();
+            private readonly Dictionary<string, string[]?> cache = new Dictionary<string, string[]?>();
 
             public SourceCache(string[] searchPath)
             {
                 this.searchPath = searchPath;
             }
 
-            [CanBeNull]
-            private string FindFile(string filename)
+            private string? FindFile(string filename)
             {
                 foreach (var p in searchPath)
                 {
@@ -1038,8 +1052,7 @@ namespace ZLR.Interfaces.SystemConsole.Debugger
                 return File.Exists(filename) ? Path.GetFullPath(filename) : null;
             }
 
-            [CanBeNull]
-            public string Load(LineInfo li)
+            public string? Load(LineInfo li)
             {
                 if (!cache.TryGetValue(li.File, out var lines))
                 {
@@ -1090,13 +1103,12 @@ namespace ZLR.Interfaces.SystemConsole.Debugger
                 this.io = io;
             }
 
-            public override string ReadLine()
+            public override string? ReadLine()
             {
                 return ReadLineAsync().GetAwaiter().GetResult();
             }
 
-            [ItemNotNull]
-            public override async Task<string> ReadLineAsync()
+            public override async Task<string?> ReadLineAsync()
             {
                 var result = await io.ReadLineAsync(string.Empty, DummyTerminatingKeys, allowDebuggerBreak: false);
                 if (result.Outcome != ReadOutcome.KeyPressed)
@@ -1160,6 +1172,7 @@ namespace ZLR.Interfaces.SystemConsole.Debugger
 
             public override Encoding Encoding => Encoding.Default;
 
+            [AllowNull]
             public override string NewLine
             {
                 get => "\n";
@@ -1180,16 +1193,19 @@ namespace ZLR.Interfaces.SystemConsole.Debugger
                 io.PutString(new string(buffer, index, count));
             }
 
-            public override void Write([NotNull] string value)
+            public override void Write(string? value)
             {
-                io.PutString(value);
+                if (value != null)
+                    io.PutString(value);
             }
 
             // TODO: async methods, if io.PutStringAsync() etc is implemented
 
-            public override void WriteLine([NotNull] string value)
+            public override void WriteLine(string? value)
             {
-                io.PutString(value);
+                if (value != null)
+                    io.PutString(value);
+
                 io.PutChar('\n');
             }
         }
@@ -1203,7 +1219,7 @@ namespace ZLR.Interfaces.SystemConsole.Debugger
 
             for (var i = 0; i < disposables.Length; i++)
             {
-                disposables[i].Dispose();
+                disposables[i]?.Dispose();
                 disposables[i] = null;
             }
         }

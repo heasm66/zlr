@@ -1,7 +1,7 @@
 ﻿
 Microsoft Visual Studio Solution File, Format Version 12.00
-# Visual Studio 15
-VisualStudioVersion = 15.0.27130.2027
+# Visual Studio Version 16
+VisualStudioVersion = 16.0.30523.141
 MinimumVisualStudioVersion = 10.0.40219.1
 Project("{2150E333-8FDC-42A3-9474-1A3956D46DE8}") = "Gargoyle", "Gargoyle", "{32E3D7B7-0213-41F0-B31E-45A3AFBCAC88}"
 	ProjectSection(SolutionItems) = preProject
@@ -11,7 +11,7 @@ Project("{2150E333-8FDC-42A3-9474-1A3956D46DE8}") = "Gargoyle", "Gargoyle", "{32
 EndProject
 Project("{9A19103F-16F7-4668-BE54-9A1E7A4F7556}") = "ConsoleZLR", "ConsoleZLR\ConsoleZLR.csproj", "{0FF5AD11-1849-4BDF-A2DE-D97586EE95B0}"
 EndProject
-Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Demona", "Demona\Demona.csproj", "{2B837CC9-6BD8-484C-B7F9-75D3F18FD251}"
+Project("{9A19103F-16F7-4668-BE54-9A1E7A4F7556}") = "Demona", "Demona\Demona.csproj", "{2B837CC9-6BD8-484C-B7F9-75D3F18FD251}"
 	ProjectSection(ProjectDependencies) = postProject
 		{63A5651F-ABA6-4857-955E-57B3A8DD75B0} = {63A5651F-ABA6-4857-955E-57B3A8DD75B0}
 	EndProjectSection
@@ -26,7 +26,7 @@ Project("{8BC9CEB8-8B4A-11D0-8D11-00A0C91BC942}") = "libjpeg", "Demona\Gargoyle\
 EndProject
 Project("{8BC9CEB8-8B4A-11D0-8D11-00A0C91BC942}") = "libz", "Demona\Gargoyle\support\zlib-1.2.2\libz.vcxproj", "{EDF8C11C-EAEC-4D4D-A67D-A09528B5E3D7}"
 EndProject
-Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "TestSuite", "TestSuite\TestSuite.csproj", "{57DD165A-D333-4FF9-B9CE-A9FA7A721041}"
+Project("{9A19103F-16F7-4668-BE54-9A1E7A4F7556}") = "TestSuite", "TestSuite\TestSuite.csproj", "{57DD165A-D333-4FF9-B9CE-A9FA7A721041}"
 EndProject
 Project("{930C7802-8A8C-48F9-8165-68863BCCD9DD}") = "DemonaWiX", "DemonaWiX\DemonaWiX.wixproj", "{DA4E0918-5A69-423D-BB20-362FB168BA80}"
 EndProject
@@ -34,6 +34,7 @@ Project("{9A19103F-16F7-4668-BE54-9A1E7A4F7556}") = "ZLR.VM", "ZLR.VM\ZLR.VM.csp
 EndProject
 Project("{2150E333-8FDC-42A3-9474-1A3956D46DE8}") = "Solution Items", "Solution Items", "{8BE8F43B-49A7-4970-8656-FBF2DD6E2EB8}"
 	ProjectSection(SolutionItems) = preProject
+		.editorconfig = .editorconfig
 		ZLR.ruleset = ZLR.ruleset
 	EndProjectSection
 EndProject

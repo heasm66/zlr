@@ -1,6 +1,8 @@
 using System;
 using System.Text;
 using System.IO;
+using System.Runtime.CompilerServices;
+using JetBrains.Annotations;
 
 namespace ZLR.VM
 {
@@ -20,12 +22,12 @@ namespace ZLR.VM
             if (dest == 0)
                 stack.Push(result);
             else if (dest < 16)
-                TopFrame.Locals[dest - 1] = result;
+                TopFrame!.Locals[dest - 1] = result;
             else
                 SetWord(GlobalsOffset + 2 * (dest - 16), result);
         }
 
-        internal void EnterFunctionImpl(short packedAddress, short[] args, int resultStorage, int returnPC)
+        internal void EnterFunctionImpl(short packedAddress, short[]? args, int resultStorage, int returnPC)
         {
             if (debugging)
             {
@@ -130,7 +132,7 @@ namespace ZLR.VM
                 return stack.Peek();
 
             if (num < 16)
-                return this.TopFrame.Locals[num - 1];
+                return this.TopFrame!.Locals[num - 1];
 
             return GetWord(this.GlobalsOffset + 2 * (num - 16));
         }
@@ -145,7 +147,7 @@ namespace ZLR.VM
             }
             else if (dest < 16)
             {
-                var frame = TopFrame;
+                var frame = TopFrame!;
                 result = (short)(frame.Locals[dest - 1] + amount);
                 frame.Locals[dest - 1] = result;
             }
@@ -316,56 +318,86 @@ namespace ZLR.VM
 
         internal short SaveAuxiliary(ushort table, ushort bytes, ushort nameAddr)
         {
-            var nameLen = GetByte(nameAddr);
-            var nameBuffer = new byte[nameLen];
-            GetBytes(nameAddr + 1, nameLen, nameBuffer, 0);
-
-            var name = Encoding.ASCII.GetString(nameBuffer);
+            var name = GetLengthPrefixedZSCIIString(nameAddr);
+#if HAVE_SPAN
+            var span = GetSpan(table, bytes);
+#endif
+#if !HAVE_SPAN
             var data = new byte[bytes];
             GetBytes(table, bytes, data, 0);
+#endif
 
-            using (var stream = io.OpenAuxiliaryFile(name, bytes, true))
+            // TODO: asyncify SaveAuxiliary
+            using var stream = io.OpenAuxiliaryFileAsync(name, bytes, true, interruptToken).GetAwaiter().GetResult();
+            if (stream == null)
+                return 0;
+
+            try
             {
-                if (stream == null)
-                    return 0;
-
-                try
-                {
-                    stream.Write(data, 0, bytes);
-                    return 1;
-                }
-                catch (IOException)
-                {
-                    return 0;
-                }
+#if HAVE_SPAN
+                stream.Write(span);
+#endif
+#if !HAVE_SPAN
+                stream.Write(data, 0, data.Length);
+#endif
+                return 1;
             }
+            catch (IOException)
+            {
+                return 0;
+            }
+        }
+
+        [NotNull]
+        internal string GetLengthPrefixedZSCIIString(ushort address)
+        {
+            var length = GetByte(address);
+
+#if HAVE_SPAN
+            return string.Create<object?>(length, default, (chars, _) =>
+            {
+                var zbytes = GetSpan(address + 1, chars.Length);
+
+                for (var i = 0; i < chars.Length; i++)
+                    chars[i] = CharFromZSCII(zbytes[i]);
+            });
+#endif
+#if !HAVE_SPAN
+            var buffer = new byte[length];
+            GetBytes(address + 1, length, buffer, 0);
+            return Encoding.ASCII.GetString(buffer);
+#endif
         }
 
         internal ushort RestoreAuxiliary(ushort table, ushort bytes, ushort nameAddr)
         {
-            var nameLen = GetByte(nameAddr);
-            var nameBuffer = new byte[nameLen];
-            GetBytes(nameAddr + 1, nameLen, nameBuffer, 0);
-
-            var name = Encoding.ASCII.GetString(nameBuffer);
+            var name = GetLengthPrefixedZSCIIString(nameAddr);
+#if HAVE_SPAN
+            var span = GetSpan(table, bytes);
+#endif
+#if !HAVE_SPAN
             var data = new byte[bytes];
+#endif
 
             // TODO: asyncify RestoreAuxiliary
-            using (var stream = io.OpenAuxiliaryFileAsync(name, bytes, false, interruptToken).GetAwaiter().GetResult())
-            {
-                if (stream == null)
-                    return 0;
+            using var stream = io.OpenAuxiliaryFileAsync(name, bytes, false, interruptToken).GetAwaiter().GetResult();
+            if (stream == null)
+                return 0;
 
-                try
-                {
-                    var count = stream.Read(data, 0, bytes);
-                    SetBytes(table, count, data, 0);
-                    return (ushort)count;
-                }
-                catch (IOException)
-                {
-                    return 0;
-                }
+            try
+            {
+#if HAVE_SPAN
+                var count = stream.Read(span);
+#endif
+#if !HAVE_SPAN
+                var count = stream.Read(data, 0, bytes);
+                SetBytes(table, count, data, 0);
+#endif
+                return (ushort)count;
+            }
+            catch (IOException)
+            {
+                return 0;
             }
         }
 
@@ -388,14 +420,56 @@ namespace ZLR.VM
             }
             else
             {
+#if HAVE_SPAN
+                var span = GetSpan(table, tableLen * entryLen);
+                for (var i = 0; i < tableLen; i++)
+                    if (span[i * entryLen] == x)
+                        return 0x10000 | (table + i * entryLen);
+#endif
+#if !HAVE_SPAN
                 for (var i = 0; i < tableLen; i++)
                     if (GetByte(table + i * entryLen) == x)
                         return 0x10000 | (table + i * entryLen);
+#endif
             }
 
             return 0;
         }
 
+#if HAVE_SPAN
+        internal void CopyTableImpl(ushort first, ushort second, short size)
+        {
+            if (second == 0)
+            {
+                var span = GetSpan(first, size);
+                span.Fill(0);
+                return;
+            }
+
+            var forceForward = false;
+            if (size < 0)
+            {
+                forceForward = true;
+                size = (short) -size;
+            }
+
+            var src = GetSpan(first, size);
+            var dest = GetSpan(second, size);
+
+            if (forceForward)
+            {
+                for (var i = 0; i < dest.Length; i++)
+                    dest[i] = src[i];
+            }
+            else
+            {
+                src.CopyTo(dest);
+            }
+
+            TrapMemory(second, (ushort)size);
+        }
+#endif
+#if !HAVE_SPAN
         internal void CopyTableImpl(ushort first, ushort second, short size)
         {
             if (second == 0)
@@ -408,7 +482,7 @@ namespace ZLR.VM
             if (size < 0)
             {
                 forceForward = true;
-                size = (short) -size;
+                size = (short)-size;
             }
 
             if (first > second || forceForward)
@@ -424,12 +498,19 @@ namespace ZLR.VM
 
             TrapMemory(second, (ushort)size);
         }
+#endif
 #pragma warning restore 0169
 
         internal void ZeroMemory(ushort address, short size)
         {
+#if HAVE_SPAN
+            var span = GetSpan(address, size);
+            span.Fill(0);
+#endif
+#if !HAVE_SPAN
             for (var i = 0; i < size; i++)
                 SetByte(address + i, 0);
+#endif
 
             TrapMemory(address, (ushort)size);
         }
@@ -478,9 +559,22 @@ namespace ZLR.VM
             io.PutTextRectangle(lines);
         }
 
+#if HAVE_SPAN
+        [System.Diagnostics.CodeAnalysis.SuppressMessage("Style", "IDE0060:Remove unused parameter", Justification = "See TODO")]
         internal void EncodeTextImpl(ushort buffer, ushort length, ushort start, ushort dest)
         {
-            // TODO: use Span<byte> in .NET Standard 2.0
+            // BUG: start is ignored
+
+            var src = GetSpan(buffer, length);
+            var destSpan = GetSpan(dest, DictWordSize);
+
+            EncodeText(src, destSpan);
+            TrapMemory(dest, (ushort)this.DictWordSize);
+        }
+#endif
+#if !HAVE_SPAN
+        internal void EncodeTextImpl(ushort buffer, ushort length, ushort start, ushort dest)
+        {
             // BUG: start is ignored
 
             var text = new byte[length];
@@ -491,6 +585,7 @@ namespace ZLR.VM
             for (var i = 0; i < result.Length; i++)
                 SetByte(dest + i, result[i]);
         }
+#endif
 
         private void PadStatusLine(int spacesToLeave)
         {

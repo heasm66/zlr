@@ -9,10 +9,10 @@ namespace ZLR.Interfaces.SystemConsole
     class DumbIO : IZMachineIO
     {
         private readonly bool bottomWinOnly;
-        private string suppliedCommandFile;
+        private string? suppliedCommandFile;
         private short curWin;
 
-        public DumbIO(bool bottomWinOnly, string commandFile)
+        public DumbIO(bool bottomWinOnly, string? commandFile)
         {
             this.bottomWinOnly = bottomWinOnly;
             suppliedCommandFile = commandFile;
@@ -90,25 +90,25 @@ namespace ZLR.Interfaces.SystemConsole
             // not implemented
         }
 
-        public Stream OpenSaveFile(int size)
+        public Stream? OpenSaveFile(int size)
         {
             // not implemented
             return null;
         }
 
-        public Stream OpenRestoreFile()
+        public Stream? OpenRestoreFile()
         {
             // not implemented
             return null;
         }
 
-        public Stream OpenAuxiliaryFile(string name, int size, bool writing)
+        public Stream? OpenAuxiliaryFile(string name, int size, bool writing)
         {
             // not implemented
             return null;
         }
 
-        public Stream OpenCommandFile(bool writing)
+        public Stream? OpenCommandFile(bool writing)
         {
             string filename;
             if (suppliedCommandFile != null)

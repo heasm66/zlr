@@ -112,7 +112,7 @@ namespace ZLR.VM
         public ReadOutcome Outcome { get; }
 
         [CanBeNull]
-        private readonly string text;
+        private readonly string? text;
 
         private readonly byte terminator;
 
@@ -133,19 +133,17 @@ namespace ZLR.VM
         public byte Terminator =>
             Outcome == ReadOutcome.KeyPressed ? terminator : throw new InvalidOperationException();
 
-        private ReadLineResult(ReadOutcome outcome, [CanBeNull] string text, byte terminator)
+        private ReadLineResult(ReadOutcome outcome, [CanBeNull] string? text, byte terminator)
         {
             Outcome = outcome;
             this.text = text;
             this.terminator = terminator;
         }
 
-        public override string ToString()
-        {
-            return this.Outcome == ReadOutcome.KeyPressed
+        public override string ToString() =>
+            this.Outcome == ReadOutcome.KeyPressed
                 ? $"Outcome={this.Outcome}, Terminator={terminator}, Text=\"{text}\""
                 : $"Outcome={this.Outcome}";
-        }
 
         /// <summary>
         /// Input was cancelled by the timer callback.
@@ -163,10 +161,7 @@ namespace ZLR.VM
         /// <param name="text">The entered text.</param>
         /// <param name="terminator">The ZSCII code of the terminating key.</param>
         /// <returns>A structure describing the result of the read.</returns>
-        public static ReadLineResult LineEntered([NotNull] string text, byte terminator = 13)
-        {
-            return new ReadLineResult(ReadOutcome.KeyPressed, text, terminator);
-        }
+        public static ReadLineResult LineEntered([NotNull] string text, byte terminator = 13) => new ReadLineResult(ReadOutcome.KeyPressed, text, terminator);
     }
 
     /// <summary>
@@ -205,7 +200,7 @@ namespace ZLR.VM
         /// it is recommended to err on the side of letting the player edit the text.)</para>
         /// </remarks>
         [Obsolete("Use the async method instead.")]
-        ReadLineResult ReadLine([NotNull] string initial, int time, [NotNull] TimedInputCallback callback, [CanBeNull] byte[] terminatingKeys, bool allowDebuggerBreak);
+        ReadLineResult ReadLine([NotNull] string initial, int time, [NotNull] TimedInputCallback callback, byte[] terminatingKeys, bool allowDebuggerBreak);
         /// <summary>
         /// Reads a single key of input from the player, without echoing it.
         /// </summary>
@@ -249,7 +244,7 @@ namespace ZLR.VM
         /// current cursor position, and leaving the cursor at the end of the last line.
         /// </summary>
         /// <param name="lines">The lines to write.</param>
-        void PutTextRectangle([ItemNotNull] [NotNull] string[] lines);
+        void PutTextRectangle([ItemNotNull, NotNull] string[] lines);
         /// <summary>
         /// Gets or sets a value indicating whether text in the lower (main) window is
         /// buffered for word wrapping.
@@ -301,7 +296,7 @@ namespace ZLR.VM
         /// </remarks>
         [CanBeNull]
         [Obsolete("Use the async method instead.")]
-        Stream OpenSaveFile(int size);
+        Stream? OpenSaveFile(int size);
         /// <summary>
         /// Opens a stream to read a previously saved game file.
         /// </summary>
@@ -313,7 +308,7 @@ namespace ZLR.VM
         /// </remarks>
         [CanBeNull]
         [Obsolete("Use the async method instead.")]
-        Stream OpenRestoreFile();
+        Stream? OpenRestoreFile();
         /// <summary>
         /// Opens a stream to read or write auxiliary game data.
         /// </summary>
@@ -334,7 +329,7 @@ namespace ZLR.VM
         /// </remarks>
         [CanBeNull]
         [Obsolete("Use the async method instead.")]
-        Stream OpenAuxiliaryFile([NotNull] string name, int size, bool writing);
+        Stream? OpenAuxiliaryFile([NotNull] string name, int size, bool writing);
         /// <summary>
         /// Opens a stream to read or write the player's input to a file.
         /// </summary>
@@ -346,7 +341,7 @@ namespace ZLR.VM
         /// select a file or the file couldn't be opened.</returns>
         [CanBeNull]
         [Obsolete("Use the async method instead.")]
-        Stream OpenCommandFile(bool writing);
+        Stream? OpenCommandFile(bool writing);
 
         #endregion
 
@@ -659,7 +654,7 @@ namespace ZLR.VM
         /// it is recommended to err on the side of letting the player edit the text.)</para>
         /// </remarks>
         [NotNull]
-        Task<ReadLineResult> ReadLineAsync([NotNull] string initial, [CanBeNull] byte[] terminatingKeys,
+        Task<ReadLineResult> ReadLineAsync([NotNull] string initial, byte[] terminatingKeys,
             bool allowDebuggerBreak, CancellationToken cancellationToken = default);
 
         /// <summary>
@@ -687,7 +682,7 @@ namespace ZLR.VM
         /// </remarks>
         [NotNull]
         [ItemCanBeNull]
-        Task<Stream> OpenSaveFileAsync(int size, CancellationToken cancellationToken = default);
+        Task<Stream?> OpenSaveFileAsync(int size, CancellationToken cancellationToken = default);
         /// <summary>
         /// Opens a stream to read a previously saved game file.
         /// </summary>
@@ -700,7 +695,7 @@ namespace ZLR.VM
         /// </remarks>
         [NotNull]
         [ItemCanBeNull]
-        Task<Stream> OpenRestoreFileAsync(CancellationToken cancellationToken = default);
+        Task<Stream?> OpenRestoreFileAsync(CancellationToken cancellationToken = default);
         /// <summary>
         /// Opens a stream to read or write auxiliary game data.
         /// </summary>
@@ -722,7 +717,7 @@ namespace ZLR.VM
         /// </remarks>
         [NotNull]
         [ItemCanBeNull]
-        Task<Stream> OpenAuxiliaryFileAsync([NotNull] string name, int size, bool writing, CancellationToken cancellationToken = default);
+        Task<Stream?> OpenAuxiliaryFileAsync([NotNull] string name, int size, bool writing, CancellationToken cancellationToken = default);
         /// <summary>
         /// Opens a stream to read or write the player's input to a file.
         /// </summary>
@@ -735,12 +730,12 @@ namespace ZLR.VM
         /// select a file or the file couldn't be opened.</returns>
         [NotNull]
         [ItemCanBeNull]
-        Task<Stream> OpenCommandFileAsync(bool writing, CancellationToken cancellationToken = default);
+        Task<Stream?> OpenCommandFileAsync(bool writing, CancellationToken cancellationToken = default);
     }
 
     class AsyncZMachineIOAdapter : IAsyncZMachineIO
     {
-        [NotNull] private IZMachineIO next;
+        [NotNull] private readonly IZMachineIO next;
 
         public AsyncZMachineIOAdapter([NotNull] IZMachineIO next)
         {
@@ -749,36 +744,19 @@ namespace ZLR.VM
 
         [Obsolete]
         public ReadLineResult ReadLine(string initial, int time, TimedInputCallback callback, byte[] terminatingKeys,
-            bool allowDebuggerBreak)
-        {
-            return next.ReadLine(initial, time, callback, terminatingKeys, allowDebuggerBreak);
-        }
+            bool allowDebuggerBreak) =>
+            next.ReadLine(initial, time, callback, terminatingKeys, allowDebuggerBreak);
 
         [Obsolete]
-        public short ReadKey(int time, TimedInputCallback callback, CharTranslator translator)
-        {
-            return next.ReadKey(time, callback, translator);
-        }
+        public short ReadKey(int time, TimedInputCallback callback, CharTranslator translator) => next.ReadKey(time, callback, translator);
 
-        public void PutCommand(string command)
-        {
-            next.PutCommand(command);
-        }
+        public void PutCommand(string command) => next.PutCommand(command);
 
-        public void PutChar(char ch)
-        {
-            next.PutChar(ch);
-        }
+        public void PutChar(char ch) => next.PutChar(ch);
 
-        public void PutString(string str)
-        {
-            next.PutString(str);
-        }
+        public void PutString(string str) => next.PutString(str);
 
-        public void PutTextRectangle(string[] lines)
-        {
-            next.PutTextRectangle(lines);
-        }
+        public void PutTextRectangle(string[] lines) => next.PutTextRectangle(lines);
 
         public bool Buffering
         {
@@ -792,89 +770,41 @@ namespace ZLR.VM
             set => next.Transcripting = value;
         }
 
-        public void PutTranscriptChar(char ch)
-        {
-            next.PutTranscriptChar(ch);
-        }
+        public void PutTranscriptChar(char ch) => next.PutTranscriptChar(ch);
 
-        public void PutTranscriptString(string str)
-        {
-            next.PutTranscriptString(str);
-        }
+        public void PutTranscriptString(string str) => next.PutTranscriptString(str);
 
         [Obsolete]
-        public Stream OpenSaveFile(int size)
-        {
-            return next.OpenSaveFile(size);
-        }
+        public Stream? OpenSaveFile(int size) => next.OpenSaveFile(size);
 
         [Obsolete]
-        public Stream OpenRestoreFile()
-        {
-            return next.OpenRestoreFile();
-        }
+        public Stream? OpenRestoreFile() => next.OpenRestoreFile();
 
         [Obsolete]
-        public Stream OpenAuxiliaryFile(string name, int size, bool writing)
-        {
-            return next.OpenAuxiliaryFile(name, size, writing);
-        }
+        public Stream? OpenAuxiliaryFile(string name, int size, bool writing) => next.OpenAuxiliaryFile(name, size, writing);
 
         [Obsolete]
-        public Stream OpenCommandFile(bool writing)
-        {
-            return next.OpenCommandFile(writing);
-        }
+        public Stream? OpenCommandFile(bool writing) => next.OpenCommandFile(writing);
 
-        public void SetTextStyle(TextStyle style)
-        {
-            next.SetTextStyle(style);
-        }
+        public void SetTextStyle(TextStyle style) => next.SetTextStyle(style);
 
-        public void SplitWindow(short lines)
-        {
-            next.SplitWindow(lines);
-        }
+        public void SplitWindow(short lines) => next.SplitWindow(lines);
 
-        public void SelectWindow(short num)
-        {
-            next.SelectWindow(num);
-        }
+        public void SelectWindow(short num) => next.SelectWindow(num);
 
-        public void EraseWindow(short num)
-        {
-            next.EraseWindow(num);
-        }
+        public void EraseWindow(short num) => next.EraseWindow(num);
 
-        public void EraseLine()
-        {
-            next.EraseLine();
-        }
+        public void EraseLine() => next.EraseLine();
 
-        public void MoveCursor(short x, short y)
-        {
-            next.MoveCursor(x, y);
-        }
+        public void MoveCursor(short x, short y) => next.MoveCursor(x, y);
 
-        public void GetCursorPos(out short x, out short y)
-        {
-            next.GetCursorPos(out x, out y);
-        }
+        public void GetCursorPos(out short x, out short y) => next.GetCursorPos(out x, out y);
 
-        public void SetColors(short fg, short bg)
-        {
-            next.SetColors(fg, bg);
-        }
+        public void SetColors(short fg, short bg) => next.SetColors(fg, bg);
 
-        public short SetFont(short num)
-        {
-            return next.SetFont(num);
-        }
+        public short SetFont(short num) => next.SetFont(num);
 
-        public bool DrawCustomStatusLine(string location, short hoursOrScore, short minsOrTurns, bool useTime)
-        {
-            return next.DrawCustomStatusLine(location, hoursOrScore, minsOrTurns, useTime);
-        }
+        public bool DrawCustomStatusLine(string location, short hoursOrScore, short minsOrTurns, bool useTime) => next.DrawCustomStatusLine(location, hoursOrScore, minsOrTurns, useTime);
 
         public void PlaySoundSample(ushort number, SoundAction action, byte volume, byte repeats, SoundFinishedCallback callback)
         {
@@ -937,10 +867,7 @@ namespace ZLR.VM
 
         public byte DefaultBackground => next.DefaultBackground;
 
-        public UnicodeCaps CheckUnicode(char ch)
-        {
-            return next.CheckUnicode(ch);
-        }
+        public UnicodeCaps CheckUnicode(char ch) => next.CheckUnicode(ch);
 
         #region Async Adapters
 #pragma warning disable 618
@@ -1020,22 +947,22 @@ namespace ZLR.VM
             return Task.Run(() => next.ReadKey(0, Callback, translator), cancellationToken);
         }
 
-        public Task<Stream> OpenSaveFileAsync(int size, CancellationToken cancellationToken)
+        public Task<Stream?> OpenSaveFileAsync(int size, CancellationToken cancellationToken)
         {
             return Task.Run(() => next.OpenSaveFile(size), cancellationToken);
         }
 
-        public Task<Stream> OpenRestoreFileAsync(CancellationToken cancellationToken)
+        public Task<Stream?> OpenRestoreFileAsync(CancellationToken cancellationToken)
         {
             return Task.Run(() => next.OpenRestoreFile(), cancellationToken);
         }
 
-        public Task<Stream> OpenAuxiliaryFileAsync(string name, int size, bool writing, CancellationToken cancellationToken)
+        public Task<Stream?> OpenAuxiliaryFileAsync(string name, int size, bool writing, CancellationToken cancellationToken)
         {
             return Task.Run(() => next.OpenAuxiliaryFile(name, size, writing), cancellationToken);
         }
 
-        public Task<Stream> OpenCommandFileAsync(bool writing, CancellationToken cancellationToken)
+        public Task<Stream?> OpenCommandFileAsync(bool writing, CancellationToken cancellationToken)
         {
             return Task.Run(() => next.OpenCommandFile(writing), cancellationToken);
         }
@@ -1045,11 +972,9 @@ namespace ZLR.VM
 
         [NotNull]
         [Obsolete("Implement IAsyncZMachineIO directly.")]
-        public static IAsyncZMachineIO Wrap([NotNull] IZMachineIO io)
-        {
-            return io as IAsyncZMachineIO ??
-                   new AsyncZMachineIOAdapter(io ?? throw new ArgumentNullException(nameof(io)));
-        }
+        public static IAsyncZMachineIO Wrap([NotNull] IZMachineIO io) =>
+            io as IAsyncZMachineIO ??
+            new AsyncZMachineIOAdapter(io ?? throw new ArgumentNullException(nameof(io)));
     }
 
     partial class ZMachine
@@ -1062,9 +987,9 @@ namespace ZLR.VM
             if (zc == 0)
                 return;
 
-            if (tableOutput)
+            if (TableOutputEnabled)
             {
-                var buffer = tableOutputBufferStack.Peek();
+                var (_, buffer) = tableOutputStack.Peek();
                 buffer.Add((byte)zc);
             }
             else
@@ -1079,9 +1004,9 @@ namespace ZLR.VM
 
         internal void PrintUnicode(ushort uc)
         {
-            if (tableOutput)
+            if (TableOutputEnabled)
             {
-                var buffer = tableOutputBufferStack.Peek();
+                var (_, buffer) = tableOutputStack.Peek();
                 buffer.Add((byte)CharToZSCII((char)uc));
             }
             else
@@ -1093,11 +1018,11 @@ namespace ZLR.VM
             }
         }
 
-        internal void PrintString(string str)
+        internal void PrintString([NotNull] string str)
         {
-            if (tableOutput)
+            if (this.TableOutputEnabled)
             {
-                var buffer = tableOutputBufferStack.Peek();
+                var (_, buffer) = tableOutputStack.Peek();
                 foreach (var ch in str)
                     buffer.Add((byte)CharToZSCII(ch));
             }
@@ -1152,28 +1077,41 @@ namespace ZLR.VM
         }
 
         // default alphabets (S 3.5.3)
+        [NotNull]
         private static readonly char[] DefaultAlphabet0 =
-            { 'a', 'b', 'c', 'd', 'e', 'f', 'g', 'h', 'i', 'j', 'k', 'l', 'm',
-              'n', 'o', 'p', 'q', 'r', 's', 't', 'u', 'v', 'w', 'x', 'y', 'z' };
+        {
+            'a', 'b', 'c', 'd', 'e', 'f', 'g', 'h', 'i', 'j', 'k', 'l', 'm',
+            'n', 'o', 'p', 'q', 'r', 's', 't', 'u', 'v', 'w', 'x', 'y', 'z',
+        };
+
+        [NotNull]
         private static readonly char[] DefaultAlphabet1 =
-            { 'A', 'B', 'C', 'D', 'E', 'F', 'G', 'H', 'I', 'J', 'K', 'L', 'M',
-              'N', 'O', 'P', 'Q', 'R', 'S', 'T', 'U', 'V', 'W', 'X', 'Y', 'Z' };
+        {
+            'A', 'B', 'C', 'D', 'E', 'F', 'G', 'H', 'I', 'J', 'K', 'L', 'M',
+            'N', 'O', 'P', 'Q', 'R', 'S', 'T', 'U', 'V', 'W', 'X', 'Y', 'Z',
+        };
+
+        [NotNull]
         private static readonly char[] DefaultAlphabet2 =
-            { ' ', '\n', '0', '1', '2', '3',  '4', '5', '6',  '7', '8', '9', '.',
-              ',', '!',  '?', '_', '#', '\'', '"', '/', '\\', '-', ':', '(', ')' };
+        {
+            ' ', '\n', '0', '1', '2', '3', '4', '5', '6', '7', '8', '9', '.',
+            ',', '!', '?', '_', '#', '\'', '"', '/', '\\', '-', ':', '(', ')',
+        };
 
         // default Unicode translations (S 3.8.5.3)
         private static readonly char[] DefaultExtraChars =
-            { '\u00e4', '\u00f6', '\u00fc', '\u00c4', '\u00d6', '\u00dc', '\u00df', '\u00bb', '\u00ab', '\u00eb', // 155
-              '\u00ef', '\u00ff', '\u00cb', '\u00cf', '\u00e1', '\u00e9', '\u00ed', '\u00f3', '\u00fa', '\u00fd', // 165
-              '\u00c1', '\u00c9', '\u00cd', '\u00d3', '\u00da', '\u00dd', '\u00e0', '\u00e8', '\u00ec', '\u00f2', // 175
-              '\u00f9', '\u00c0', '\u00c8', '\u00cc', '\u00d2', '\u00d9', '\u00e2', '\u00ea', '\u00ee', '\u00f4', // 185
-              '\u00fb', '\u00c2', '\u00ca', '\u00ce', '\u00d4', '\u00db', '\u00e5', '\u00c5', '\u00f8', '\u00d8', // 195
-              '\u00e3', '\u00f1', '\u00f5', '\u00c3', '\u00d1', '\u00d5', '\u00e6', '\u00c6', '\u00e7', '\u00c7', // 205
-              '\u00fe', '\u00f0', '\u00de', '\u00d0', '\u00a3', '\u0153', '\u0152', '\u00a1', '\u00bf' };         // 215
+        {
+            '\u00e4', '\u00f6', '\u00fc', '\u00c4', '\u00d6', '\u00dc', '\u00df', '\u00bb', '\u00ab', '\u00eb', // 155
+            '\u00ef', '\u00ff', '\u00cb', '\u00cf', '\u00e1', '\u00e9', '\u00ed', '\u00f3', '\u00fa', '\u00fd', // 165
+            '\u00c1', '\u00c9', '\u00cd', '\u00d3', '\u00da', '\u00dd', '\u00e0', '\u00e8', '\u00ec', '\u00f2', // 175
+            '\u00f9', '\u00c0', '\u00c8', '\u00cc', '\u00d2', '\u00d9', '\u00e2', '\u00ea', '\u00ee', '\u00f4', // 185
+            '\u00fb', '\u00c2', '\u00ca', '\u00ce', '\u00d4', '\u00db', '\u00e5', '\u00c5', '\u00f8', '\u00d8', // 195
+            '\u00e3', '\u00f1', '\u00f5', '\u00c3', '\u00d1', '\u00d5', '\u00e6', '\u00c6', '\u00e7', '\u00c7', // 205
+            '\u00fe', '\u00f0', '\u00de', '\u00d0', '\u00a3', '\u0153', '\u0152', '\u00a1', '\u00bf'            // 215
+        };
 
         [NotNull]
-        internal string DecodeString(int address) => DecodeStringWithLen(address, out var dummy);
+        internal string DecodeString(int address) => DecodeStringWithLen(address, out _);
 
         [NotNull]
         private string DecodeStringWithLen(int address, out int len)
@@ -1199,7 +1137,7 @@ namespace ZLR.VM
             return sb.ToString();
         }
 
-        private void DecodeChar(int zchar, ref int alphabet, ref int abbrevMode, StringBuilder sb)
+        private void DecodeChar(int zchar, ref int alphabet, ref int abbrevMode, [NotNull] StringBuilder sb)
         {
             switch (abbrevMode)
             {
@@ -1301,27 +1239,21 @@ namespace ZLR.VM
                     // memory (nestable up to 16 levels)
                     if (enabled)
                     {
-                        if (tableOutputAddrStack.Count == 16)
+                        if (tableOutputStack.Count == 16)
                             throw new Exception("Output stream 3 nested too deeply");
                         if (address < 64 || address + 1 >= RomStart)
                             throw new Exception("Output stream 3 address is out of range");
 
-                        tableOutput = true;
-                        tableOutputAddrStack.Push(address);
-                        tableOutputBufferStack.Push(new List<byte>());
+                        tableOutputStack.Push((address, new List<byte>()));
                     }
-                    else if (tableOutput)
+                    else if (this.TableOutputEnabled)
                     {
-                        address = tableOutputAddrStack.Pop();
-                        var buffer = tableOutputBufferStack.Pop();
+                        var (prevAddress, buffer) = tableOutputStack.Pop();
 
-                        var len = Math.Min(buffer.Count, RomStart - address - 2);
-                        SetWord(address, (short)len);
+                        var len = Math.Min(buffer.Count, RomStart - prevAddress - 2);
+                        SetWord(prevAddress, (short)len);
                         for (var i = 0; i < len; i++)
-                            SetByte(address + 2 + i, buffer[i]);
-
-                        if (tableOutputAddrStack.Count == 0)
-                            tableOutput = false;
+                            SetByte(prevAddress + 2 + i, buffer[i]);
                     }
                     break;
 

@@ -4,6 +4,7 @@ using System.Reflection;
 using System.Text;
 using System.Reflection.Emit;
 using JetBrains.Annotations;
+using System.Diagnostics;
 
 namespace ZLR.VM
 {
@@ -43,7 +44,7 @@ namespace ZLR.VM
         private readonly int argc;
         private readonly OperandType[] operandTypes;
         private readonly short[] operandValues;
-        private readonly string operandText;
+        private readonly string? operandText;
         private readonly int resultStorage;
         private readonly bool branchIfTrue;
         private readonly int branchOffset;
@@ -51,14 +52,14 @@ namespace ZLR.VM
         private bool compiling;
 
         // fields for ZMachine to use to string opcodes together
-        public Opcode Next;
-        public Opcode Target;
+        public Opcode? Next;
+        public Opcode? Target;
         public Label Label;
 
         public Opcode(ZMachine zm, OpcodeCompiler compiler, OpcodeAttribute attribute,
             int pc, int zCodeLength,
             int argc, [NotNull] OperandType[] operandTypes, [NotNull] short[] operandValues,
-            string operandText, int resultStorage, bool branchIfTrue, int branchOffset)
+            string? operandText, int resultStorage, bool branchIfTrue, int branchOffset)
         {
             this.zm = zm;
             this.compiler = compiler;
@@ -140,6 +141,7 @@ namespace ZLR.VM
             if (attribute.Text)
             {
                 string tstr;
+                Debug.Assert(operandText != null);
                 if (operandText.Length <= 10)
                     tstr = operandText;
                 else
@@ -285,7 +287,7 @@ namespace ZLR.VM
                         {
                             var newArray = new OpcodeInfo[array.Length + 1];
                             Array.Copy(array, newArray, array.Length);
-                            newArray[newArray.Length - 1] = info;
+                            newArray[^1] = info;
                             dict[num] = newArray;
                         }
                     }
@@ -295,29 +297,15 @@ namespace ZLR.VM
 
         public static bool FindOpcodeInfo(OpCount count, byte opnum, byte zversion, out OpcodeInfo result)
         {
-            Dictionary<byte, OpcodeInfo[]> dict;
-
-            switch (count)
+            var dict = count switch
             {
-                case OpCount.Zero:
-                    dict = ZeroOpInfos;
-                    break;
-                case OpCount.One:
-                    dict = OneOpInfos;
-                    break;
-                case OpCount.Two:
-                    dict = TwoOpInfos;
-                    break;
-                case OpCount.Var:
-                    dict = VarOpInfos;
-                    break;
-                case OpCount.Ext:
-                    dict = ExtOpInfos;
-                    break;
-                default:
-                    throw new ArgumentOutOfRangeException(nameof(count));
-            }
-
+                OpCount.Zero => ZeroOpInfos,
+                OpCount.One => OneOpInfos,
+                OpCount.Two => TwoOpInfos,
+                OpCount.Var => VarOpInfos,
+                OpCount.Ext => ExtOpInfos,
+                _ => throw new ArgumentOutOfRangeException(nameof(count)),
+            };
             if (dict.TryGetValue(opnum, out var array))
             {
                 foreach (var info in array)
@@ -669,6 +657,6 @@ namespace ZLR.VM
         public bool Async { get; set; }
         public byte MinVersion { get; set; } = 1;
         public byte MaxVersion { get; set; } = 8;
-        public string Alias { get; set; }
+        public string? Alias { get; set; }
     }
 }

@@ -51,14 +51,13 @@ namespace ZLR.VM.Debugging
     {
         public short PackedAddress { get; }
 
-        [CanBeNull]
-        public IReadOnlyList<short> Args { get; }
+        public IReadOnlyList<short>? Args { get; }
 
         public int ResultStorage { get; }
         public int ReturnPC { get; }
         public int CallDepth { get; }
 
-        public EnterFunctionEventArgs(short packedAddress, [CanBeNull] IReadOnlyList<short> args, int resultStorage, int returnPC, int callDepth)
+        public EnterFunctionEventArgs(short packedAddress, [CanBeNull] IReadOnlyList<short>? args, int resultStorage, int returnPC, int callDepth)
         {
             PackedAddress = packedAddress;
             Args = args;
@@ -361,7 +360,7 @@ namespace ZLR.VM
                     zm.running = true;
                     zm.DebuggerState = DebuggerState.Running;
 
-                    await operation();
+                    await operation().ConfigureAwait(false);
 
                     zm.stepping = -1;
                     if (!zm.running)
@@ -391,10 +390,10 @@ namespace ZLR.VM
                 return Step(async () =>
                 {
                     var callDepth = zm.callStack.Count;
-                    await OneStepAsync();
+                    await OneStepAsync().ConfigureAwait(false);
 
                     while (zm.callStack.Count > callDepth && zm.running && zm.DebuggerState.IsRunning())
-                        await OneStepAsync();
+                        await OneStepAsync().ConfigureAwait(false);
                 });
             }
 
@@ -404,10 +403,10 @@ namespace ZLR.VM
                 return Step(async () =>
                 {
                     var callDepth = zm.callStack.Count;
-                    await OneStepAsync();
+                    await OneStepAsync().ConfigureAwait(false);
 
                     while (zm.callStack.Count >= callDepth && zm.running && zm.DebuggerState.IsRunning())
-                        await OneStepAsync();
+                        await OneStepAsync().ConfigureAwait(false);
                 });
             }
 
@@ -425,12 +424,12 @@ namespace ZLR.VM
 
                     // step past a breakpoint on the current line, if we're continuing
                     if (zm.breakpoints.Contains(zm.pc) && zm.DebuggerState != DebuggerState.PausedOnEntry)
-                        await StepIntoAsync();
+                        await StepIntoAsync().ConfigureAwait(false);
 
                     zm.running = true;
                     zm.DebuggerState = DebuggerState.Running;
                     while (zm.running && zm.DebuggerState.IsRunning())
-                        await OneStepAsync();
+                        await OneStepAsync().ConfigureAwait(false);
 
                     if (!zm.running)
                         zm.DebuggerState = DebuggerState.Terminated;
@@ -445,7 +444,7 @@ namespace ZLR.VM
             {
                 zmachineInterruptSource.Cancel();
                 // ReSharper disable once MethodSupportsCancellation
-                await whenStopped.WaitAsync();
+                await whenStopped.WaitAsync().ConfigureAwait(false);
             }
 
             public void SetBreakpoint(int address, bool enabled)
@@ -465,7 +464,7 @@ namespace ZLR.VM
                 zm.EnterFunctionImpl(packedAddress, args, 0, zm.pc);
                 try
                 {
-                    await zm.JitLoopAsync();
+                    await zm.JitLoopAsync().ConfigureAwait(false);
                     return zm.stack.Pop();
                 }
                 catch (DebuggerBreakException)
@@ -718,12 +717,12 @@ namespace ZLR.VM
 
         #region IDebuggerEvents Members
 
-        public event EventHandler<EnterFunctionEventArgs> EnteringFunction;
-        public event EventHandler<DebuggerStateEventArgs> DebuggerStateChanged;
+        public event EventHandler<EnterFunctionEventArgs>? EnteringFunction;
+        public event EventHandler<DebuggerStateEventArgs>? DebuggerStateChanged;
 
         #endregion
 
-        private void HandleEnterFunction(short packedAddress, short[] args, int resultStorage, int returnPC)
+        private void HandleEnterFunction(short packedAddress, short[]? args, int resultStorage, int returnPC)
         {
             EnteringFunction?.Invoke(this, new EnterFunctionEventArgs(
                 packedAddress, args, resultStorage, returnPC, callStack.Count));

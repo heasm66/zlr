@@ -15,8 +15,8 @@ namespace ZLR.Interfaces.SystemConsole
         private int split;
         private bool upper;
         private int xupper = 1, yupper = 1, xlower = 1, ylower = 1;
-        private ConsoleColor bgupper = ConsoleColor.Black, fgupper = ConsoleColor.Gray;
-        private ConsoleColor bglower = ConsoleColor.Black, fglower = ConsoleColor.Gray;
+        private (ConsoleColor fg, ConsoleColor bg) upperColor = (ConsoleColor.Gray, ConsoleColor.Black);
+        private (ConsoleColor fg, ConsoleColor bg) lowerColor = (ConsoleColor.Gray, ConsoleColor.Black);
         private bool reverse, emphasis;
         private bool scrollFromBottom;
 
@@ -72,7 +72,7 @@ namespace ZLR.Interfaces.SystemConsole
         }
 
         [PublicAPI]
-        public string SuppliedCommandFile { get; set; }
+        public string? SuppliedCommandFile { get; set; }
 
         public bool HideMorePrompts { get; set; }
 
@@ -351,39 +351,39 @@ namespace ZLR.Interfaces.SystemConsole
         private static byte ConsoleKeyToZSCII(ConsoleKey key)
         {
             // ReSharper disable once SwitchStatementMissingSomeCases
-            switch (key)
+            return key switch
             {
-                case ConsoleKey.Delete: return 8;
-                case ConsoleKey.Enter: return 13;
-                case ConsoleKey.Escape: return 27;
-                case ConsoleKey.UpArrow: return 129;
-                case ConsoleKey.DownArrow: return 130;
-                case ConsoleKey.LeftArrow: return 131;
-                case ConsoleKey.RightArrow: return 132;
-                case ConsoleKey.F1: return 133;
-                case ConsoleKey.F2: return 134;
-                case ConsoleKey.F3: return 135;
-                case ConsoleKey.F4: return 136;
-                case ConsoleKey.F5: return 137;
-                case ConsoleKey.F6: return 138;
-                case ConsoleKey.F7: return 139;
-                case ConsoleKey.F8: return 140;
-                case ConsoleKey.F9: return 141;
-                case ConsoleKey.F10: return 142;
-                case ConsoleKey.F11: return 143;
-                case ConsoleKey.F12: return 144;
-                case ConsoleKey.NumPad0: return 145;
-                case ConsoleKey.NumPad1: return 146;
-                case ConsoleKey.NumPad2: return 147;
-                case ConsoleKey.NumPad3: return 148;
-                case ConsoleKey.NumPad4: return 149;
-                case ConsoleKey.NumPad5: return 150;
-                case ConsoleKey.NumPad6: return 151;
-                case ConsoleKey.NumPad7: return 152;
-                case ConsoleKey.NumPad8: return 153;
-                case ConsoleKey.NumPad9: return 154;
-                default: return 0;
-            }
+                ConsoleKey.Delete => 8,
+                ConsoleKey.Enter => 13,
+                ConsoleKey.Escape => 27,
+                ConsoleKey.UpArrow => 129,
+                ConsoleKey.DownArrow => 130,
+                ConsoleKey.LeftArrow => 131,
+                ConsoleKey.RightArrow => 132,
+                ConsoleKey.F1 => 133,
+                ConsoleKey.F2 => 134,
+                ConsoleKey.F3 => 135,
+                ConsoleKey.F4 => 136,
+                ConsoleKey.F5 => 137,
+                ConsoleKey.F6 => 138,
+                ConsoleKey.F7 => 139,
+                ConsoleKey.F8 => 140,
+                ConsoleKey.F9 => 141,
+                ConsoleKey.F10 => 142,
+                ConsoleKey.F11 => 143,
+                ConsoleKey.F12 => 144,
+                ConsoleKey.NumPad0 => 145,
+                ConsoleKey.NumPad1 => 146,
+                ConsoleKey.NumPad2 => 147,
+                ConsoleKey.NumPad3 => 148,
+                ConsoleKey.NumPad4 => 149,
+                ConsoleKey.NumPad5 => 150,
+                ConsoleKey.NumPad6 => 151,
+                ConsoleKey.NumPad7 => 152,
+                ConsoleKey.NumPad8 => 153,
+                ConsoleKey.NumPad9 => 154,
+                _ => 0,
+            };
         }
 
         public void PutChar(char ch)
@@ -436,7 +436,7 @@ namespace ZLR.Interfaces.SystemConsole
 
             if (bufferLength == 0)
             {
-                GetConsoleColors(out var fg, out var bg);
+                var (fg, bg) = GetConsoleColors();
                 buffer.Add(STYLE_FLAG | ((uint)bg << 16) | (uint)fg);
             }
             buffer.Add(ch);
@@ -459,33 +459,30 @@ namespace ZLR.Interfaces.SystemConsole
             }
         }
 
-        private void GetConsoleColors(out ConsoleColor fg, out ConsoleColor bg)
+        private ref (ConsoleColor fg, ConsoleColor bg) WindowColors(bool upper)
         {
             if (upper)
-            {
-                bg = bgupper;
-                fg = fgupper;
-            }
-            else
-            {
-                bg = bglower;
-                fg = fglower;
-            }
+                return ref upperColor;
+
+            return ref lowerColor;
+        }
+
+        private (ConsoleColor fg, ConsoleColor bg) GetConsoleColors()
+        {
+            var result = WindowColors(upper);
 
             if (emphasis)
-                fg = EmphasizeColor(fg);
+                result.fg = EmphasizeColor(result.fg);
 
             if (reverse)
-            {
-                var temp = bg;
-                bg = fg;
-                fg = temp;
-            }
+                (result.fg, result.bg) = (result.bg, result.fg);
+
+            return result;
         }
 
         private void SetConsoleColors()
         {
-            GetConsoleColors(out var fg, out var bg);
+            var (fg, bg) = GetConsoleColors();
             Console.BackgroundColor = bg;
             Console.ForegroundColor = fg;
         }
@@ -515,7 +512,7 @@ namespace ZLR.Interfaces.SystemConsole
             }
             else
             {
-                GetConsoleColors(out var fg, out var bg);
+                var (fg, bg) = GetConsoleColors();
                 buffer.Add(STYLE_FLAG | ((uint)bg << 16) | (uint)fg);
             }
         }
@@ -668,7 +665,7 @@ namespace ZLR.Interfaces.SystemConsole
                         startat = split + 1;
                     }
 
-                    Console.BackgroundColor = bglower;
+                    Console.BackgroundColor = lowerColor.bg;
                     for (var i = startat; i < height; i++)
                     {
                         Console.SetCursorPosition(Console.WindowLeft, i + Console.WindowTop);
@@ -684,7 +681,7 @@ namespace ZLR.Interfaces.SystemConsole
                     // erase upper
                     var height = split;
                     var width = Console.WindowWidth;
-                    Console.BackgroundColor = bgupper;
+                    Console.BackgroundColor = upperColor.bg;
                     for (var i = 0; i < height; i++)
                     {
                         Console.SetCursorPosition(Console.WindowLeft, i + Console.WindowTop);
@@ -831,16 +828,10 @@ namespace ZLR.Interfaces.SystemConsole
 
         public void SetColors(short fg, short bg)
         {
-            if (upper)
-            {
-                fgupper = ColorToConsole(fg, fgupper, false);
-                bgupper = ColorToConsole(bg, bgupper, true);
-            }
-            else
-            {
-                fglower = ColorToConsole(fg, fglower, false);
-                bglower = ColorToConsole(bg, bglower, true);
-            }
+            ref var winColors = ref WindowColors(upper);
+
+            winColors.fg = ColorToConsole(fg, winColors.fg, false);
+            winColors.bg = ColorToConsole(bg, winColors.bg, true);
 
             SetConsoleColors();
         }
@@ -853,38 +844,36 @@ namespace ZLR.Interfaces.SystemConsole
          */
         private ConsoleColor ColorToConsole(short num, ConsoleColor current, bool background)
         {
-            switch (num)
+            return num switch
             {
-                case 0: return current;
-                case 1: return background ? ConsoleColor.Black : ConsoleColor.Gray;
-                case 2: return ConsoleColor.Black;
-                case 3: return ConsoleColor.DarkRed;
-                case 4: return ConsoleColor.DarkGreen;
-                case 5: return ConsoleColor.DarkYellow;
-                case 6: return ConsoleColor.DarkBlue;
-                case 7: return ConsoleColor.DarkMagenta;
-                case 8: return ConsoleColor.DarkCyan;
-                case 9: return ConsoleColor.Gray;
-                default:
-                    return current;
-            }
+                0 => current,
+                1 => background ? ConsoleColor.Black : ConsoleColor.Gray,
+                2 => ConsoleColor.Black,
+                3 => ConsoleColor.DarkRed,
+                4 => ConsoleColor.DarkGreen,
+                5 => ConsoleColor.DarkYellow,
+                6 => ConsoleColor.DarkBlue,
+                7 => ConsoleColor.DarkMagenta,
+                8 => ConsoleColor.DarkCyan,
+                9 => ConsoleColor.Gray,
+                _ => current,
+            };
         }
 
         private ConsoleColor EmphasizeColor(ConsoleColor color)
         {
-            switch (color)
+            return color switch
             {
-                case ConsoleColor.Black: return ConsoleColor.DarkGray;
-                case ConsoleColor.DarkRed: return ConsoleColor.Red;
-                case ConsoleColor.DarkGreen: return ConsoleColor.Green;
-                case ConsoleColor.DarkYellow: return ConsoleColor.Yellow;
-                case ConsoleColor.DarkBlue: return ConsoleColor.Blue;
-                case ConsoleColor.DarkMagenta: return ConsoleColor.Magenta;
-                case ConsoleColor.DarkCyan: return ConsoleColor.Cyan;
-                case ConsoleColor.Gray: return ConsoleColor.White;
-                default:
-                    return color;
-            }
+                ConsoleColor.Black => ConsoleColor.DarkGray,
+                ConsoleColor.DarkRed => ConsoleColor.Red,
+                ConsoleColor.DarkGreen => ConsoleColor.Green,
+                ConsoleColor.DarkYellow => ConsoleColor.Yellow,
+                ConsoleColor.DarkBlue => ConsoleColor.Blue,
+                ConsoleColor.DarkMagenta => ConsoleColor.Magenta,
+                ConsoleColor.DarkCyan => ConsoleColor.Cyan,
+                ConsoleColor.Gray => ConsoleColor.White,
+                _ => color,
+            };
         }
 
         public byte WidthChars => (byte)Console.WindowWidth;
@@ -899,7 +888,7 @@ namespace ZLR.Interfaces.SystemConsole
 
         public byte FontWidth => 1;
 
-        public event EventHandler SizeChanged;
+        public event EventHandler? SizeChanged;
 
         public bool ColorsAvailable => true;
 
@@ -907,14 +896,14 @@ namespace ZLR.Interfaces.SystemConsole
 
         public byte DefaultBackground => 2; // black
 
-        public Stream OpenSaveFile(int size)
+        public Stream? OpenSaveFile(int size)
         {
             var defaultFile = fileBase + ".sav";
 
             FlushBuffer();
             lineCount = 0;
 
-            string filename;
+            string? filename;
             do
             {
                 Console.Write("Enter a new saved game file (\".\" to quit) [{0}]: ",
@@ -937,7 +926,7 @@ namespace ZLR.Interfaces.SystemConsole
             return new FileStream(filename, FileMode.Create, FileAccess.Write);
         }
 
-        public Stream OpenRestoreFile()
+        public Stream? OpenRestoreFile()
         {
             FlushBuffer();
             lineCount = 0;
@@ -958,7 +947,7 @@ namespace ZLR.Interfaces.SystemConsole
             return new FileStream(filename, FileMode.Open, FileAccess.Read);
         }
 
-        public Stream OpenAuxiliaryFile(string name, int size, bool writing)
+        public Stream? OpenAuxiliaryFile(string name, int size, bool writing)
         {
             if (InvalidAuxFileName(name))
                 return null;
@@ -975,7 +964,7 @@ namespace ZLR.Interfaces.SystemConsole
             }
         }
 
-        public Stream OpenCommandFile(bool writing)
+        public Stream? OpenCommandFile(bool writing)
         {
             FlushBuffer();
             lineCount = 0;
@@ -1013,8 +1002,8 @@ namespace ZLR.Interfaces.SystemConsole
             }
 
             return new FileStream(filename,
-                    writing ? FileMode.Create : FileMode.Open,
-                    writing ? FileAccess.Write : FileAccess.Read);
+                writing ? FileMode.Create : FileMode.Open,
+                writing ? FileAccess.Write : FileAccess.Read);
         }
 
         private static bool YesOrNoPrompt(string prompt)
@@ -1024,6 +1013,28 @@ namespace ZLR.Interfaces.SystemConsole
             {
                 Console.Write(prompt);
                 yorn = Console.ReadLine()?.ToLower().Trim() ?? "n";
+            } while (yorn.Length == 0);
+
+            return yorn[0] == 'y';
+        }
+
+        private static readonly byte[] DummyTerminatingKeys = { };
+
+        private async Task<bool> YesOrNoPromptAsync(string prompt, CancellationToken cancellationToken = default)
+        {
+            string yorn = "";
+            do
+            {
+                Console.Write(prompt);
+                cancellationToken.ThrowIfCancellationRequested();
+
+                var rlr = await ReadLineAsync("", DummyTerminatingKeys, false, cancellationToken).ConfigureAwait(false);
+                cancellationToken.ThrowIfCancellationRequested();
+
+                if (rlr.Outcome != ReadOutcome.KeyPressed)
+                    continue;
+
+                yorn = rlr.Text.ToLower().Trim();
             } while (yorn.Length == 0);
 
             return yorn[0] == 'y';
@@ -1165,7 +1176,7 @@ namespace ZLR.Interfaces.SystemConsole
                 if (lineCount >= Console.WindowHeight - split - 1)
                 {
                     Console.Write("-- more --");
-                    await DoConsoleAsync(() => Console.ReadKey(true));
+                    await DoConsoleAsync(() => Console.ReadKey(true)).ConfigureAwait(false);
 
                     // erase the prompt
                     Console.Write("\b\b\b\b\b\b\b\b\b\b");
@@ -1201,7 +1212,7 @@ namespace ZLR.Interfaces.SystemConsole
                 {
                     CheckScroll(item == '\n');
                     Console.Write((char)item);
-                    await CheckMoreAsync();
+                    await CheckMoreAsync().ConfigureAwait(false);
                 }
                 else
                 {
@@ -1221,7 +1232,7 @@ namespace ZLR.Interfaces.SystemConsole
         {
             cancellationToken.ThrowIfCancellationRequested();
 
-            await FlushBufferAsync();
+            await FlushBufferAsync().ConfigureAwait(false);
             lineCount = 0;
 
             var histIdx = history.Count;
@@ -1254,7 +1265,7 @@ namespace ZLR.Interfaces.SystemConsole
             while (true)
             {
                 while (!Console.KeyAvailable && !cancellationToken.IsCancellationRequested)
-                    await Task.Delay(POLL_INTERVAL_MS, cancellationToken);
+                    await Task.Delay(POLL_INTERVAL_MS, cancellationToken).ConfigureAwait(false);
 
                 cancellationToken.ThrowIfCancellationRequested();
 
@@ -1408,7 +1419,7 @@ namespace ZLR.Interfaces.SystemConsole
                 Console.WriteLine();
             }
 
-            var result = sb.ToString();
+            var result = sb.ToString() ?? throw new InvalidOperationException();
 
             history.Add(result);
             if (history.Count > MAX_COMMAND_HISTORY)
@@ -1419,13 +1430,13 @@ namespace ZLR.Interfaces.SystemConsole
 
         public async Task<short> ReadKeyAsync(CharTranslator translator, CancellationToken cancellationToken = default)
         {
-            await FlushBufferAsync();
+            await FlushBufferAsync().ConfigureAwait(false);
             lineCount = 0;
 
             while (true)
             {
                 while (!Console.KeyAvailable && !cancellationToken.IsCancellationRequested)
-                    await Task.Delay(POLL_INTERVAL_MS, cancellationToken);
+                    await Task.Delay(POLL_INTERVAL_MS, cancellationToken).ConfigureAwait(false);
 
                 cancellationToken.ThrowIfCancellationRequested();
 
@@ -1440,24 +1451,101 @@ namespace ZLR.Interfaces.SystemConsole
             }
         }
 
-        public async Task<Stream> OpenSaveFileAsync(int size, CancellationToken cancellationToken = default)
+        public async Task<Stream?> OpenSaveFileAsync(int size, CancellationToken cancellationToken = default)
         {
-            throw new NotImplementedException();
+            var defaultFile = fileBase + ".sav";
+
+            await FlushBufferAsync();
+            lineCount = 0;
+
+            string? filename;
+            do
+            {
+                Console.Write("Enter a new saved game file (\".\" to quit) [{0}]: ",
+                    defaultFile);
+                filename = Console.ReadLine();
+                if (filename == "")
+                    filename = defaultFile;
+
+                if (filename == ".")
+                    return null;
+
+                if (File.Exists(filename))
+                {
+                    if (!await YesOrNoPromptAsync($"\"{filename}\" exists. Are you sure (y/n)? ", cancellationToken))
+                        filename = null;
+                }
+            }
+            while (filename == null);
+
+            return new FileStream(filename, FileMode.Create, FileAccess.Write);
         }
 
-        public async Task<Stream> OpenRestoreFileAsync(CancellationToken cancellationToken = default)
+        public async Task<Stream?> OpenRestoreFileAsync(CancellationToken cancellationToken = default)
         {
-            throw new NotImplementedException();
+            await FlushBufferAsync().ConfigureAwait(false);
+            lineCount = 0;
+
+            string filename;
+            do
+            {
+                Console.Write("Enter an existing saved game file (blank to cancel): ");
+                filename = Console.ReadLine();
+                if (string.IsNullOrWhiteSpace(filename))
+                    return null;
+            }
+            while (!File.Exists(filename));
+
+            return new FileStream(filename, FileMode.Open, FileAccess.Read);
         }
 
-        public async Task<Stream> OpenAuxiliaryFileAsync(string name, int size, bool writing, CancellationToken cancellationToken = default)
+        public Task<Stream?> OpenAuxiliaryFileAsync(string name, int size, bool writing, CancellationToken cancellationToken = default)
         {
-            throw new NotImplementedException();
+            return Task.FromResult(OpenAuxiliaryFile(name, size, writing));
         }
 
-        public async Task<Stream> OpenCommandFileAsync(bool writing, CancellationToken cancellationToken = default)
+        public async Task<Stream?> OpenCommandFileAsync(bool writing, CancellationToken cancellationToken = default)
         {
-            throw new NotImplementedException();
+            await FlushBufferAsync().ConfigureAwait(false);
+            lineCount = 0;
+
+            string filename;
+            if (SuppliedCommandFile != null)
+            {
+                filename = SuppliedCommandFile;
+                SuppliedCommandFile = null;
+            }
+            else
+            {
+                do
+                {
+                    Console.Write("Enter the name of a command file to {0} (blank to cancel): ",
+                        writing ? "record" : "play back");
+                    filename = Console.ReadLine();
+                    if (string.IsNullOrWhiteSpace(filename))
+                        return null;
+
+                    if (writing)
+                    {
+                        // if the file exists, prompt to overwrite it
+                        if (!File.Exists(filename) ||
+                            await YesOrNoPromptAsync($"\"{filename}\" exists. Are you sure (y/n)? ", cancellationToken)
+                                .ConfigureAwait(false))
+                            break;
+                    }
+                    else
+                    {
+                        // the file must already exist
+                        if (File.Exists(filename))
+                            break;
+                    }
+                }
+                while (true);
+            }
+
+            return new FileStream(filename,
+                writing ? FileMode.Create : FileMode.Open,
+                writing ? FileAccess.Write : FileAccess.Read);
         }
     }
 }

@@ -235,7 +235,7 @@ namespace ZLR.VM
         private void op_check_unicode([NotNull] ILGenerator il)
         {
             var ioFI = ZMachine.GetFieldInfo(nameof(ZMachine.io));
-            var checkUnicodeMI = typeof(IZMachineIO).GetMethod(nameof(IZMachineIO.CheckUnicode));
+            var checkUnicodeMI = ZMachine.GetIOMethodInfo(nameof(IAsyncZMachineIO.CheckUnicode));
             System.Diagnostics.Debug.Assert(checkUnicodeMI != null);
 
             il.Emit(OpCodes.Ldarg_0);

@@ -78,9 +78,9 @@ namespace ZLR.VM
         readonly byte zversion;
         int objectTable, dictionaryTable, abbrevTable;
         bool compiling;
-        ILGenerator il;
-        LocalBuilder tempArrayLocal, tempWordLocal;
-        LruCache<int, CachedCode> cache;
+        ILGenerator il = default!;
+        LocalBuilder? tempArrayLocal, tempWordLocal;
+        LruCache<int, CachedCode> cache = default!;
         int cacheSize = DEFAULT_CACHE_SIZE;
         int maxUndoDepth = DEFAULT_MAX_UNDO_DEPTH;
 
@@ -93,35 +93,29 @@ namespace ZLR.VM
         // runtime state
         readonly Stream gameFile;
         internal bool running;
-        [NotNull] readonly byte[] zmem;
-        [NotNull] internal readonly IAsyncZMachineIO io;
-        CommandFileReader cmdRdr;
-        CommandFileWriter cmdWtr;
+        readonly byte[] zmem;
+        internal readonly IAsyncZMachineIO io;
+        CommandFileReader? cmdRdr;
+        CommandFileWriter? cmdWtr;
         Stack<short> stack = new Stack<short>();
 
-        [ItemNotNull] [NotNull]
         internal Stack<CallFrame> callStack = new Stack<CallFrame>();
 
         Random rng = new Random();
         bool predictableRng;
-        byte[] wordSeparators;
+        byte[] wordSeparators = default!;
         int codeStart, stringStart; // V6-7
 
-        [ItemNotNull] [NotNull]
         readonly List<UndoState> undoStates = new List<UndoState>();
 
-        bool normalOutput, tableOutput;
+        bool normalOutput;
 
-        [NotNull]
-        readonly Stack<ushort> tableOutputAddrStack = new Stack<ushort>();
+        readonly Stack<(ushort address, List<byte> buffer)> tableOutputStack = new Stack<(ushort address, List<byte> buffer)>();
+        bool TableOutputEnabled => tableOutputStack.Count != 0;
 
-        [ItemNotNull] [NotNull]
-        readonly Stack<List<byte>> tableOutputBufferStack = new Stack<List<byte>>();
+        char[] alphabet0 = DefaultAlphabet0, alphabet1 = DefaultAlphabet1, alphabet2 = DefaultAlphabet2, extraChars = DefaultExtraChars;
+        byte[] terminatingChars = default!;
 
-        char[] alphabet0, alphabet1, alphabet2, extraChars;
-        byte[] terminatingChars;
-
-        [NotNull]
         readonly MemoryTraps traps = new MemoryTraps();
 
 #if BENCHMARK
@@ -191,9 +185,9 @@ namespace ZLR.VM
         }
 
         [PublicAPI]
-        public event EventHandler<RandomNeededEventArgs> RandomNeeded;
+        public event EventHandler<RandomNeededEventArgs>? RandomNeeded;
         [PublicAPI]
-        public event EventHandler<RandomRolledEventArgs> RandomRolled;
+        public event EventHandler<RandomRolledEventArgs>? RandomRolled;
 
         [PublicAPI]
         public int CodeCacheSize
@@ -233,14 +227,20 @@ namespace ZLR.VM
         }
 
         [CanBeNull]
-        public DebugInfo DebugInfo { get; private set; }
+        public DebugInfo DebugInfo { get; private set; } = default!;
 
         // ReSharper disable once InconsistentNaming
         [NotNull]
         public IAsyncZMachineIO IO => io;
 
-        // ReSharper disable once MemberCanBePrivate.Global
-        internal CallFrame TopFrame { get; private set; }
+        private CallFrame? topFrame;
+
+        [System.Diagnostics.CodeAnalysis.AllowNull]
+        internal CallFrame TopFrame
+        {
+            get => topFrame ?? throw new InvalidOperationException(nameof(TopFrame) + " is null");
+            private set => topFrame = value;
+        }
 
         internal byte GetByte(int address)
         {
@@ -256,6 +256,13 @@ namespace ZLR.VM
         {
             Array.Copy(zmem, address, dest, destIndex, length);
         }
+
+#if HAVE_SPAN
+        private Span<byte> GetSpan(int address, int length)
+        {
+            return new Span<byte>(zmem, address, length);
+        }
+#endif
 
         private void SetBytes(int address, int length, [NotNull] byte[] src, int srcIndex)
         {
@@ -393,7 +400,7 @@ namespace ZLR.VM
             running = true;
             try
             {
-                await JitLoopAsync();
+                await JitLoopAsync().ConfigureAwait(false);
             }
             finally
             {
@@ -558,10 +565,10 @@ namespace ZLR.VM
                 var thisPC = pc;
 #pragma warning disable IDE0018 // Inline variable declaration
                 // ReSharper disable once InlineOutVariableDeclaration
-                CachedCode entry;
+                CachedCode? entry;
 #pragma warning restore IDE0018 // Inline variable declaration
 #if !DISABLE_CACHE
-                if (thisPC < RomStart || cache.TryGetValue(thisPC, out entry) == false)
+                if (thisPC < RomStart || !cache.TryGetValue(thisPC, out entry))
 #endif
                 {
 #if BENCHMARK
@@ -591,14 +598,14 @@ namespace ZLR.VM
         // compilation state exposed internally for the Opcode class
         // TODO: clean up compilation state. the runtime PC shouldn't be used for compilation, especially.
         [NotNull]
-        internal LocalBuilder TempWordLocal => tempWordLocal ?? (tempWordLocal = il.DeclareLocal(typeof(short)));
+        internal LocalBuilder TempWordLocal => tempWordLocal ??= il.DeclareLocal(typeof(short));
 
         [NotNull]
-        internal LocalBuilder TempArrayLocal => tempArrayLocal ?? (tempArrayLocal = il.DeclareLocal(typeof(short[])));
+        internal LocalBuilder TempArrayLocal => tempArrayLocal ??= il.DeclareLocal(typeof(short[]));
 
-        internal LocalBuilder StackLocal { get; private set; }
+        internal LocalBuilder? StackLocal { get; private set; }
 
-        internal LocalBuilder LocalsLocal { get; private set; }
+        internal LocalBuilder? LocalsLocal { get; private set; }
 
         internal int GlobalsOffset { get; private set; }
 
@@ -685,7 +692,7 @@ namespace ZLR.VM
             var todoList = new Queue<int>();
 
             // pass 1: make linear opcode chains, which might be disconnected from each other.
-            Opcode lastOp = null;
+            Opcode? lastOp = null;
             while (compiling)
             {
                 instructionCount++;
@@ -852,7 +859,7 @@ namespace ZLR.VM
             il.Emit(OpCodes.Ldnull);
             il.Emit(OpCodes.Ret);
 
-            il = null;
+            il = null!;
             tempArrayLocal = null;
             tempWordLocal = null;
             StackLocal = null;
@@ -869,7 +876,13 @@ namespace ZLR.VM
         [NotNull]
         internal static MethodInfo GetMethodInfo([NotNull] string name) =>
             typeof(ZMachine).GetMethod(name, BindingFlags.NonPublic | BindingFlags.Instance) ??
-            throw new ArgumentException($"No such field {name} on {nameof(ZMachine)}");
+            throw new ArgumentException($"No such method {name} on {nameof(ZMachine)}");
+
+        [NotNull]
+        internal static MethodInfo GetIOMethodInfo([NotNull] string name) =>
+            typeof(IAsyncZMachineIO).GetMethod(name) ??
+            typeof(IZMachineIO).GetMethod(name) ??
+            throw new ArgumentException($"No such method {name} on {nameof(IAsyncZMachineIO)} or {nameof(IZMachineIO)}");
 
         [NotNull]
         private Opcode DecodeOneOp([NotNull] OperandType[] operandTypes, [NotNull] short[] argv)
@@ -1026,7 +1039,7 @@ namespace ZLR.VM
             var resultStorage = -1;
             var branchIfTrue = false;
             var branchOffset = int.MinValue;
-            string text = null;
+            string? text = null;
 
             if (info.Attr.Store)
             {
@@ -1101,15 +1114,15 @@ namespace ZLR.VM
         [NotNull]
         private static string FormatOpCount(OpCount opc)
         {
-            switch (opc)
+            return opc switch
             {
-                case OpCount.Zero: return "0OP";
-                case OpCount.One: return "1OP";
-                case OpCount.Two: return "2OP";
-                case OpCount.Var: return "VAR";
-                case OpCount.Ext: return "EXT";
-                default: return "BUG";
-            }
+                OpCount.Zero => "0OP",
+                OpCount.One => "1OP",
+                OpCount.Two => "2OP",
+                OpCount.Var => "VAR",
+                OpCount.Ext => "EXT",
+                _ => "BUG",
+            };
         }
 
         [NotNull]
@@ -1161,9 +1174,7 @@ namespace ZLR.VM
         void ResetHeaderFields()
         {
             normalOutput = true;
-            tableOutput = false;
-            tableOutputAddrStack.Clear();
-            tableOutputBufferStack.Clear();
+            tableOutputStack.Clear();
 
             dictionaryTable = (ushort)GetWord(0x8);
             objectTable = (ushort)GetWord(0xA);
@@ -1188,7 +1199,7 @@ namespace ZLR.VM
             {
                 // old-style flags1
                 flags1 = GetByte(0x1);
-                flags1 |= 16 | 32;    // status line and screen splitting are always available
+                flags1 |= 16 | 32; // status line and screen splitting are always available
                 if (io.VariablePitchAvailable)
                     flags1 |= 64;
                 else
@@ -1228,17 +1239,17 @@ namespace ZLR.VM
             io.Transcripting = (flags2 & 1) != 0;
             io.ForceFixedPitch = (flags2 & 2) != 0;
 
-            SetByte(0x1E, 6);                       // interpreter platform
-            SetByte(0x1F, (byte)'A');               // interpreter version
-            SetByte(0x20, io.HeightChars);          // screen height (rows)
-            SetByte(0x21, io.WidthChars);           // screen width (columns)
-            SetWord(0x22, io.WidthUnits);           // screen width (units)
-            SetWord(0x24, io.HeightUnits);          // screen height (units)
-            SetByte(0x26, io.FontWidth);            // font width (units)
-            SetByte(0x27, io.FontHeight);           // font height (units)
-            SetByte(0x2C, io.DefaultBackground);    // default background color
-            SetByte(0x2D, io.DefaultForeground);    // default background color
-            SetWord(0x32, 0x0100);                  // z-machine standard version
+            SetByte(0x1E, 6);                    // interpreter platform
+            SetByte(0x1F, (byte)'A');            // interpreter version
+            SetByte(0x20, io.HeightChars);       // screen height (rows)
+            SetByte(0x21, io.WidthChars);        // screen width (columns)
+            SetWord(0x22, io.WidthUnits);        // screen width (units)
+            SetWord(0x24, io.HeightUnits);       // screen height (units)
+            SetByte(0x26, io.FontWidth);         // font width (units)
+            SetByte(0x27, io.FontHeight);        // font height (units)
+            SetByte(0x2C, io.DefaultBackground); // default background color
+            SetByte(0x2D, io.DefaultForeground); // default background color
+            SetWord(0x32, 0x0100);               // z-machine standard version
         }
 
         private void LoadAlphabets()
@@ -1261,7 +1272,7 @@ namespace ZLR.VM
                     alphabet1[i] = CharFromZSCII(GetByte(userAlphabets + 26 + i));
 
                 alphabet2 = new char[26];
-                alphabet2[0] = ' '; // escape code
+                alphabet2[0] = ' ';  // escape code
                 alphabet2[1] = '\n'; // new line
                 for (var i = 2; i < 26; i++)
                     alphabet2[i] = CharFromZSCII(GetByte(userAlphabets + 52 + i));
@@ -1347,12 +1358,12 @@ namespace ZLR.VM
 
         private void IOSizeChanged(object sender, EventArgs e)
         {
-            SetByte(0x20, io.HeightChars);          // screen height (rows)
-            SetByte(0x21, io.WidthChars);           // screen width (columns)
-            SetWord(0x22, io.WidthUnits);           // screen width (units)
-            SetWord(0x24, io.HeightUnits);          // screen height (units)
-            SetByte(0x26, io.FontWidth);            // font width (units)
-            SetByte(0x27, io.FontHeight);           // font height (units)
+            SetByte(0x20, io.HeightChars); // screen height (rows)
+            SetByte(0x21, io.WidthChars);  // screen width (columns)
+            SetWord(0x22, io.WidthUnits);  // screen width (units)
+            SetWord(0x24, io.HeightUnits); // screen height (units)
+            SetByte(0x26, io.FontWidth);   // font width (units)
+            SetByte(0x27, io.FontHeight);  // font height (units)
         }
 
         private short GetHeaderExtWord(int num)

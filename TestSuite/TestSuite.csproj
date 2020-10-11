@@ -8,12 +8,11 @@
     <RepositoryType>mercurial</RepositoryType>
     <AssemblyVersion></AssemblyVersion>
 
-    <TargetFramework>net471</TargetFramework>
+    <TargetFramework>netcoreapp3.1</TargetFramework>
     <Prefer32Bit>false</Prefer32Bit>
     <OutputType>Exe</OutputType>
 
     <RootNamespace>TestSuite</RootNamespace>
-    <LangVersion>7.2</LangVersion>
 
     <CodeAnalysisRuleSet>..\ZLR.ruleset</CodeAnalysisRuleSet>
   </PropertyGroup>
@@ -23,7 +22,7 @@
   </ItemGroup>
 
   <ItemGroup>
-    <PackageReference Include="JetBrains.Annotations" Version="2018.3.0">
+    <PackageReference Include="JetBrains.Annotations" Version="2020.1.0">
       <PrivateAssets>All</PrivateAssets>
     </PackageReference>
   </ItemGroup>

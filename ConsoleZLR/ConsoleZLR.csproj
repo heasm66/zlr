@@ -10,12 +10,12 @@
     <RepositoryType>mercurial</RepositoryType>
     <AssemblyVersion>0.9.0.0</AssemblyVersion>
     
-    <TargetFramework>net471</TargetFramework>
+    <TargetFramework>netcoreapp3.1</TargetFramework>
     <Prefer32Bit>false</Prefer32Bit>
     <OutputType>Exe</OutputType>
 
     <RootNamespace>ZLR.Interfaces.SystemConsole</RootNamespace>
-    <LangVersion>7.2</LangVersion>
+    <Nullable>enable</Nullable>
 
     <CodeAnalysisRuleSet>..\ZLR.ruleset</CodeAnalysisRuleSet>
 
@@ -24,17 +24,20 @@
   <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Debug|AnyCPU'">
     <DefineConstants>DEBUG;TRACE</DefineConstants>
   </PropertyGroup>
+  <ItemGroup>
+    <None Include="..\.editorconfig" Link=".editorconfig" />
+  </ItemGroup>
 
   <ItemGroup>
     <ProjectReference Include="..\ZLR.VM\ZLR.VM.csproj" />
   </ItemGroup>
 
   <ItemGroup>
-    <PackageReference Include="JetBrains.Annotations" Version="2018.3.0">
+    <PackageReference Include="JetBrains.Annotations" Version="2020.1.0">
       <PrivateAssets>All</PrivateAssets>
     </PackageReference>
-    <PackageReference Include="Nito.AsyncEx" Version="5.0.0-pre-05" />
-    <PackageReference Include="System.Collections.Immutable" Version="1.5.0" />
+    <PackageReference Include="Nito.AsyncEx" Version="5.0.0" />
+    <PackageReference Include="System.Collections.Immutable" Version="1.7.1" />
   </ItemGroup>
 
   <ItemGroup>

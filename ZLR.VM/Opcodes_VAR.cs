@@ -4,6 +4,8 @@ using JetBrains.Annotations;
 
 namespace ZLR.VM
 {
+    [System.Diagnostics.CodeAnalysis.SuppressMessage("Code Quality", "IDE0051:Remove unused private members",
+        Justification = "Private methods with OpcodeAttribute are called via Reflection.")]
     partial class Opcode
     {
 #pragma warning disable 0169
