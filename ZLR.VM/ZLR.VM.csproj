@@ -9,17 +9,19 @@
     <Authors>Jesse McGrew</Authors>
     <Company />
     <Product>ZLR</Product>
-    <PackageProjectUrl>https://bitbucket.org/jmcgrew/zlr</PackageProjectUrl>
-    <RepositoryUrl>https://bitbucket.org/jmcgrew/zlr</RepositoryUrl>
+    <PackageProjectUrl>https://foss.heptapod.net/zilf/zlr</PackageProjectUrl>
+    <RepositoryUrl>https://foss.heptapod.net/zilf/zlr</RepositoryUrl>
     <RepositoryType>mercurial</RepositoryType>
     <PackageLicenseExpression>LGPL-2.1-only</PackageLicenseExpression>
-    <Copyright>Copyright 2007-2018 Jesse McGrew</Copyright>
+    <Copyright>Copyright 2007-2020 Jesse McGrew</Copyright>
     <PackageTags>zlr z-machine zmachine z-code zcode infocom jit interpreter</PackageTags>
-    <PackageIconUrl>http://zlr.sourceforge.net/zlr-icon-32x32.png</PackageIconUrl>
+    <PackageIconUrl></PackageIconUrl>
     <NeutralLanguage>en-US</NeutralLanguage>
     <Description>A Z-Machine interpreter.</Description>
     <CodeAnalysisRuleSet>..\ZLR.ruleset</CodeAnalysisRuleSet>
     <DocumentationFile>bin\$(Configuration)\$(TargetFramework)\ZLR.VM.xml</DocumentationFile>
+    <PackageIcon>zlr-logo.png</PackageIcon>
+    <PackageRequireLicenseAcceptance>false</PackageRequireLicenseAcceptance>
   </PropertyGroup>
 
   <ItemGroup>
@@ -28,6 +30,13 @@
     </PackageReference>
     <PackageReference Include="Nito.AsyncEx" Version="5.0.0" />
     <PackageReference Include="System.ValueTuple" Version="4.5.0" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <None Include="..\zlr-logo.png">
+      <Pack>True</Pack>
+      <PackagePath></PackagePath>
+    </None>
   </ItemGroup>
 
   <PropertyGroup Condition="'$(TargetFramework)' == 'netstandard2.1'">
