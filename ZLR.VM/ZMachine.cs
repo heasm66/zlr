@@ -553,9 +553,9 @@ namespace ZLR.VM
             {
 #if TRACING
                 Console.Write("===== Call: {1,2} Eval: {0,2}", stack.Count, callStack.Count);
-                if (debugFile != null)
+                if (DebugInfo != null)
                 {
-                    RoutineInfo ri = debugFile.FindRoutine(pc);
+                    var ri = DebugInfo.FindRoutine(pc);
                     if (ri != null)
                         Console.Write("   (in {0})", ri.Name);
                 }
@@ -665,17 +665,17 @@ namespace ZLR.VM
             var instructionCount = 0;
 
             // initialize local variables for the stack and z-locals
-            var stackFI = GetFieldInfo("stack");
+            var stackFI = GetFieldInfo(nameof(stack));
             StackLocal = il.DeclareLocal(typeof(Stack<short>));
             il.Emit(OpCodes.Ldarg_0);
             il.Emit(OpCodes.Ldfld, stackFI);
             il.Emit(OpCodes.Stloc, StackLocal);
 
-            var getTopFrameMI = GetMethodInfo("get_TopFrame");
+            var topFrameFI = GetFieldInfo(nameof(topFrame));
             var localsFI = typeof(CallFrame).GetField(nameof(CallFrame.Locals));
             LocalsLocal = il.DeclareLocal(typeof(short[]));
             il.Emit(OpCodes.Ldarg_0);
-            il.Emit(OpCodes.Call, getTopFrameMI);
+            il.Emit(OpCodes.Ldfld, topFrameFI);
             var haveLocals = il.DefineLabel();
             il.Emit(OpCodes.Dup);
             il.Emit(OpCodes.Brtrue, haveLocals);

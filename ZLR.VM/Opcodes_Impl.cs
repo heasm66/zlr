@@ -22,7 +22,7 @@ namespace ZLR.VM
             if (dest == 0)
                 stack.Push(result);
             else if (dest < 16)
-                TopFrame!.Locals[dest - 1] = result;
+                TopFrame.Locals[dest - 1] = result;
             else
                 SetWord(GlobalsOffset + 2 * (dest - 16), result);
         }
@@ -132,7 +132,7 @@ namespace ZLR.VM
                 return stack.Peek();
 
             if (num < 16)
-                return this.TopFrame!.Locals[num - 1];
+                return this.TopFrame.Locals[num - 1];
 
             return GetWord(this.GlobalsOffset + 2 * (num - 16));
         }
@@ -147,7 +147,7 @@ namespace ZLR.VM
             }
             else if (dest < 16)
             {
-                var frame = TopFrame!;
+                var frame = TopFrame;
                 result = (short)(frame.Locals[dest - 1] + amount);
                 frame.Locals[dest - 1] = result;
             }

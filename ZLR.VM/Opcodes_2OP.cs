@@ -329,7 +329,7 @@ namespace ZLR.VM
             il.Emit(OpCodes.Ldfld, ioFI);
             LoadOperand(il, 0);
             LoadOperand(il, 1);
-            il.Emit(OpCodes.Call, impl);
+            il.Emit(OpCodes.Callvirt, impl);
         }
 
         [Opcode(OpCount.Two, 28, Terminates = true, MinVersion = 5)]

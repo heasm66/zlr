@@ -191,7 +191,7 @@ namespace ZLR.VM
             il.Emit(OpCodes.Ldarg_0);
             il.Emit(OpCodes.Ldfld, ioFI);
             LoadOperand(il, 0);
-            il.Emit(OpCodes.Call, setFontMI);
+            il.Emit(OpCodes.Callvirt, setFontMI);
             StoreResult(il);
         }
 
@@ -241,7 +241,7 @@ namespace ZLR.VM
             il.Emit(OpCodes.Ldarg_0);
             il.Emit(OpCodes.Ldfld, ioFI);
             LoadOperand(il, 0);
-            il.Emit(OpCodes.Call, checkUnicodeMI);
+            il.Emit(OpCodes.Callvirt, checkUnicodeMI);
             StoreResult(il);
         }
 

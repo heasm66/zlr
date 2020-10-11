@@ -208,7 +208,7 @@ namespace ZLR.VM
             il.Emit(OpCodes.Ldarg_0);
             il.Emit(OpCodes.Ldfld, ioFI);
             LoadOperand(il, 0);
-            il.Emit(OpCodes.Call, splitWindowMI);
+            il.Emit(OpCodes.Callvirt, splitWindowMI);
 
             if (zm.ZVersion == 3)
             {
@@ -219,7 +219,7 @@ namespace ZLR.VM
                 il.Emit(OpCodes.Ldarg_0);
                 il.Emit(OpCodes.Ldfld, ioFI);
                 il.Emit(OpCodes.Ldc_I4_1);
-                il.Emit(OpCodes.Call, eraseWindowMI);
+                il.Emit(OpCodes.Callvirt, eraseWindowMI);
             }
         }
 
@@ -233,7 +233,7 @@ namespace ZLR.VM
             il.Emit(OpCodes.Ldarg_0);
             il.Emit(OpCodes.Ldfld, ioFI);
             LoadOperand(il, 0);
-            il.Emit(OpCodes.Call, impl);
+            il.Emit(OpCodes.Callvirt, impl);
         }
 
         [Opcode(OpCount.Var, 236, Store = true, Terminates = true, MinVersion = 4)]
@@ -252,7 +252,7 @@ namespace ZLR.VM
             il.Emit(OpCodes.Ldarg_0);
             il.Emit(OpCodes.Ldfld, ioFI);
             LoadOperand(il, 0);
-            il.Emit(OpCodes.Call, eraseWindowMI);
+            il.Emit(OpCodes.Callvirt, eraseWindowMI);
         }
 
         [Opcode(OpCount.Var, 238, MinVersion = 4)]
@@ -278,7 +278,7 @@ namespace ZLR.VM
 
             il.Emit(OpCodes.Ldarg_0);
             il.Emit(OpCodes.Ldfld, ioFI);
-            il.Emit(OpCodes.Call, eraseLineMI);
+            il.Emit(OpCodes.Callvirt, eraseLineMI);
 
             if (skip != null)
                 il.MarkLabel(skip.Value);
@@ -298,7 +298,7 @@ namespace ZLR.VM
             il.Emit(OpCodes.Ldfld, ioFI);
             LoadOperand(il, 1); // x
             il.Emit(OpCodes.Ldloc, zm.TempWordLocal); // y
-            il.Emit(OpCodes.Call, moveCursorMI);
+            il.Emit(OpCodes.Callvirt, moveCursorMI);
         }
 
         [Opcode(OpCount.Var, 240, MinVersion = 4)]
@@ -321,14 +321,14 @@ namespace ZLR.VM
             il.Emit(OpCodes.Ldarg_0);
             il.Emit(OpCodes.Ldfld, ioFI);
             LoadOperand(il, 0);
-            il.Emit(OpCodes.Call, impl);
+            il.Emit(OpCodes.Callvirt, impl);
         }
 
         [Opcode(OpCount.Var, 242, MinVersion = 4)]
         private void op_buffer_mode([NotNull] ILGenerator il)
         {
             var ioFI = ZMachine.GetFieldInfo(nameof(ZMachine.io));
-            var impl = typeof(IZMachineIO).GetProperty("Buffering")?.GetSetMethod();
+            var impl = typeof(IZMachineIO).GetProperty(nameof(IZMachineIO.Buffering))?.GetSetMethod();
             System.Diagnostics.Debug.Assert(impl != null);
 
             il.Emit(OpCodes.Ldarg_0);
@@ -338,7 +338,7 @@ namespace ZLR.VM
             il.Emit(OpCodes.Ceq);
             il.Emit(OpCodes.Ldc_I4_0);
             il.Emit(OpCodes.Ceq);
-            il.Emit(OpCodes.Call, impl);
+            il.Emit(OpCodes.Callvirt, impl);
         }
 
         [Opcode(OpCount.Var, 243, MinVersion = 3, Async = true)]
@@ -517,13 +517,13 @@ namespace ZLR.VM
             var getTopFrameMI = typeof(ZMachine)
                 .GetProperty(nameof(ZMachine.TopFrame), System.Reflection.BindingFlags.Instance | System.Reflection.BindingFlags.NonPublic)
                 ?.GetGetMethod(true);
-            var argCountMI = typeof(ZMachine.CallFrame).GetField(nameof(ZMachine.CallFrame.ArgCount));
+            var argCountFI = typeof(ZMachine.CallFrame).GetField(nameof(ZMachine.CallFrame.ArgCount));
 
             System.Diagnostics.Debug.Assert(getTopFrameMI != null);
 
             il.Emit(OpCodes.Ldarg_0);
             il.Emit(OpCodes.Call, getTopFrameMI);
-            il.Emit(OpCodes.Ldfld, argCountMI);
+            il.Emit(OpCodes.Ldfld, argCountFI);
 
             LoadOperand(il, 0);
             Branch(il, OpCodes.Bge, OpCodes.Blt);

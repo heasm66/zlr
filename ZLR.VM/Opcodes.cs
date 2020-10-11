@@ -321,7 +321,7 @@ namespace ZLR.VM
         }
 
         [NotNull]
-        static string GetOpcodeName([CanBeNull] OpcodeAttribute attribute, OpcodeCompiler handler)
+        internal static string GetOpcodeName([CanBeNull] OpcodeAttribute attribute, OpcodeCompiler handler)
         {
             if (attribute?.Alias != null)
                 return attribute.Alias;
@@ -539,6 +539,8 @@ namespace ZLR.VM
             il.Emit(OpCodes.Ldarg_0);
             il.Emit(OpCodes.Ldloc, zm.TempWordLocal);
             il.Emit(OpCodes.Call, impl);
+            il.Emit(OpCodes.Ldnull);
+            il.Emit(OpCodes.Ret);
             compiling = false;
         }
 
