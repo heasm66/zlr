@@ -1,6 +1,6 @@
 ﻿namespace ZLR.Interfaces.SystemConsole.Debugger
 {
-    partial class InformExpressionLexer
+    partial class ZilExpressionLexer
     {
     }
 }
