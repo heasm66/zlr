@@ -560,28 +560,23 @@ namespace ZLR.VM
         }
 
 #if HAVE_SPAN
-        [System.Diagnostics.CodeAnalysis.SuppressMessage("Style", "IDE0060:Remove unused parameter", Justification = "See TODO")]
         internal void EncodeTextImpl(ushort buffer, ushort length, ushort start, ushort dest)
         {
-            // BUG: start is ignored
-
-            var src = GetSpan(buffer, length);
-            var destSpan = GetSpan(dest, DictWordSize);
+            var src = GetSpan(buffer + start, length);
+            var destSpan = GetSpan(dest, DictWordSizeInBytes);
 
             EncodeText(src, destSpan);
-            TrapMemory(dest, (ushort)this.DictWordSize);
+            TrapMemory(dest, (ushort)this.DictWordSizeInBytes);
         }
 #endif
 #if !HAVE_SPAN
         internal void EncodeTextImpl(ushort buffer, ushort length, ushort start, ushort dest)
         {
-            // BUG: start is ignored
-
             var text = new byte[length];
             for (var i = 0; i < length; i++)
-                text[i] = GetByte(buffer + i);
+                text[i] = GetByte(buffer + start + i);
 
-            var result = EncodeText(text, 0, length, DictWordSize);
+            var result = EncodeText(text, 0, length, DictWordSizeInZchars);
             for (var i = 0; i < result.Length; i++)
                 SetByte(dest + i, result[i]);
         }

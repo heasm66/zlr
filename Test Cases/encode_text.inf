@@ -1,0 +1,7 @@
+Array source_table -> 72 101 108 108 111;
+Array dest_table -> 6;
+
+[ Main i;
+  @encode_text source_table 4 1 dest_table;
+  print (address) dest_table;
+];

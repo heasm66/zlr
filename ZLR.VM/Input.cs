@@ -434,7 +434,7 @@ namespace ZLR.VM
         {
             int dictStart;
 
-            Span<byte> word = stackalloc byte[DictWordSize * 2 / 3];
+            Span<byte> word = stackalloc byte[DictWordSizeInBytes];
             EncodeText(buffer.AsSpan(pos, length), word);
 
             if (userDict != 0)
@@ -500,7 +500,7 @@ namespace ZLR.VM
         {
             int dictStart;
 
-            var word = EncodeText(buffer, pos, length, DictWordSize);
+            var word = EncodeText(buffer, pos, length, DictWordSizeInZchars);
 
             if (userDict != 0)
             {

@@ -979,7 +979,8 @@ namespace ZLR.VM
 
     partial class ZMachine
     {
-        private int DictWordSize => zversion >= 4 ? 9 : 6;
+        private int DictWordSizeInZchars => zversion >= 4 ? 9 : 6;
+        private int DictWordSizeInBytes => DictWordSizeInZchars * 2 / 3;
 
 #pragma warning disable 0169
         internal void PrintZSCII(short zc)
