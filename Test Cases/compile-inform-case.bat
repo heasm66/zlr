@@ -13,20 +13,28 @@ exit /b
 echo Usage: compile-inform-case.bat {base}
 echo Reads {base}.inf in the current directory.
 echo Produces {base}.zcode and {base}.dbg in Compiled.
-pause
-exit /b
+exit /b 1
 
 :noinform
-set informpath=%ProgramFiles%\Inform 7\Compilers\inform-631.exe
-if not exist "%informpath%" set informpath=%ProgramFiles(x86)%\Inform 7\Compilers\inform-631.exe
+set informpath1=%ProgramFiles%\Inform 7\Compilers\inform6.exe
+set informpath2=%ProgramFiles%\Inform 7\Compilers\inform-631.exe
+set informpath3=%ProgramFiles(x86)%\Inform 7\Compilers\inform6.exe
+set informpath4=%ProgramFiles(x86)%\Inform 7\Compilers\inform-631.exe
+set informpath=%informpath1%
+if not exist "%informpath%" set informpath=%informpath2%
+if not exist "%informpath%" set informpath=%informpath3%
+if not exist "%informpath%" set informpath=%informpath4%
 if exist "%informpath%" goto copyinform
 :copyinformfailed
 echo Inform6.exe is missing. Please copy the compiler from a
-echo recent Inform 7 build and call it Inform6.exe. I7 installs
-echo the compiler by default at:
-echo C:\Program Files\Inform 7\Compilers\inform-631.exe
-pause
-exit /b
+echo recent Inform 7 build and call it inform6.exe.
+echo I checked the following paths:
+echo %CD%\inform6.exe
+echo %informpath1%
+echo %informpath2%
+echo %informpath3%
+echo %informpath4%
+exit /b 2
 
 :copyinform
 echo Copying Inform 6 from %informpath%...
@@ -36,5 +44,4 @@ goto foundinform
 
 :nocode
 echo The source file "%1.inf" does not exist.
-pause
-exit /b
+exit /b 3
