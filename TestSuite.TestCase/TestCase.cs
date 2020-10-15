@@ -73,6 +73,10 @@ namespace ZLR.VM.Tests
                     case ".inf":
                         result.Add(shortname, new InformTestCase(file));
                         break;
+
+                    case ".zil":
+                        result.Add(shortname, new ZilTestCase(file));
+                        break;
                 }
             }
 
@@ -201,6 +205,14 @@ namespace ZLR.VM.Tests
     {
         public InformTestCase(string file) :
             base("compile-inform-case.bat", file)
+        {
+        }
+    }
+
+    class ZilTestCase : SourceCodeTestCase
+    {
+        public ZilTestCase(string file) :
+            base("compile-zil-case.bat", file)
         {
         }
     }

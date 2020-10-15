@@ -32,6 +32,7 @@
   <ItemGroup>
     <TestCase Include="$(TestCaseDir)*.inf" />
     <TestCase Include="$(TestCaseDir)*.z?" />
+    <TestCase Include="$(TestCaseDir)*.zil" />
   </ItemGroup>
 
   <ItemGroup>
