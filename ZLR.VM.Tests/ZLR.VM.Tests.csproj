@@ -19,4 +19,38 @@
     <ProjectReference Include="..\ZLR.VM\ZLR.VM.csproj" />
   </ItemGroup>
 
+  <PropertyGroup>
+    <TestCaseDir>..\Test Cases\</TestCaseDir>
+  </PropertyGroup>
+
+  <ItemDefinitionGroup>
+    <TestCase>
+      <Link>Test Cases\%(FileName)%(Extension)</Link>
+    </TestCase>
+  </ItemDefinitionGroup>
+
+  <ItemGroup>
+    <TestCase Include="$(TestCaseDir)*.inf" />
+    <TestCase Include="$(TestCaseDir)*.z?" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <TestData Include="@(TestCase->'%(FullPath).input.txt')" />
+    <TestData Include="@(TestCase->'%(FullPath).output.txt')" />
+    <TestData Update="@(TestCase->'%(FullPath).*.txt')">
+      <DependentUpon>%(TestCase.Identity)</DependentUpon>
+    </TestData>
+  </ItemGroup>
+
+  <ItemGroup>
+    <_Exists Include="$(TestCaseDir)**" />
+    <_DoesNotExist Include="@(TestData)" Exclude="@(_Exists)" />
+    <TestData Remove="@(_DoesNotExist)" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <None Include="@(TestCase)" />
+    <None Include="@(TestData)" />
+  </ItemGroup>
+
 </Project>
