@@ -6,6 +6,7 @@ using System.Text.RegularExpressions;
 using System.Threading.Tasks;
 using JetBrains.Annotations;
 using ZLR.VM;
+using ZLR.VM.Tests;
 
 namespace TestSuite
 {

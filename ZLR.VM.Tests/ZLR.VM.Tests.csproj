@@ -53,4 +53,6 @@
     <None Include="@(TestData)" />
   </ItemGroup>
 
+  <Import Project="..\TestSuite.TestCase\TestSuite.TestCase.projitems" Label="Shared" />
+
 </Project>
