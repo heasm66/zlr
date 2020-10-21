@@ -242,7 +242,7 @@ namespace ZLR.VM
             return ch;
         }
 
-        private struct Token
+        private readonly struct Token
         {
             public readonly byte StartPos;
             public readonly byte Length;
@@ -390,52 +390,58 @@ namespace ZLR.VM
             var max = GetByte(parse + 0);
             byte count = 0;
 
-            var myBuffer = new byte[bufLen];
-            GetBytes(buffer + tokenOffset, bufLen, myBuffer, 0);
-
-#if HAVE_SPAN
-            SplitTokens(myBuffer, userDict, tok =>
+            if (max > 0)
             {
-                var word = LookUpWord(userDict, myBuffer, tok.StartPos, tok.Length);
-                if (word == 0 && skipUnrecognized)
-                    return true;
+#if HAVE_SPAN
+                var myBuffer = GetSpan(buffer + tokenOffset, bufLen);
 
-                SetWord(parse + 2 + 4 * count, (short)word);
-                SetByte(parse + 2 + 4 * count + 2, tok.Length);
-                SetByte(parse + 2 + 4 * count + 3, (byte)(tokenOffset + tok.StartPos));
-                count++;
+                SplitTokens(myBuffer, userDict, tok =>
+                {
+                    var word = LookUpWord(userDict, GetSpan(buffer + tokenOffset + tok.StartPos, tok.Length));
 
-                return count != max;
-            });
+                    if (word != 0 || !skipUnrecognized)
+                    {
+                        SetWord(parse + 2 + 4 * count, (short)word);
+                        SetByte(parse + 2 + 4 * count + 2, tok.Length);
+                        SetByte(parse + 2 + 4 * count + 3, (byte)(tokenOffset + tok.StartPos));
+                    }
+
+                    return ++count != max;
+                });
 #endif
 #if !HAVE_SPAN
-            var tokens = SplitTokens(myBuffer, userDict);
+                var myBuffer = new byte[bufLen];
+                GetBytes(buffer + tokenOffset, bufLen, myBuffer, 0);
 
-            foreach (var tok in tokens)
-            {
-                var word = LookUpWord(userDict, myBuffer, tok.StartPos, tok.Length);
-                if (word == 0 && skipUnrecognized)
-                    continue;
+                var tokens = SplitTokens(myBuffer, userDict);
 
-                SetWord(parse + 2 + 4 * count, (short)word);
-                SetByte(parse + 2 + 4 * count + 2, tok.Length);
-                SetByte(parse + 2 + 4 * count + 3, (byte)(tokenOffset + tok.StartPos));
-                count++;
+                foreach (var tok in tokens)
+                {
+                    var word = LookUpWord(userDict, myBuffer, tok.StartPos, tok.Length);
 
-                if (count == max)
-                    break;
-            }
+                    if (word != 0 || !skipUnrecognized)
+                    {
+                        SetWord(parse + 2 + 4 * count, (short)word);
+                        SetByte(parse + 2 + 4 * count + 2, tok.Length);
+                        SetByte(parse + 2 + 4 * count + 3, (byte)(tokenOffset + tok.StartPos));
+                    }
+
+                    if (++count == max)
+                        break;
+                }
 #endif
+            }
+
             SetByte(parse + 1, count);
         }
 
 #if HAVE_SPAN
-        private ushort LookUpWord(int userDict, byte[] buffer, int pos, int length)
+        private ushort LookUpWord(int userDict, ReadOnlySpan<byte> buffer)
         {
             int dictStart;
 
             Span<byte> word = stackalloc byte[DictWordSizeInBytes];
-            EncodeText(buffer.AsSpan(pos, length), word);
+            EncodeText(buffer, word);
 
             if (userDict != 0)
             {

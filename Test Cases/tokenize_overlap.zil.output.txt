@@ -1,0 +1,5 @@
+
+Enter words: 3 words parsed
+Word 1: "apple" (start 2, len 5)
+Word 2: nil (start 0, len 0)
+Word 3: "banana" (start 12, len 6)
