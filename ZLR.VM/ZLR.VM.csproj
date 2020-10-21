@@ -5,7 +5,7 @@
     <TargetFramework>netstandard2.1</TargetFramework>
     <Nullable>enable</Nullable>
     <GeneratePackageOnBuild>true</GeneratePackageOnBuild>
-    <Version>0.9.0-pre-02</Version>
+    <Version>0.9.0-pre-03</Version>
     <Authors>Jesse McGrew</Authors>
     <Company />
     <Product>ZLR</Product>
