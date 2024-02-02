@@ -2,11 +2,11 @@
 <Project Sdk="Microsoft.NET.Sdk">
   <PropertyGroup>
     <Description>Console interface for ZLR.</Description>
-    <Authors>Jesse McGrew</Authors>
-    <Copyright>Copyright © 2007-2018 Jesse McGrew</Copyright>
-    <RepositoryUrl>https://bitbucket.org/jmcgrew/zlr</RepositoryUrl>
-    <PackageProjectUrl>https://bitbucket.org/jmcgrew/zlr/overview</PackageProjectUrl>
-    <PackageIconUrl>https://bytebucket.org/jmcgrew/zlr/raw/tip/zlr-logo.png</PackageIconUrl>
+    <Authors>Tara McGrew</Authors>
+    <Copyright>Copyright © 2007-2023 Tara McGrew</Copyright>
+    <RepositoryUrl>https://foss.heptapod.net/zilf/zlr</RepositoryUrl>
+    <PackageProjectUrl>https://foss.heptapod.net/zilf/zlr</PackageProjectUrl>
+    <PackageIconUrl>https://foss.heptapod.net/uploads/-/system/project/avatar/135/zlr-logo.png?width=64</PackageIconUrl>
     <RepositoryType>mercurial</RepositoryType>
     <AssemblyVersion>0.9.0.0</AssemblyVersion>
     

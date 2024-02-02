@@ -14,7 +14,7 @@
     <CodeAnalysisRuleSet>..\ZLR.ruleset</CodeAnalysisRuleSet>
     <AssemblyTitle>Demona</AssemblyTitle>
     <Description>It makes Gargoyle come alive.</Description>
-    <Company>Jesse McGrew</Company>
+    <Company>Tara McGrew</Company>
     <Product>ZLR</Product>
   </PropertyGroup>
   <PropertyGroup Condition=" '$(Configuration)|$(Platform)' == 'Debug|AnyCPU' ">

@@ -6,14 +6,14 @@
     <Nullable>enable</Nullable>
     <GeneratePackageOnBuild>true</GeneratePackageOnBuild>
     <Version>0.9.0-pre-03</Version>
-    <Authors>Jesse McGrew</Authors>
+    <Authors>Tara McGrew</Authors>
     <Company />
     <Product>ZLR</Product>
     <PackageProjectUrl>https://foss.heptapod.net/zilf/zlr</PackageProjectUrl>
     <RepositoryUrl>https://foss.heptapod.net/zilf/zlr</RepositoryUrl>
     <RepositoryType>mercurial</RepositoryType>
     <PackageLicenseExpression>LGPL-2.1-only</PackageLicenseExpression>
-    <Copyright>Copyright 2007-2020 Jesse McGrew</Copyright>
+    <Copyright>Copyright 2007-2023 Tara McGrew</Copyright>
     <PackageTags>zlr z-machine zmachine z-code zcode infocom jit interpreter</PackageTags>
     <PackageIconUrl></PackageIconUrl>
     <NeutralLanguage>en-US</NeutralLanguage>

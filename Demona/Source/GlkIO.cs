@@ -56,7 +56,7 @@ namespace ZLR.Interfaces.Demona
             Glk.gli_startup(args.Length, argv);
 
             Glk.garglk_set_program_name("Demona");
-            Glk.garglk_set_program_info("Demona by Jesse McGrew\nA Glk interface for ZLR\nVersion " + ZMachine.ZLR_VERSION);
+            Glk.garglk_set_program_info("Demona by Tara McGrew\nA Glk interface for ZLR\nVersion " + ZMachine.ZLR_VERSION);
             Glk.garglk_set_story_name(storyName);
 
             // set style hints

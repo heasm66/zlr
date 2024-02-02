@@ -2,11 +2,11 @@
 <?include Includes.wxi ?>
 <Wix xmlns="http://schemas.microsoft.com/wix/2006/wi">
     <Product Id="{041C4738-9DCE-41FB-8B9D-3D8D81A0AF42}" Codepage="1252" Language="1033" Manufacturer="ZLR" Name="Demona" UpgradeCode="{62484948-D4A8-4406-9531-270A0E16C763}" Version="$(var.ZlrVersion)">
-        <Package Compressed="yes" InstallerVersion="200" Languages="1033" Manufacturer="Jesse McGrew" Platform="x86" />
+        <Package Compressed="yes" InstallerVersion="200" Languages="1033" Manufacturer="Tara McGrew" Platform="x86" />
       
-        <Property Id="ARPHELPLINK" Value="http://zlr.sourceforge.net/" />
-        <Property Id="ARPCONTACT" Value="Jesse McGrew" />
-        <Property Id="ARPURLINFOABOUT" Value="http://zlr.sourceforge.net/" />
+        <Property Id="ARPHELPLINK" Value="https://foss.heptapod.net/zilf/zlr" />
+        <Property Id="ARPCONTACT" Value="Tara McGrew" />
+        <Property Id="ARPURLINFOABOUT" Value="https://foss.heptapod.net/zilf/zlr" />
         <Property Id="ARPPRODUCTICON" Value="DemonaIcon.exe" />
 
         <MajorUpgrade DowngradeErrorMessage="A newer version of [ProductName] is already installed." />
