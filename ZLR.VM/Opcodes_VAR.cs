@@ -164,6 +164,7 @@ namespace ZLR.VM
 
         [Opcode(OpCount.Var, 233, IndirectVar = true, MaxVersion = 5)]
         [Opcode(OpCount.Var, 233, Store = true, MinVersion = 6, MaxVersion = 6)]
+        [Opcode(OpCount.Var, 233, IndirectVar = true, MinVersion = 7, MaxVersion = 8)]                  // Bugfix: issue #13
         private void op_pull([NotNull] ILGenerator il)
         {
             if (zm.ZVersion == 6)
