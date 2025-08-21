@@ -3,14 +3,14 @@
   <PropertyGroup>
     <Description>Console interface for ZLR.</Description>
     <Authors>Tara McGrew</Authors>
-    <Copyright>Copyright © 2007-2023 Tara McGrew</Copyright>
+    <Copyright>Copyright © 2007-2025 Tara McGrew</Copyright>
     <RepositoryUrl>https://foss.heptapod.net/zilf/zlr</RepositoryUrl>
     <PackageProjectUrl>https://foss.heptapod.net/zilf/zlr</PackageProjectUrl>
     <PackageIconUrl>https://foss.heptapod.net/uploads/-/system/project/avatar/135/zlr-logo.png?width=64</PackageIconUrl>
     <RepositoryType>mercurial</RepositoryType>
-    <AssemblyVersion>0.9.0.0</AssemblyVersion>
+    <AssemblyVersion>0.9.1.0</AssemblyVersion>
     
-    <TargetFramework>netcoreapp3.1</TargetFramework>
+    <TargetFramework>net9.0</TargetFramework>
     <Prefer32Bit>false</Prefer32Bit>
     <OutputType>Exe</OutputType>
 
