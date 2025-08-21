@@ -531,7 +531,7 @@ namespace ZLR.Interfaces.SystemConsole
 
             SaveCursorPos();
 
-            ylower = ylower + oldSplit - split;
+            // ylower = ylower + oldSplit - split;                                          // Bugfix: issue #14
 
             if (split == 0)
             {
@@ -547,7 +547,8 @@ namespace ZLR.Interfaces.SystemConsole
                     yupper = 1;
                 }
 
-                if (ylower <= split)
+                if ((Console.CursorTop - Console.WindowTop + 1) <= split)                   // Bugfix: issue #14
+
                 {
                     ylower = Math.Min(split + 1, Console.WindowHeight);
                 }
