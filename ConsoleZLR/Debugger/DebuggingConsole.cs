@@ -111,6 +111,11 @@ namespace ZLR.Interfaces.SystemConsole.Debugger
             AttachDebugger();
 
             Activate();
+
+            // Fix to issue #16 (is this the right place?)
+            if (zm.ZVersion <= 4)
+                zm.IO.ScrollFromBottom = true;
+
             try
             {
                 if (sharingIO)
