@@ -107,6 +107,9 @@ namespace ZLR.VM.Debugging
         CancellationToken PauseCancellationToken { get; }
 
         void SetBreakpoint(int address, bool enabled);
+
+        void SetPC(int address);
+
         int[] GetBreakpoints();
 
         /// <summary>
@@ -453,6 +456,11 @@ namespace ZLR.VM
                     zm.breakpoints.Add(address);
                 else
                     zm.breakpoints.Remove(address);
+            }
+
+            public void SetPC(int address)
+            {
+                    zm.pc = address;
             }
 
             [NotNull]

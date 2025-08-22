@@ -509,6 +509,11 @@ namespace ZLR.Interfaces.SystemConsole.Debugger
                         active = ActiveState.Finished;
                         return;
 
+                    case "j":
+                    case "jump":
+                        DoJump(parts); 
+                        break;
+
                     case "h":
                     case "help":
                     case "?":
@@ -516,7 +521,7 @@ namespace ZLR.Interfaces.SystemConsole.Debugger
                         await writer.WriteLineAsync("reset, (s)tep, (o)ver, stepline (sl), overline (ol), up, (r)un,");
                         await writer.WriteLineAsync("(b)reak, (c)lear, breakpoints (bps), tracecalls (tc)");
                         await writer.WriteLineAsync("backtrace (bt), (l)ocals, (g)lobals");
-                        await writer.WriteLineAsync("(p)rint, showobj (so), tree");
+                        await writer.WriteLineAsync("(p)rint, showobj (so), tree, (j)ump");
                         await writer.WriteLineAsync("(q)uit");
 
                         // TODO: mention interrupts? or ask IO to explain debugger break key?
@@ -902,6 +907,20 @@ namespace ZLR.Interfaces.SystemConsole.Debugger
             {
                 dbg.SetBreakpoint(address, true);
                 writer.WriteLine($"Set breakpoint at {DumpCodeAddress(address)}.");
+            }
+        }
+
+        private void DoJump(string[] parts)
+        {
+            int address;
+            if (parts.Length < 2 || (address = ParseAddress(parts[1])) < 0)
+            {
+                writer.WriteLine("Usage: jump <addrspec>");
+            }
+            else
+            {
+                dbg.SetPC(address);
+                writer.WriteLine($"Set pc to {DumpCodeAddress(address)}.");
             }
         }
 
