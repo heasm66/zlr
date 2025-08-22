@@ -523,6 +523,8 @@ namespace ZLR.Interfaces.SystemConsole
                 lines = 0;
 
             var oldSplit = split;
+            var oldYlower = ylower;                                                         // Bugfix: issue #14
+
             split = Math.Min(lines, Console.WindowHeight);
             if (!weakConsole)
             {
@@ -531,7 +533,11 @@ namespace ZLR.Interfaces.SystemConsole
 
             SaveCursorPos();
 
-            // ylower = ylower + oldSplit - split;                                          // Bugfix: issue #14
+            if (!upper)                                                                     // Bugfix: issue #14
+            {
+                oldYlower = (Console.CursorTop - Console.WindowTop + 1) - oldSplit;
+                ylower = oldYlower + oldSplit - split;                                          
+            }
 
             if (split == 0)
             {
@@ -547,7 +553,7 @@ namespace ZLR.Interfaces.SystemConsole
                     yupper = 1;
                 }
 
-                if ((Console.CursorTop - Console.WindowTop + 1) <= split)                   // Bugfix: issue #14
+                if ((oldYlower + oldSplit) <= split)                                        // Bugfix: issue #14
 
                 {
                     ylower = Math.Min(split + 1, Console.WindowHeight);
