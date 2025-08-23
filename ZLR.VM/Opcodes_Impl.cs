@@ -267,6 +267,8 @@ namespace ZLR.VM
 
             ResetHeaderFields();
             io.EraseWindow(-1);
+            if (zversion <= 4)
+                io.ScrollFromBottom = true;
 
             pc = (ushort)GetWord(0x06);
         }
