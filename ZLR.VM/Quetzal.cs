@@ -355,7 +355,7 @@ namespace ZLR.VM
                 System.Diagnostics.Debug.Assert(sp == frame.PrevStackDepth);
                 for (var j = 0; j < stackUsage; j++)
                 {
-                    var value = flatStack[^(1 - sp)];
+                    var value = flatStack[^(1 + sp)];
                     sp++;
                     result.Add((byte)(value >> 8));
                     result.Add((byte)value);
