@@ -150,8 +150,7 @@ namespace ZLR.VM.Tests
             // ReSharper disable once CatchAllClause
             catch (Exception ex)
             {
-                if (output == null)
-                    output = io.CollectOutput();
+                output ??= io.CollectOutput();
 
                 output += "\n\n*** Exception ***\n" + ex;
             }

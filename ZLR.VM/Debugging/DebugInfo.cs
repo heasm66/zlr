@@ -15,7 +15,7 @@ namespace ZLR.VM.Debugging
             public ushort LineNum;
             public byte Column;
 
-            public bool IsValid => FileNum != 0 && FileNum != 255;
+            public readonly bool IsValid => FileNum != 0 && FileNum != 255;
         }
 
         private readonly byte[]? matchingHeader;
@@ -392,7 +392,7 @@ namespace ZLR.VM.Debugging
     }
 
     [PublicAPI]
-    public struct LineInfo
+    public readonly struct LineInfo
     {
         public readonly string File;
         public readonly int Line;

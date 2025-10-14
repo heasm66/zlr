@@ -49,7 +49,7 @@ namespace ZLR.Interfaces.SystemConsole.Debugger
         private bool tracingCalls;
         private string? lastCmd;
 
-        private static readonly char[] COMMAND_DELIM = { ' ' };
+        private static readonly char[] COMMAND_DELIM = [' '];
 
         public DebuggingConsole(
             ZMachine zm,
@@ -61,7 +61,7 @@ namespace ZLR.Interfaces.SystemConsole.Debugger
 
             // ReSharper disable once SuspiciousTypeConversion.Global
             if (io is IDisposable dio)
-                disposables = new[] { dio };
+                disposables = [dio];
         }
 
         public DebuggingConsole(
@@ -79,7 +79,7 @@ namespace ZLR.Interfaces.SystemConsole.Debugger
             IEnumerable<string> sourcePath)
             : this(zm, new StreamReader(stream, encoding), new StreamWriter(stream, encoding), sourcePath)
         {
-            disposables = new IDisposable[] { stream };
+            disposables = [stream];
         }
 
         private DebuggingConsole(ZMachine zm, TextReader reader, TextWriter writer,
@@ -89,7 +89,7 @@ namespace ZLR.Interfaces.SystemConsole.Debugger
             this.debugInfo = zm.DebugInfo;
             this.reader = reader;
             this.writer = writer;
-            this.sourcePath = sourcePath.ToArray();
+            this.sourcePath = [.. sourcePath];
         }
 
         [System.Diagnostics.Conditional("DEBUG_DEBUGGER")]
@@ -102,7 +102,7 @@ namespace ZLR.Interfaces.SystemConsole.Debugger
         private static void DebugWriteLine([NotNull] string format, [NotNull] params object[] args)
         {
             System.Diagnostics.Debug.Write(
-                $"[{TaskScheduler.Current.Id} @ {System.Threading.Thread.CurrentThread.ManagedThreadId}] ");
+                $"[{TaskScheduler.Current.Id} @ {Environment.CurrentManagedThreadId}] ");
             System.Diagnostics.Debug.WriteLine(format, args);
         }
 
@@ -157,7 +157,7 @@ namespace ZLR.Interfaces.SystemConsole.Debugger
             DebugWriteLine("Help, I'm steppin' into the twilight zone");
 
             ShowStatus();
-            await writer.FlushAsync().ConfigureAwait(false);
+            await writer.FlushAsync(loopCancellationToken).ConfigureAwait(false);
 
             // interrupts are handled by the producer when read
             // non-interrupts are queued for the consumer to handle in order
@@ -175,7 +175,7 @@ namespace ZLR.Interfaces.SystemConsole.Debugger
                 {
                     while (this.Active)
                     {
-                        var command = await reader.ReadLineAsync().WaitAsync(ct).ConfigureAwait(false);
+                        var command = await reader.ReadLineAsync(loopCancellationToken).AsTask().WaitAsync(ct).ConfigureAwait(false);
 
                         if (command is null)
                             break;
@@ -221,7 +221,7 @@ namespace ZLR.Interfaces.SystemConsole.Debugger
                         try
                         {
                             await HandleCommandAsync(command).ConfigureAwait(false);
-                            await writer.FlushAsync().ConfigureAwait(false);
+                            await writer.FlushAsync(loopCancellationToken).ConfigureAwait(false);
                         }
                         catch (Exception ex)
                         {
@@ -232,7 +232,7 @@ namespace ZLR.Interfaces.SystemConsole.Debugger
                         if (Active)
                             ShowStatus();
 
-                        await writer.FlushAsync().ConfigureAwait(false);
+                        await writer.FlushAsync(loopCancellationToken).ConfigureAwait(false);
                     }
                 }
                 finally
@@ -774,8 +774,8 @@ namespace ZLR.Interfaces.SystemConsole.Debugger
                 ? (from p in debugInfo.Globals
                    orderby p.Value
                    select new { num = (byte) (p.Value + 16), name = p.Key })
-                : (from byte i in Enumerable.Range(16, GuessNumberOfGlobals())
-                   select new { num = i, name = $"global_{i}" });
+                : (from i in Enumerable.Range(16, GuessNumberOfGlobals())
+                   select new { num = (byte)i, name = $"global_{i}" });
 
             foreach (var g in globals)
             {
@@ -976,7 +976,7 @@ namespace ZLR.Interfaces.SystemConsole.Debugger
             if (string.IsNullOrEmpty(spec)) return -1;
 
             if (spec[0] == '$')
-                return Convert.ToInt32(spec.Substring(1), 16);
+                return Convert.ToInt32(spec[1..], 16);
 
             if (char.IsDigit(spec[0]))
                 return Convert.ToInt32(spec);
@@ -989,8 +989,8 @@ namespace ZLR.Interfaces.SystemConsole.Debugger
                 try
                 {
                     var result = debugInfo.FindCodeAddress(
-                        spec.Substring(0, idx),
-                        Convert.ToInt32(spec.Substring(idx + 1)));
+                        spec[..idx],
+                        Convert.ToInt32(spec[(idx + 1)..]));
                     if (result >= 0)
                         return result;
                 }
@@ -1009,9 +1009,9 @@ namespace ZLR.Interfaces.SystemConsole.Debugger
             {
                 try
                 {
-                    rtn = debugInfo.FindRoutine(spec.Substring(0, idx));
+                    rtn = debugInfo.FindRoutine(spec[..idx]);
                     if (rtn != null)
-                        return rtn.CodeStart + Convert.ToInt32(spec.Substring(idx + 1));
+                        return rtn.CodeStart + Convert.ToInt32(spec[(idx + 1)..]);
                 }
                 catch (FormatException)
                 {
@@ -1028,17 +1028,10 @@ namespace ZLR.Interfaces.SystemConsole.Debugger
             return -1;
         }
 
-        class SourceCache
+        class SourceCache(string[] searchPath)
         {
             private const int MAX_SRC_LINE_LEN = 50;
-
-            private readonly string[] searchPath;
-            private readonly Dictionary<string, string[]?> cache = new Dictionary<string, string[]?>();
-
-            public SourceCache(string[] searchPath)
-            {
-                this.searchPath = searchPath;
-            }
+            private readonly Dictionary<string, string[]?> cache = [];
 
             private string? FindFile(string filename)
             {
@@ -1081,7 +1074,7 @@ namespace ZLR.Interfaces.SystemConsole.Debugger
                     {
                         var result = lines[line];
                         return result.Length > MAX_SRC_LINE_LEN
-                            ? result.Substring(0, MAX_SRC_LINE_LEN - 3) + "..."
+                            ? result[..(MAX_SRC_LINE_LEN - 3)] + "..."
                             : result;
                     }
                 }
@@ -1092,16 +1085,9 @@ namespace ZLR.Interfaces.SystemConsole.Debugger
 
         #region IO adapters
 
-        private sealed class ZIOReader : TextReader
+        private sealed class ZIOReader(IAsyncZMachineIO io) : TextReader
         {
-            private static readonly byte[] DummyTerminatingKeys = { };
-
-            private readonly IAsyncZMachineIO io;
-
-            public ZIOReader(IAsyncZMachineIO io)
-            {
-                this.io = io;
-            }
+            private static readonly byte[] DummyTerminatingKeys = [];
 
             public override string? ReadLine()
             {

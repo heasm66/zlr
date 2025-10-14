@@ -38,6 +38,7 @@ namespace ZLR.VM
         }
 
         [Opcode(OpCount.Zero, 180)]
+        [System.Diagnostics.CodeAnalysis.SuppressMessage("Style", "IDE0060:Remove unused parameter", Justification = "<Pending>")]
         private void op_nop(ILGenerator il)
         {
             // do nothing

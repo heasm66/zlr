@@ -146,17 +146,12 @@ namespace ZLR.VM
                 return GetWord(objectTable + 2 * (prop - 1));
             }
 
-            switch (GetPropLength((ushort)addr))
+            return GetPropLength((ushort)addr) switch
             {
-                case 1:
-                    return GetByte(addr);
-
-                case 2:
-                    return GetWord(addr);
-
-                default:
-                    throw new InvalidOperationException("Illegal get_prop on >2 byte property");
-            }
+                1 => GetByte(addr),
+                2 => GetWord(addr),
+                _ => throw new InvalidOperationException("Illegal get_prop on >2 byte property"),
+            };
         }
 
         internal void SetPropValue(ushort obj, short prop, short value)

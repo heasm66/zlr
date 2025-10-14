@@ -243,9 +243,7 @@ namespace ZLR.IFF
 
             stream = fromStream;
 
-            var ridx = GetBlock("RIdx");
-            if (ridx == null)
-                throw new ArgumentException("Blorb file contains no resource index", nameof(fromStream));
+            var ridx = GetBlock("RIdx") ?? throw new ArgumentException("Blorb file contains no resource index", nameof(fromStream));
 
             // load resource index
             var count = (ridx[0] << 24) + (ridx[1] << 16) + (ridx[2] << 8) + ridx[3];
@@ -348,15 +346,11 @@ namespace ZLR.IFF
         /// story resource is present.</returns>
         public Stream GetStoryStream()
         {
-            var storyRes = FindResource(EXEC_USAGE_ID, null);
-
-            if (storyRes == null)
-                throw new InvalidOperationException("No story resource is present");
-
-            var lenBytes = ReadBlock(storyRes.Value.Offset + 4, 4);
+            var storyRes = FindResource(EXEC_USAGE_ID, null) ?? throw new InvalidOperationException("No story resource is present");
+            var lenBytes = ReadBlock(storyRes.Offset + 4, 4);
             var len = (uint)((lenBytes[0] << 24) + (lenBytes[1] << 16) + (lenBytes[2] << 8) + lenBytes[3]);
 
-            return new SubStream(stream, storyRes.Value.Offset + 8, len);
+            return new SubStream(stream, storyRes.Offset + 8, len);
         }
     }
 

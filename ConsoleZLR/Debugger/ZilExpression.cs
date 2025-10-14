@@ -9,7 +9,7 @@ using ZLR.VM.Debugging;
 
 namespace ZLR.Interfaces.SystemConsole.Debugger
 {
-    internal static class ZilExpression
+    internal static partial class ZilExpression
     {
         public static Value Evaluate(ZMachine zm, IDebugger dbg, string exprText, bool wantLvalue = false)
         {
@@ -26,17 +26,8 @@ namespace ZLR.Interfaces.SystemConsole.Debugger
             return wantLvalue ? result : visitor.Resolve(result);
         }
 
-        class EvaluatingVisitor : ZilExpressionBaseVisitor<Value>
+        partial class EvaluatingVisitor(ZMachine zm, IDebugger dbg) : ZilExpressionBaseVisitor<Value>
         {
-            private readonly ZMachine zm;
-            private readonly IDebugger dbg;
-
-            public EvaluatingVisitor(ZMachine zm, IDebugger dbg)
-            {
-                this.zm = zm;
-                this.dbg = dbg;
-            }
-            
             private Value Resolve([NotNull] IParseTree tree)
             {
                 return Resolve(Visit(tree));
@@ -44,20 +35,13 @@ namespace ZLR.Interfaces.SystemConsole.Debugger
 
             public Value Resolve(Value v)
             {
-                switch (v.Type)
+                return v.Type switch
                 {
-                    case ValueType.Variable:
-                        return Value.Number(dbg.ReadVariable((byte)v.Content));
-
-                    case ValueType.ByteAtAddress:
-                        return Value.Number(dbg.ReadByte(v.Content));
-
-                    case ValueType.WordAtAddress:
-                        return Value.Number(dbg.ReadWord(v.Content));
-
-                    default:
-                        return v;
-                }
+                    ValueType.Variable => Value.Number(dbg.ReadVariable((byte)v.Content)),
+                    ValueType.ByteAtAddress => Value.Number(dbg.ReadByte(v.Content)),
+                    ValueType.WordAtAddress => Value.Number(dbg.ReadWord(v.Content)),
+                    _ => v,
+                };
             }
 
             private Value ParseIdentifier(string name)
@@ -95,7 +79,11 @@ namespace ZLR.Interfaces.SystemConsole.Debugger
                 return Value.Invalid;
             }
 
-            private static readonly Regex BinLiteralPattern = new Regex(@"#2\s+([01]+)");
+            private static readonly Regex BinLiteralPattern = BinLiteralRegex();
+
+            [GeneratedRegex(@"#2\s+([01]+)")]
+            private static partial Regex BinLiteralRegex();
+
 
             public override Value VisitLogicalNot([NotNull] ZilExpressionParser.LogicalNotContext context)
             {
@@ -146,7 +134,11 @@ namespace ZLR.Interfaces.SystemConsole.Debugger
                 return Value.Number(context.GetText()[2]);
             }
 
-            private static readonly Regex EscapedCharPattern = new Regex(@"\\(.)");
+            private static readonly Regex EscapedCharPattern = EscapedCharRegex();
+
+            [GeneratedRegex(@"\\(.)")]
+            private static partial Regex EscapedCharRegex();
+
 
             [NotNull, Pure]
             private static string Unescape([NotNull] string str)
@@ -159,7 +151,7 @@ namespace ZLR.Interfaces.SystemConsole.Debugger
                 var atom = Unescape(context.GetText());
                 var parsed = ParseIdentifier(atom);
 
-                return parsed.IsValid || atom.ToUpperInvariant() != "T"
+                return parsed.IsValid || !atom.Equals("T", StringComparison.InvariantCultureIgnoreCase)
                     ? parsed
                     : Value.Boolean(true);
             }
@@ -167,7 +159,7 @@ namespace ZLR.Interfaces.SystemConsole.Debugger
             public override Value VisitOctLiteral([NotNull] ZilExpressionParser.OctLiteralContext context)
             {
                 var text = context.GetText();
-                return Value.Number(Convert.ToInt32(text.Substring(1, text.Length - 2), 8));
+                return Value.Number(Convert.ToInt32(text[1..^1], 8));
             }
 
             public override Value VisitLval([NotNull] ZilExpressionParser.LvalContext context)
@@ -355,34 +347,24 @@ namespace ZLR.Interfaces.SystemConsole.Debugger
             {
                 var resolved = context._args.Select(Resolve).ToArray();
 
-                switch (resolved.Length)
+                return resolved.Length switch
                 {
-                    case 0:
-                        return Value.Number(0);
-
-                    case 1:
-                        return -resolved[0];
-
-                    default:
-                        return resolved.Aggregate((a, b) => a - b);
-                }
+                    0 => Value.Number(0),
+                    1 => -resolved[0],
+                    _ => resolved.Aggregate((a, b) => a - b),
+                };
             }
 
             public override Value VisitDivision([NotNull] ZilExpressionParser.DivisionContext context)
             {
                 var resolved = context._args.Select(Resolve).ToArray();
 
-                switch (resolved.Length)
+                return resolved.Length switch
                 {
-                    case 0:
-                        return Value.Number(1);
-
-                    case 1:
-                        return Value.Number(1) / resolved[0];
-
-                    default:
-                        return resolved.Aggregate((a, b) => a / b);
-                }
+                    0 => Value.Number(1),
+                    1 => Value.Number(1) / resolved[0],
+                    _ => resolved.Aggregate((a, b) => a / b),
+                };
             }
 
             public override Value VisitAddition([NotNull] ZilExpressionParser.AdditionContext context)
@@ -466,17 +448,12 @@ namespace ZLR.Interfaces.SystemConsole.Debugger
 
                 var propLen = dbg.GetPropLength(propAddr);
 
-                switch (propLen)
+                return propLen switch
                 {
-                    case 1:
-                        return Value.ByteAtAddress(propAddr);
-
-                    case 2:
-                        return Value.WordAtAddress(propAddr);
-
-                    default:
-                        throw new DebuggerException("Reading property with length " + propLen);
-                }
+                    1 => Value.ByteAtAddress(propAddr),
+                    2 => Value.WordAtAddress(propAddr),
+                    _ => throw new DebuggerException("Reading property with length " + propLen),
+                };
             }
 
             public override Value VisitPropertyWriteExpr([NotNull] ZilExpressionParser.PropertyWriteExprContext context)

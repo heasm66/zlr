@@ -5,18 +5,9 @@ using ZLR.VM;
 
 namespace ZLR.Interfaces.SystemConsole
 {
-    [SuppressMessage("ReSharper", "LocalizableElement")]
-    class DumbIO : IZMachineIO
+    class DumbIO(bool bottomWinOnly, string? commandFile) : IZMachineIO
     {
-        private readonly bool bottomWinOnly;
-        private string? suppliedCommandFile;
         private short curWin;
-
-        public DumbIO(bool bottomWinOnly, string? commandFile)
-        {
-            this.bottomWinOnly = bottomWinOnly;
-            suppliedCommandFile = commandFile;
-        }
 
         public ReadLineResult ReadLine(string initial, int time, TimedInputCallback callback,
             byte[] terminatingKeys, bool allowDebuggerBreak)
@@ -111,10 +102,10 @@ namespace ZLR.Interfaces.SystemConsole
         public Stream? OpenCommandFile(bool writing)
         {
             string filename;
-            if (suppliedCommandFile != null)
+            if (commandFile != null)
             {
-                filename = suppliedCommandFile;
-                suppliedCommandFile = null;
+                filename = commandFile;
+                commandFile = null;
             }
             else
             {

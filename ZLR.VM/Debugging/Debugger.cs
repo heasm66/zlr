@@ -319,8 +319,7 @@ namespace ZLR.VM
                 whenStopped.Set();
 
                 zm.Restart();
-                if (zm.cache == null)
-                    zm.cache = new LruCache<int, CachedCode>(zm.cacheSize);
+                zm.cache ??= new LruCache<int, CachedCode>(zm.cacheSize);
                 zm.DebuggerState = DebuggerState.PausedOnEntry;
             }
 

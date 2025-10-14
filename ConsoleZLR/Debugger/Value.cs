@@ -5,7 +5,7 @@ using System.Diagnostics;
 
 namespace ZLR.Interfaces.SystemConsole.Debugger
 {
-    internal struct Value
+    internal readonly struct Value
     {
         public readonly ValueType Type;
         public readonly int Content;
@@ -63,21 +63,14 @@ namespace ZLR.Interfaces.SystemConsole.Debugger
 
         private static ValueType AdditionResultType(Value left, Value right)
         {
-            switch (left, right)
+            return (left, right) switch
             {
-                case ({ Type: ValueType.Number }, { Type: var otherType }):
-                    return otherType;
-
-                case ({ Type: var otherType }, { Type: ValueType.Number }):
-                    return otherType;
-
-                case ({ IsUnpackedAddress: true }, { IsAddress: false }):
-                case ({ IsAddress: false }, { IsUnpackedAddress: true }):
-                    return ValueType.Pointer;
-
-                default:
-                    return ValueType.Number;
-            }
+                ({ Type: ValueType.Number }, { Type: var otherType }) => otherType,
+                ({ Type: var otherType }, { Type: ValueType.Number }) => otherType,
+                ({ IsUnpackedAddress: true }, { IsAddress: false })
+                or ({ IsAddress: false }, { IsUnpackedAddress: true }) => ValueType.Pointer,
+                _ => ValueType.Number,
+            };
         }
 
         public static Value operator *(Value left, Value right)
@@ -179,29 +172,29 @@ namespace ZLR.Interfaces.SystemConsole.Debugger
 
         #region Type-Specific Factory Functions
 
-        public static readonly Value Invalid = new Value(ValueType.Invalid, 0);
+        public static readonly Value Invalid = new(ValueType.Invalid, 0);
 
-        public static Value Number(int num) => new Value(ValueType.Number, num);
+        public static Value Number(int num) => new(ValueType.Number, num);
 
-        public static Value Boolean(bool b) => new Value(ValueType.Number, b ? 1 : 0);
+        public static Value Boolean(bool b) => new(ValueType.Number, b ? 1 : 0);
 
-        public static Value Object(int num) => new Value(ValueType.Object, num);
+        public static Value Object(int num) => new(ValueType.Object, num);
 
-        public static Value Attribute(int num) => new Value(ValueType.Attribute, num);
+        public static Value Attribute(int num) => new(ValueType.Attribute, num);
 
-        public static Value Property(int num) => new Value(ValueType.Property, num);
+        public static Value Property(int num) => new(ValueType.Property, num);
 
-        public static Value Variable(int num) => new Value(ValueType.Variable, num);
+        public static Value Variable(int num) => new(ValueType.Variable, num);
 
-        public static Value Routine(int num) => new Value(ValueType.Routine, num);
+        public static Value Routine(int num) => new(ValueType.Routine, num);
 
-        public static Value Pointer(int num) => new Value(ValueType.Pointer, num);
+        public static Value Pointer(int num) => new(ValueType.Pointer, num);
 
-        public static Value ByteAtAddress(int address) => new Value(ValueType.ByteAtAddress, address);
+        public static Value ByteAtAddress(int address) => new(ValueType.ByteAtAddress, address);
 
-        public static Value WordAtAddress(int address) => new Value(ValueType.WordAtAddress, address);
+        public static Value WordAtAddress(int address) => new(ValueType.WordAtAddress, address);
 
-        public static Value VariableNumber(int num) => new Value(ValueType.VariableNumber, num);
+        public static Value VariableNumber(int num) => new(ValueType.VariableNumber, num);
 
         #endregion
 

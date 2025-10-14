@@ -28,17 +28,8 @@ namespace ZLR.Interfaces.SystemConsole.Debugger
             return result;
         }
 
-        class EvaluatingVisitor : InformExpressionBaseVisitor<Value>
+        class EvaluatingVisitor(ZMachine zm, IDebugger dbg) : InformExpressionBaseVisitor<Value>
         {
-            private readonly ZMachine zm;
-            private readonly IDebugger dbg;
-
-            public EvaluatingVisitor(ZMachine zm, IDebugger dbg)
-            {
-                this.zm = zm;
-                this.dbg = dbg;
-            }
-
             public override Value VisitDecLiteral([JetBrains.Annotations.NotNull] [NotNull] InformExpressionParser.DecLiteralContext context)
             {
                 return Value.Number(int.Parse(context.Decimal_literal().GetText()));
@@ -46,12 +37,12 @@ namespace ZLR.Interfaces.SystemConsole.Debugger
 
             public override Value VisitBinLiteral([JetBrains.Annotations.NotNull] [NotNull] InformExpressionParser.BinLiteralContext context)
             {
-                return Value.Number(Convert.ToInt32(context.Binary_literal().GetText().Substring(2), 2));
+                return Value.Number(Convert.ToInt32(context.Binary_literal().GetText()[2..], 2));
             }
 
             public override Value VisitHexLiteral([JetBrains.Annotations.NotNull] [NotNull] InformExpressionParser.HexLiteralContext context)
             {
-                return Value.Number(Convert.ToInt32(context.Hex_literal().GetText().Substring(1), 16));
+                return Value.Number(Convert.ToInt32(context.Hex_literal().GetText()[1..], 16));
             }
 
             public override Value VisitCharLiteral([JetBrains.Annotations.NotNull] [NotNull] InformExpressionParser.CharLiteralContext context)

@@ -4,17 +4,8 @@ using ZLR.VM.Debugging;
 
 namespace ZLR.Interfaces.SystemConsole.Debugger
 {
-    internal class ValueFormatter
+    internal class ValueFormatter(ZMachine zm, IDebugger dbg)
     {
-        private readonly ZMachine zm;
-        private readonly IDebugger dbg;
-
-        public ValueFormatter(ZMachine zm, IDebugger dbg)
-        {
-            this.zm = zm;
-            this.dbg = dbg;
-        }
-
         [JetBrains.Annotations.NotNull]
         public string Format(Value value)
         {

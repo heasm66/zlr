@@ -20,7 +20,7 @@ namespace ZLR.VM
 
     internal delegate void OpcodeCompiler(Opcode thisptr, ILGenerator il);
 
-    internal struct OpcodeInfo
+    internal readonly struct OpcodeInfo
     {
         public readonly OpcodeAttribute Attr;
         public readonly OpcodeCompiler Compiler;
@@ -145,7 +145,7 @@ namespace ZLR.VM
                 if (operandText.Length <= 10)
                     tstr = operandText;
                 else
-                    tstr = operandText.Substring(0, 7) + "...";
+                    tstr = operandText[..7] + "...";
                 sb.Append(" \"");
                 sb.Append(tstr);
                 sb.Append('"');
@@ -331,7 +331,7 @@ namespace ZLR.VM
 
             var mi = handler.Method;
             var name = mi.Name;
-            return name.StartsWith("op_") ? name.Remove(0, 3) : name;
+            return name.StartsWith("op_") ? name[3..] : name;
         }
 
         #endregion

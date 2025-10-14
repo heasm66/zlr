@@ -136,7 +136,6 @@ namespace ZLR.VM
 
 
         // ReSharper disable once UnusedParameter.Global
-        [System.Diagnostics.CodeAnalysis.SuppressMessage("Style", "IDE0060:Remove unused parameter", Justification = "See TODO")]
         internal async Task ReadCharImplAsync(ushort time, ushort routine, int retryPC, int nextPC, int resultStorage)
         {
             // TODO: support debugger break in read_char
@@ -625,7 +624,7 @@ namespace ZLR.VM
 
             // pad up to the fixed size
             if (j < zchars.Length)
-                zchars.Slice(j).Fill(5);
+                zchars[j..].Fill(5);
 
             int zi = 0, ri = 0;
             while (ri < output.Length)
@@ -854,7 +853,7 @@ namespace ZLR.VM
                         var key = line[(idx + 1)..^1];
                         if (int.TryParse(key, out var keyCode))
                         {
-                            line = line.Substring(0, idx);
+                            line = line[..idx];
                             terminator = (byte)keyCode;
                         }
                     }

@@ -12,7 +12,7 @@ namespace ZLR.VM
     /// <typeparam name="TValue">The type of values being cached.</typeparam>
     public class LruCache<TKey, TValue>
     {
-        private struct Entry
+        private readonly struct Entry
         {
             public readonly TKey Key;
             public readonly TValue Value;

@@ -107,7 +107,7 @@ namespace ZLR.VM
     /// <summary>
     /// Indicates the outcome of a call to <see cref="IAsyncZMachineIO.ReadLineAsync"/>.
     /// </summary>
-    public struct ReadLineResult
+    public readonly struct ReadLineResult
     {
         public ReadOutcome Outcome { get; }
 

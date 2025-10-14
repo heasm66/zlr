@@ -23,11 +23,11 @@ namespace ZLR.Interfaces.SystemConsole
         private const uint STYLE_FLAG = 0x80000000;
         private bool buffering = true;
         private int bufferLength;
-        private readonly List<uint> buffer = new List<uint>();
+        private readonly List<uint> buffer = [];
         private int lineCount;
 
         private const int MAX_COMMAND_HISTORY = 10;
-        private readonly List<string> history = new List<string>();
+        private readonly List<string> history = [];
 
         private readonly int origBufHeight;
         private readonly bool weakConsole;
@@ -842,7 +842,7 @@ namespace ZLR.Interfaces.SystemConsole
             2  =  black   3 = red       4 = green    5 = yellow
             6  =  blue    7 = magenta   8 = cyan     9 = white
          */
-        private ConsoleColor ColorToConsole(short num, ConsoleColor current, bool background)
+        private static ConsoleColor ColorToConsole(short num, ConsoleColor current, bool background)
         {
             return num switch
             {
@@ -860,7 +860,7 @@ namespace ZLR.Interfaces.SystemConsole
             };
         }
 
-        private ConsoleColor EmphasizeColor(ConsoleColor color)
+        private static ConsoleColor EmphasizeColor(ConsoleColor color)
         {
             return color switch
             {
@@ -1018,7 +1018,7 @@ namespace ZLR.Interfaces.SystemConsole
             return yorn[0] == 'y';
         }
 
-        private static readonly byte[] DummyTerminatingKeys = { };
+        private static readonly byte[] DummyTerminatingKeys = [];
 
         private async Task<bool> YesOrNoPromptAsync(string prompt, CancellationToken cancellationToken = default)
         {
@@ -1040,14 +1040,14 @@ namespace ZLR.Interfaces.SystemConsole
             return yorn[0] == 'y';
         }
 
-        private static readonly char[] BadChars = { ':', '"', '<', '>', '\\', '/', '*', '?', '|' };
+        private static readonly System.Buffers.SearchValues<char> s_badChars = System.Buffers.SearchValues.Create(":\"<>\\/*?|");
 
         private static bool InvalidAuxFileName([NotNull] string name)
         {
             if (name.Trim().Length == 0)
                 return true;
 
-            return name.IndexOfAny(BadChars) > 0;
+            return name.AsSpan().IndexOfAny(s_badChars) > 0;
         }
 
         public short SetFont(short num)
